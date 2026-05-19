@@ -163,6 +163,28 @@ main{display:flex;flex:1;overflow:hidden;}
 .empty .ei{font-size:36px;margin-bottom:8px;}
 .toast{position:fixed;bottom:24px;right:24px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 16px;font-size:13px;z-index:9999;animation:si .2s ease;color:var(--text);max-width:280px;}
 @keyframes si{from{transform:translateY(8px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+/* LOGIN */
+#login-screen{position:fixed;inset:0;background:var(--bg);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;}
+.login-box{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;width:100%;max-width:360px;padding:32px 28px;}
+.login-logo{font-size:28px;font-weight:700;color:var(--green);text-align:center;margin-bottom:4px;}
+.login-sub{font-size:13px;color:var(--text3);text-align:center;margin-bottom:28px;}
+.login-pin{display:flex;gap:10px;justify-content:center;margin:16px 0;}
+.pin-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--border2);background:transparent;transition:.15s;}
+.pin-dot.filled{background:var(--green);border-color:var(--green);}
+.numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px;}
+.np-btn{padding:16px;border-radius:10px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:18px;font-weight:500;cursor:pointer;font-family:var(--mono);transition:.1s;}
+.np-btn:hover{background:var(--border);border-color:var(--border2);}
+.np-btn:active{transform:scale(.94);}
+.np-btn.del{font-size:15px;color:var(--text2);}
+.np-btn.zero{grid-column:2;}
+.login-err{text-align:center;font-size:13px;color:var(--red);min-height:20px;margin-top:10px;}
+.login-role-label{text-align:center;font-size:12px;color:var(--text3);margin-bottom:16px;}
+/* role badge in header */
+.role-badge{font-size:11px;padding:3px 8px;border-radius:5px;border:1px solid;cursor:pointer;}
+.role-admin{background:var(--adim);border-color:var(--abr);color:var(--amber);}
+.role-user{background:var(--bdim);border-color:var(--bbr);color:var(--blue);}
+/* shop manage buttons */
+.shop-actions{display:flex;gap:4px;margin-left:auto;}
 /* Round label */
 .round-sep{display:flex;align-items:center;gap:8px;margin:16px 0 10px;color:var(--text3);font-size:12px;}
 .round-sep::before,.round-sep::after{content:'';flex:1;height:1px;background:var(--border);}
@@ -181,13 +203,45 @@ main{display:flex;flex:1;overflow:hidden;}
 </style>
 </head>
 <body>
+<!-- LOGIN SCREEN -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">💰 น้องลัดดา</div>
+    <div class="login-sub">ระบบนับเงิน Multi-Route</div>
+    <div class="login-role-label" id="login-role-label">กรอก PIN เพื่อเข้าสู่ระบบ</div>
+    <div class="login-pin" id="login-pin">
+      <div class="pin-dot" id="pd0"></div>
+      <div class="pin-dot" id="pd1"></div>
+      <div class="pin-dot" id="pd2"></div>
+      <div class="pin-dot" id="pd3"></div>
+    </div>
+    <div class="numpad">
+      <button class="np-btn" onclick="pinPress('1')">1</button>
+      <button class="np-btn" onclick="pinPress('2')">2</button>
+      <button class="np-btn" onclick="pinPress('3')">3</button>
+      <button class="np-btn" onclick="pinPress('4')">4</button>
+      <button class="np-btn" onclick="pinPress('5')">5</button>
+      <button class="np-btn" onclick="pinPress('6')">6</button>
+      <button class="np-btn" onclick="pinPress('7')">7</button>
+      <button class="np-btn" onclick="pinPress('8')">8</button>
+      <button class="np-btn" onclick="pinPress('9')">9</button>
+      <button class="np-btn zero" onclick="pinPress('0')">0</button>
+      <button class="np-btn del" onclick="pinDel()">⌫</button>
+    </div>
+    <div class="login-err" id="login-err"></div>
+  </div>
+</div>
+
 <div id="app">
   <header>
     <div style="display:flex;align-items:center;gap:10px;">
       <div class="logo">💰 น้องลัดดา</div>
       <div id="cur-shop" style="font-size:13px;color:var(--text2);"></div>
     </div>
-    <div class="total-badge"><span>ยอดรวมทั้งหมด</span><div id="gtotal">฿0</div></div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <div class="total-badge"><span>ยอดรวมทั้งหมด</span><div id="gtotal">฿0</div></div>
+      <button id="role-btn" class="role-badge" onclick="logout()" title="คลิกเพื่อออกจากระบบ"></button>
+    </div>
   </header>
   <div class="tabs-bar" id="tabs-bar"></div>
   <main>
@@ -205,6 +259,63 @@ main{display:flex;flex:1;overflow:hidden;}
 </div>
 
 <script>
+// ─── AUTH ───
+const PIN_USER='1111', PIN_ADMIN='0000';
+let AUTH={role:null}; // role: 'user' | 'admin'
+
+function authInit(){
+  const saved=localStorage.getItem('ladda_role');
+  if(saved==='user'||saved==='admin'){
+    AUTH.role=saved;
+    showApp();
+  }
+  // else login screen stays visible
+}
+
+let _pin='';
+function pinPress(d){
+  if(_pin.length>=4)return;
+  _pin+=d;
+  updatePinDots();
+  if(_pin.length===4)setTimeout(pinCheck,120);
+}
+function pinDel(){_pin=_pin.slice(0,-1);updatePinDots();document.getElementById('login-err').textContent='';}
+function updatePinDots(){
+  for(let i=0;i<4;i++){
+    const el=document.getElementById('pd'+i);
+    if(el)el.classList.toggle('filled',i<_pin.length);
+  }
+}
+function pinCheck(){
+  if(_pin===PIN_ADMIN){
+    AUTH.role='admin';localStorage.setItem('ladda_role','admin');showApp();
+  } else if(_pin===PIN_USER){
+    AUTH.role='user';localStorage.setItem('ladda_role','user');showApp();
+  } else {
+    document.getElementById('login-err').textContent='PIN ไม่ถูกต้อง ลองใหม่อีกครั้ง';
+    _pin='';updatePinDots();
+  }
+}
+function showApp(){
+  document.getElementById('login-screen').style.display='none';
+  const btn=document.getElementById('role-btn');
+  if(AUTH.role==='admin'){
+    btn.textContent='👑 ผู้ดูแล';btn.className='role-badge role-admin';
+  } else {
+    btn.textContent='👤 ผู้ใช้งาน';btn.className='role-badge role-user';
+  }
+  btn.title='คลิกเพื่อออกจากระบบ';
+  loadAll();
+}
+function logout(){
+  if(!confirm('ออกจากระบบ?'))return;
+  localStorage.removeItem('ladda_role');
+  AUTH.role=null;_pin='';updatePinDots();
+  document.getElementById('login-err').textContent='';
+  document.getElementById('login-screen').style.display='flex';
+}
+function isAdmin(){return AUTH.role==='admin';}
+
 // ─── constants ───
 const BT=[1000,500,100,50,20,'coin'];
 const BL={1000:'1,000',500:'500',100:'100',50:'50',20:'20',coin:'เหรียญ'};
@@ -364,12 +475,17 @@ function renderTabs(){
 
 function renderSidebar(){
   const sb=document.getElementById('sidebar');
+  const adminControls=isAdmin();
   sb.innerHTML='<div class="ssec">ร้านค้า / สาย</div>'+
     S.shops.map(sh=>`<div class="si${sh.id===S.shop?' active':''}" onclick="setShop('${sh.id}')">
       <span style="width:8px;height:8px;border-radius:50%;background:${sh.color};display:inline-block;flex-shrink:0;"></span>
       <span class="sn">${sh.name}</span><span class="sa">${fmt(shopTot(sh.id))}</span>
+      ${adminControls?`<span class="shop-actions" onclick="event.stopPropagation()">
+        <button title="แก้ไข" onclick="editShop('${sh.id}')" style="background:var(--bdim);border:1px solid var(--bbr);color:var(--blue);border-radius:4px;padding:1px 6px;font-size:11px;cursor:pointer;">✏️</button>
+        <button title="ลบ" onclick="deleteShop('${sh.id}')" style="background:var(--rdim);border:1px solid var(--rbr);color:var(--red);border-radius:4px;padding:1px 6px;font-size:11px;cursor:pointer;">🗑</button>
+      </span>`:''}
     </div>`).join('')+
-    '<button class="sadd" onclick="addShop()">+ เพิ่มร้านค้า</button>';
+    (adminControls?'<button class="sadd" onclick="addShop()">+ เพิ่มร้านค้า</button>':'');
   document.getElementById('cur-shop').textContent=(S.shops.find(s=>s.id===S.shop)||{}).name||'';
 }
 
@@ -499,7 +615,7 @@ function renderEntry(e){
       <span class="edt">${ds}</span>
       <span class="ett">${e.title||''}</span>
       <span class="eam ${aclass[e.type]}">${sign[e.type]}${fmt(Math.abs(amt))}</span>
-      <button class="delbtn" onclick="delE(event,'${e.id}')">ลบ</button>
+      <button class="delbtn" onclick="delE(event,'${e.id}')" style="${isAdmin()?'':'display:none'}">ลบ</button>
     </div>
     <div class="ebody" id="eb-${e.id}">${body}</div>
   </div>`;
@@ -859,6 +975,47 @@ async function saveShop(){
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
 }
 
+function editShop(id){
+  const shop=S.shops.find(s=>s.id===id);
+  if(!shop)return;
+  const colors=['#22c55e','#3b82f6','#f59e0b','#ef4444','#a855f7','#06b6d4','#f97316','#ec4899'];
+  OM('แก้ไขสาย',`
+    <div class="fg"><label class="flbl">ชื่อสาย</label><input type="text" class="finp" id="es_n" value="${shop.name}" placeholder="เช่น สาย D"></div>
+    <div class="fg"><label class="flbl">สีประจำสาย</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">${colors.map(c=>`<div onclick="selC('${c}')" id="c_${c.slice(1)}" style="width:28px;height:28px;border-radius:50%;background:${c};cursor:pointer;border:2px solid transparent;transition:.1s;"></div>`).join('')}</div>
+      <input type="hidden" id="es_c" value="${shop.color}">
+    </div>`,
+  `<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-b" onclick="saveEditShop('${id}')">บันทึก</button>`);
+  // mark current color
+  document.querySelectorAll('[id^="c_"]').forEach(el=>el.style.borderColor='transparent');
+  const cur=document.getElementById('c_'+shop.color.slice(1));
+  if(cur)cur.style.borderColor='white';
+  // override selC to update es_c
+  window._editSelC=(c)=>{document.getElementById('es_c').value=c;document.querySelectorAll('[id^="c_"]').forEach(el=>el.style.borderColor='transparent');const el=document.getElementById('c_'+c.slice(1));if(el)el.style.borderColor='white';};
+  document.querySelectorAll('[id^="c_"]').forEach(el=>{const c=el.id.replace('c_','#');el.onclick=()=>window._editSelC(c);});
+}
+async function saveEditShop(id){
+  const n=document.getElementById('es_n').value.trim(),c=document.getElementById('es_c').value;
+  if(!n){toast('กรุณาใส่ชื่อ');return;}
+  try{
+    await sbUpsert('routes',{id,name:n,color:c});
+    const sh=S.shops.find(s=>s.id===id);if(sh){sh.name=n;sh.color=c;}
+    CM();render();toast(`แก้ไข "${n}" แล้ว ✓`);
+  }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
+}
+async function deleteShop(id){
+  const shop=S.shops.find(s=>s.id===id);
+  if(!shop)return;
+  if(!confirm(`ลบสาย "${shop.name}" ? ข้อมูลทั้งหมดของสายนี้จะหายถาวร`))return;
+  try{
+    await sbDelete('routes',`id=eq.${id}`);
+    S.shops=S.shops.filter(s=>s.id!==id);
+    delete S.entries[id];delete S.sessions[id];
+    if(S.shop===id)S.shop=S.shops[0]?.id||null;
+    CM();render();toast(`ลบสาย "${shop.name}" แล้ว`);
+  }catch(err){toast('ลบไม่สำเร็จ: '+err.message);console.error(err);}
+}
+
 function setYear(y){S.year=y;const months=Object.keys(Object.assign({},...Object.values(S.entries).map(e=>e))).filter(mk=>mk.startsWith(y));const cp=cpk();const all=new Set([...months,cp.startsWith(y)?cp:''].filter(Boolean));const sorted=[...all].sort();S.month=sorted[sorted.length-1]||cpk();render();}
 function setShop(id){S.shop=id;render();}
 function setMonth(m){S.month=m;render();}
@@ -866,8 +1023,7 @@ function setMonth(m){S.month=m;render();}
 function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2800);}
 
 
-loadAll();
-</script>
+authInit();
 </script>
 </body>
 </html>

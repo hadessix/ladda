@@ -97,11 +97,51 @@ sessions (
 
 ---
 
+## ระบบ Login (PIN-based Auth)
+
+| รายการ | รายละเอียด |
+|---|---|
+| เก็บสถานะ | `localStorage` key: `ladda_role` |
+| Login ครั้งเดียว | เปิด browser ใหม่ไม่ต้อง login ซ้ำ |
+| ออกจากระบบ | กด badge role ที่ header แล้วยืนยัน |
+
+### PIN Codes
+
+| Role | PIN | สิทธิ์ |
+|---|---|---|
+| 👤 ผู้ใช้งานทั่วไป | `1111` | ดู + เพิ่มรายการ (**ลบไม่ได้**) |
+| 👑 ผู้ดูแล | `0000` | ทุกอย่าง รวมถึงลบรายการ + จัดการสาย |
+
+### สิทธิ์แต่ละ Role
+
+| ฟีเจอร์ | ผู้ใช้ทั่วไป | ผู้ดูแล |
+|---|---|---|
+| นับเงิน / รายรับ / รายจ่าย / แลกเงิน | ✅ | ✅ |
+| ลบรายการ | ❌ | ✅ |
+| เพิ่มสาย | ❌ | ✅ |
+| แก้ไขสาย (ชื่อ + สี) | ❌ | ✅ |
+| ลบสาย | ❌ | ✅ |
+
+### Auth Flow
+
+```
+เปิดแอป
+  └─ มี ladda_role ใน localStorage?
+        ├─ ใช่ → showApp() → loadAll() → render()
+        └─ ไม่ → แสดงหน้า PIN pad
+                   └─ กด PIN 4 หลัก → ตรวจสอบ
+                         ├─ ถูก → บันทึก role + showApp()
+                         └─ ผิด → แสดง error, ล้าง PIN
+```
+
+---
+
 ## ฟีเจอร์หลัก
 
 ### 1. Multi-Route (หลายสาย)
 - แต่ละ "สาย" จัดการข้อมูลแยกกัน
-- เพิ่มสายใหม่ได้ พร้อมเลือกสีประจำสาย
+- เพิ่มสายใหม่ได้ พร้อมเลือกสีประจำสาย (admin only)
+- แก้ไข / ลบสายได้ (admin only) — ปุ่ม ✏️ 🗑 ใน sidebar
 - ดู grand total รวมทุกสายที่ header
 
 ### 2. ระบบงวดรายเดือน
@@ -180,6 +220,9 @@ S = {
   month: "2025-05",
   year:  "2025"
 }
+
+AUTH = { role: 'user' | 'admin' }   // สถานะ login (in-memory)
+// role ถูกเก็บใน localStorage key: 'ladda_role'
 ```
 
 ### Field mapping JS ↔ Supabase
@@ -196,6 +239,12 @@ S = {
 
 | ฟังก์ชัน | หน้าที่ |
 |---|---|
+| `authInit()` | ตรวจ localStorage → showApp() หรือแสดงหน้า login |
+| `pinPress(d)` | กด digit บน numpad — ครบ 4 ตัวตรวจสอบอัตโนมัติ |
+| `pinCheck()` | เทียบ PIN → set role + showApp() หรือ error |
+| `showApp()` | ซ่อนหน้า login, อัปเดต badge, เรียก loadAll() |
+| `logout()` | ลบ localStorage, แสดงหน้า login ใหม่ |
+| `isAdmin()` | คืน true ถ้า role === 'admin' |
 | `loadAll()` | โหลด routes/entries/sessions จาก Supabase ตอน init |
 | `render()` | re-render ทุก component |
 | `cpk()` | คืน month key ของงวดปัจจุบัน (เริ่มวันที่ 11) |
@@ -215,6 +264,11 @@ S = {
 | `updBLimit(p)` | อัปเดตยอด real-time สำหรับ input ที่มี cap (อ่าน cb จาก `_cbMap`) |
 | `billInp(p)` | render grid input แบงค์ไม่มี cap (สำหรับ count/income) |
 | `updB(p)` | อัปเดตยอด real-time สำหรับ input ไม่มี cap |
+| `addShop()` | เปิด modal เพิ่มสาย (admin only) |
+| `saveShop()` | บันทึกสายใหม่ลง Supabase |
+| `editShop(id)` | เปิด modal แก้ไขชื่อ + สีสาย (admin only) |
+| `saveEditShop(id)` | บันทึกการแก้ไขสาย |
+| `deleteShop(id)` | ลบสายและข้อมูลทั้งหมดออกจาก Supabase (admin only) |
 | `OM/CM` | เปิด/ปิด modal |
 | `toast(msg)` | แสดง notification ชั่วคราว |
 
@@ -227,12 +281,14 @@ S = {
 | 2025-05 | `updBLimit` ไม่ทำงาน — สาเหตุ: `JSON.stringify` ใน oninput attribute ทำให้ double quotes ชนกัน → SyntaxError แก้โดยเพิ่ม `_cbMap` global เก็บ cb แยกตาม prefix แทน |
 | 2025-05 | ย้ายแถบ "ยอดที่จ่ายออก" / "ยอดให้" ไปใต้ grid แบงค์ทั้งใน รายจ่าย และ แลกเงิน (ทั้งซ้าย-ขวา) |
 | 2026-05 | ปรับ modal แลกเงินระหว่างสาย: เอา cbBar ออก, เปลี่ยนเป็น layout grid แถวตรงกัน (display:contents), denomination เรียง 1 บรรทัด/แถว, font input 20px, เอาช่องวันที่/หมายเหตุออก ใช้ `today()` อัตโนมัติ |
+| 2026-05 | เพิ่มระบบ PIN login: ผู้ใช้ทั่วไป (1111) / ผู้ดูแล (0000) — จำ session ใน localStorage, ผู้ใช้ทั่วไปลบรายการไม่ได้, ผู้ดูแลจัดการสายได้ (เพิ่ม/แก้ไข/ลบ) |
 
 ---
 
 ## 🗺️ Roadmap — แผนต่อไป
 
 ### Phase 2 — Auth & Multi-user
+- [x] ระบบ PIN login เบื้องต้น (2 role: user / admin)
 - [ ] เปิด Supabase Auth — น้องลัดดามี account ของตัวเอง
 - [ ] เปิด RLS + policy ตาม user
 - [ ] ไม่ต้องใช้ anon key แบบเปิดอยู่
