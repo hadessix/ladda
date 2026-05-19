@@ -8,8 +8,8 @@
 
 ```
 C:\นับเงินอี้อ๋า\
-├── ladda.html         ← ไฟล์หลัก
-└── README_ladda.md    ← ไฟล์นี้
+├── index.html         ← ไฟล์หลัก
+└── README.md    ← ไฟล์นี้
 ```
 
 ---
@@ -18,7 +18,7 @@ C:\นับเงินอี้อ๋า\
 
 | รายการ | รายละเอียด |
 |---|---|
-| ไฟล์ | `ladda.html` |
+| ไฟล์ | `index.html` |
 | เทคโนโลยี | Vanilla HTML + CSS + JavaScript (ไม่มี dependency) |
 | การเก็บข้อมูล | **Supabase** (cloud) — ข้อมูลถาวร ไม่หายเมื่อปิด browser |
 | Hosting | **Cloudflare Pages** |
@@ -30,7 +30,7 @@ C:\นับเงินอี้อ๋า\
 
 | รายการ | ค่า |
 |---|---|
-| **URL แอป** | https://b2f47ce5.ladda-b0j.pages.dev/ladda.html |
+| **URL แอป** | https://b2f47ce5.index-b0j.pages.dev/index.html |
 | **GitHub repo** | https://github.com/hadessix/ladda |
 | **Supabase URL** | https://lsxnbdhyfsuqhopzuwls.supabase.co |
 | **Supabase anon key** | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxzeG5iZGh5ZnN1cWhvcHp1d2xzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxOTEyMjQsImV4cCI6MjA5NDc2NzIyNH0.yQUghPf7xNmPclMYNg1fX2c2ST9CTYsXl3-VjLRM2tA` |
@@ -112,8 +112,8 @@ sessions (
 - กด **สรุปรอบ** → บันทึกเป็น entry ถาวรลง Supabase
 
 ### 4. รายรับ / รายจ่าย / แลกเงินระหว่างสาย
-- รายรับ: ระบุแบงค์ที่รับ (บังคับ)
-- รายจ่าย: ระบุจำนวนเงิน (บังคับ) + แบงค์ที่จ่ายออก (ไม่บังคับ)
+- รายรับ: ระบุแบงค์ที่รับ (บังคับ) — ยอดคำนวณอัตโนมัติ
+- รายจ่าย: ระบุแบงค์ที่จ่ายออก (บังคับ อย่างน้อย 1 ใบ) — ยอดคำนวณอัตโนมัติ ไม่ต้องกรอกตัวเลขเอง จำกัดไม่เกินแบงค์ที่มีในกล่อง
 - แลกเงิน: UI 2 คอลัมน์ บันทึก exout/exin ทั้ง 2 ฝั่งพร้อมกัน
 
 ---

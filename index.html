@@ -672,7 +672,7 @@ function cbBar(cb){
   </div>`;
 }
 
-// ─── EXPENSE (merged with withdraw) ───
+// ─── EXPENSE (bill-based) ───
 function openExpense(){
   const cb=calcCB(S.shop,S.month);
   const body=`
@@ -680,31 +680,28 @@ function openExpense(){
     <div style="height:12px;"></div>
     <div class="frow">
       <div class="fg"><label class="flbl">วันที่</label><input type="date" class="finp" id="ep_d" value="${today()}"></div>
-      <div class="fg"><label class="flbl">จำนวนเงิน (บาท)</label><input type="number" class="finp" id="ep_a" placeholder="0" inputmode="numeric"></div>
+      <div class="fg"><label class="flbl">รายละเอียด</label><input type="text" class="finp" id="ep_t" placeholder="เช่น เงินเดือน, ค่าน้ำมัน"></div>
     </div>
-    <div class="fg"><label class="flbl">รายละเอียด</label><input type="text" class="finp" id="ep_t" placeholder="เช่น เงินเดือน, ค่าน้ำมัน"></div>
-    <div class="fg"><label class="flbl">หมายเหตุ</label><input type="text" class="finp" id="ep_n"></div>
-    <div class="slbl">แบงค์ที่จ่ายออก (ไม่บังคับ)</div>
-    <div class="tbar"><span class="tl">ยอดรวมแบงค์</span><span class="tv" id="ep_tot">฿0</span></div>
+    <div class="tbar"><span class="tl">ยอดที่จ่ายออก</span><span class="tv" id="ep_tot">฿0</span></div>
     ${billInpWithLimit('ep',cb)}`;
   OM('เพิ่มรายจ่าย',body,`<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-a" onclick="saveExpense()">บันทึก</button>`);
 }
 async function saveExpense(){
   const d=document.getElementById('ep_d').value;
-  const a=parseFloat(document.getElementById('ep_a').value)||0;
   const t=document.getElementById('ep_t').value||'รายจ่าย';
-  const n=document.getElementById('ep_n').value;
   const bills=gb('ep');
-  if(!d||!a){toast('กรุณากรอกวันที่และจำนวนเงิน');return;}
+  const amount=bv(bills);
+  if(!d){toast('กรุณาเลือกวันที่');return;}
+  if(amount===0){toast('กรุณาเลือกแบงค์ที่จ่ายออกอย่างน้อย 1 ใบ');return;}
   // validate แบงค์ไม่เกินที่มี
   const cb=calcCB(S.shop,S.month);
   const over=BT.find(tt=>bills[tt]>(cb[tt]||0));
   if(over){toast(`แบงค์ ฿${BL[over]} เกินจำนวนที่มีในกล่อง (มี ${fN(cb[over]||0)} ใบ)`);return;}
-  const entry={id:uid(),type:'expense',df:d,dt:d,amount:a,title:t,note:n,bills};
+  const entry={id:uid(),type:'expense',df:d,dt:d,amount,title:t,note:null,bills};
   try{
     await sbUpsert('entries',entryToRow(entry,S.shop,S.month));
     ge(S.shop,S.month).push(entry);
-    CM();render();toast('บันทึกรายจ่ายแล้ว ✓');
+    CM();render();toast(`บันทึกรายจ่าย ${fmt(amount)} แล้ว ✓`);
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
 }
 

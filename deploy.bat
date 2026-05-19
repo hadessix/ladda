@@ -1,4 +1,4 @@
 git add .
-git commit -m "update"
+git commit -m "1.1แก้รายจ่าย"
 git push
 wrangler pages deploy . --project-name=ladda --commit-dirty=true
