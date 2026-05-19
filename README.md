@@ -345,6 +345,7 @@ AUTH = { role: 'user' | 'admin' }   // สถานะ login (in-memory)
 | 2026-05 | เพิ่มระบบ Group: admin สร้างกลุ่มสายได้, sidebar แสดงกลุ่มบนสุด + สายไม่มีกลุ่มด้านล่าง, หน้าสรุปกลุ่มแสดงยอดรวม + card แต่ละสาย, toggle tab_flags ต่อกลุ่ม/สาย |
 | 2026-05 | เพิ่มแท็บ "จ่ายเฮียรวย": admin ตั้ง group ใดก็ได้เป็นเฮียรวย (is_owner flag), UI 1 ฝั่งมี cap, บันทึก exout+exin ที่ route แรกของกลุ่มเฮียรวย, group เฮียรวยแสดง ⭐ ใน sidebar |
 | 2026-05 | แก้ shop view แลกระหว่างสาย: ฝั่งซ้าย lock เป็นสายปัจจุบัน, ฝั่งขวาเลือกได้เฉพาะ standalone routes + groups (route ที่อยู่ใน group ใดก็ตามถูก filter ออก รวมถึง group ของตัวเอง) |
+| 2026-05 | ปรับ sidebar ให้อ่านง่ายขึ้นสำหรับผู้ใช้บน iPad: width 200→240px, font ชื่อสาย/กลุ่ม 12-13→15px, font ยอดเงิน 11→13px, font สายย่อยใน group 12→14px, padding กว้างขึ้นทุก element |
 
 ---
 
