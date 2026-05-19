@@ -243,7 +243,7 @@ let S={
   shops:[],
   entries:{},   // entries[sid][monthKey] = [{...}]
   sessions:{},  // sessions[sid][monthKey] = {subs:[...]} | null
-  shop:null, month:cpk()
+  shop:null, month:cpk(), year:String(new Date().getFullYear())
 };
 
 // ─── load all from Supabase ───
@@ -299,10 +299,55 @@ function render(){renderTabs();renderSidebar();renderContent();document.getEleme
 
 function renderTabs(){
   const bar=document.getElementById('tabs-bar');
-  const months=[];let y=new Date().getFullYear(),m=new Date().getMonth()+1;
-  for(let i=0;i<7;i++){months.unshift(mkKey(y,m));m--;if(m<1){m=12;y--;}}
-  const cp=cpk();if(!months.includes(cp))months.push(cp);months.sort();
-  bar.innerHTML=months.map(k=>`<button class="tab-btn${k===S.month?' active':''}" onclick="setMonth('${k}')">${monthLbl(k)}</button>`).join('');
+  const cp=cpk();
+  const cyear=Number(cp.split('-')[0]);
+
+  // รวบรวม month keys ที่มีข้อมูล + เดือนปัจจุบัน
+  const mkSet=new Set([cp]);
+  Object.values(S.entries).forEach(byMonth=>{
+    Object.keys(byMonth).forEach(mk=>{
+      if((byMonth[mk]||[]).length>0)mkSet.add(mk);
+    });
+  });
+  Object.values(S.sessions).forEach(byMonth=>{
+    Object.keys(byMonth).forEach(mk=>{if(byMonth[mk])mkSet.add(mk);});
+  });
+
+  // จัดกลุ่มตามปี
+  const byYear={};
+  mkSet.forEach(mk=>{
+    const y=mk.split('-')[0];
+    if(!byYear[y])byYear[y]=[];
+    byYear[y].push(mk);
+  });
+  const years=Object.keys(byYear).sort();
+
+  // ถ้า S.year ไม่ถูก set หรือปีที่เลือกไม่มีข้อมูล ใช้ปีของเดือนปัจจุบัน
+  if(!S.year||!byYear[S.year])S.year=String(cyear);
+
+  const monthsInYear=(byYear[S.year]||[]).slice().sort();
+  // ถ้าเดือนที่เลือกอยู่ไม่ตรงปี ให้ reset เป็นเดือนล่าสุดในปีนั้น
+  if(S.month.split('-')[0]!==S.year){
+    S.month=monthsInYear[monthsInYear.length-1]||cp;
+  }
+
+  let html='';
+  // ชั้น 1: tab ปี
+  html+=`<div style="display:flex;gap:4px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border);">`;
+  years.forEach(y=>{
+    html+=`<button class="tab-btn${y===S.year?' active':''}" onclick="setYear('${y}')">${Number(y)+543}</button>`;
+  });
+  html+=`</div>`;
+  // ชั้น 2: tab เดือนในปีนั้น
+  html+=`<div style="display:flex;gap:4px;flex-wrap:wrap;">`;
+  monthsInYear.forEach(mk=>{
+    const[,m]=mk.split('-');
+    const mname=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][Number(m)-1];
+    html+=`<button class="tab-btn${mk===S.month?' active':''}" onclick="setMonth('${mk}')">${mname}</button>`;
+  });
+  html+=`</div>`;
+
+  bar.innerHTML=html;
 }
 
 function renderSidebar(){
@@ -463,6 +508,31 @@ function CM(){document.getElementById('overlay').style.display='none';}
 document.getElementById('overlay').addEventListener('click',e=>{if(e.target.id==='overlay')CM();});
 
 // bill input grid helpers
+// bill input พร้อม cap (สำหรับรายจ่าย)
+function billInpWithLimit(p,cb){
+  const g='bgrid';
+  return`<div class="${g}">`+BT.map(t=>{
+    const max=cb[t]||0;
+    return`<div class="bcell"><label><span class="pill ${BC[t]}">฿${BL[t]}</span><span style="font-size:10px;color:var(--text3);margin-left:4px;">มี ${fN(max)}</span></label><input type="number" min="0" max="${max}" value="0" id="${p}_${t}" oninput="updBLimit('${p}',${JSON.stringify(Object.fromEntries(BT.map(tt=>[tt,cb[tt]||0])))})" inputmode="numeric"><div class="bsub" id="${p}s_${t}">= ฿0</div></div>`;
+  }).join('')+`</div>`;
+}
+function updBLimit(p,cb){
+  let tot=0,over=false;
+  BT.forEach(t=>{
+    const inp=document.getElementById(`${p}_${t}`);
+    if(!inp)return;
+    let v=parseInt(inp.value)||0;
+    const max=cb[t]||0;
+    if(v>max){v=max;inp.value=max;inp.style.color='var(--red)';over=true;}
+    else inp.style.color='';
+    const val=(t==='coin'?1:t)*v;
+    tot+=val;
+    const s=document.getElementById(`${p}s_${t}`);
+    if(s)s.textContent=`= ฿${fN(val)}`;
+  });
+  const tb=document.getElementById(`${p}_tot`);if(tb)tb.textContent=fmt(tot);
+  if(over)toast('ไม่สามารถใส่แบงค์เกินจำนวนที่มีในกล่องได้');
+}
 function billInp(p,cols){
   const g=cols===2?'bgrid2':'bgrid';
   return`<div class="${g}">`+BT.map(t=>`<div class="bcell"><label><span class="pill ${BC[t]}">฿${BL[t]}</span></label><input type="number" min="0" value="0" id="${p}_${t}" oninput="updB('${p}')" inputmode="numeric"><div class="bsub" id="${p}s_${t}">= ฿0</div></div>`).join('')+`</div>`;
@@ -571,9 +641,42 @@ async function saveIncome(){
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
 }
 
+// ─── คำนวณแบงค์คงเหลือของสาย (sid) ในเดือน (mk) ───
+function calcCB(sid,mk){
+  const cb=eb();
+  const entries=ge(sid,mk);
+  entries.forEach(e=>{
+    if(e.type==='count'){
+      (e.subs||[]).forEach(s=>BT.forEach(t=>cb[t]+=(s.bills[t]||0)));
+    } else if(e.type==='income'||e.type==='exin'){
+      if(e.bills)BT.forEach(t=>cb[t]+=(e.bills[t]||0));
+    } else if(e.type==='expense'||e.type==='exout'){
+      if(e.bills)BT.forEach(t=>cb[t]-=(e.bills[t]||0));
+    }
+  });
+  const sess=gs(sid,mk);
+  if(sess)sess.subs.forEach(s=>BT.forEach(t=>cb[t]+=(s.bills[t]||0)));
+  return cb;
+}
+
+// ─── render แถบแบงค์คงเหลือ ───
+function cbBar(cb){
+  const hasBills=BT.some(t=>cb[t]>0);
+  if(!hasBills)return`<div style="padding:8px 12px;background:var(--bg3);border-radius:7px;font-size:13px;color:var(--text3);">ไม่มีแบงค์คงเหลือในกล่อง</div>`;
+  const chips=BT.filter(t=>cb[t]>0).map(t=>`<span class="pill ${BC[t]}">฿${BL[t]} × ${fN(cb[t])}</span>`).join(' ');
+  const total=BT.reduce((s,t)=>s+(t==='coin'?1:t)*(cb[t]>0?cb[t]:0),0);
+  return`<div style="background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:10px 12px;">
+    <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">แบงค์ในกล่องตอนนี้ — รวม <strong style="color:var(--green);font-family:var(--mono);">${fmt(total)}</strong></div>
+    <div class="chips">${chips}</div>
+  </div>`;
+}
+
 // ─── EXPENSE (merged with withdraw) ───
 function openExpense(){
+  const cb=calcCB(S.shop,S.month);
   const body=`
+    ${cbBar(cb)}
+    <div style="height:12px;"></div>
     <div class="frow">
       <div class="fg"><label class="flbl">วันที่</label><input type="date" class="finp" id="ep_d" value="${today()}"></div>
       <div class="fg"><label class="flbl">จำนวนเงิน (บาท)</label><input type="number" class="finp" id="ep_a" placeholder="0" inputmode="numeric"></div>
@@ -582,7 +685,7 @@ function openExpense(){
     <div class="fg"><label class="flbl">หมายเหตุ</label><input type="text" class="finp" id="ep_n"></div>
     <div class="slbl">แบงค์ที่จ่ายออก (ไม่บังคับ)</div>
     <div class="tbar"><span class="tl">ยอดรวมแบงค์</span><span class="tv" id="ep_tot">฿0</span></div>
-    ${billInp('ep')}`;
+    ${billInpWithLimit('ep',cb)}`;
   OM('เพิ่มรายจ่าย',body,`<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-a" onclick="saveExpense()">บันทึก</button>`);
 }
 async function saveExpense(){
@@ -592,6 +695,10 @@ async function saveExpense(){
   const n=document.getElementById('ep_n').value;
   const bills=gb('ep');
   if(!d||!a){toast('กรุณากรอกวันที่และจำนวนเงิน');return;}
+  // validate แบงค์ไม่เกินที่มี
+  const cb=calcCB(S.shop,S.month);
+  const over=BT.find(tt=>bills[tt]>(cb[tt]||0));
+  if(over){toast(`แบงค์ ฿${BL[over]} เกินจำนวนที่มีในกล่อง (มี ${fN(cb[over]||0)} ใบ)`);return;}
   const entry={id:uid(),type:'expense',df:d,dt:d,amount:a,title:t,note:n,bills};
   try{
     await sbUpsert('entries',entryToRow(entry,S.shop,S.month));
@@ -604,8 +711,9 @@ async function saveExpense(){
 function openExchange(){
   if(S.shops.length<2){toast('ต้องมีสายอย่างน้อย 2 สาย');return;}
   const opts=S.shops.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-  // default left = first shop, right = second shop
   const leftDefault=S.shops[0].id, rightDefault=S.shops[1].id;
+  const cbL=calcCB(leftDefault,S.month);
+  const cbR=calcCB(rightDefault,S.month);
   const body=`
     <p style="font-size:13px;color:var(--text2);margin-bottom:14px;">แต่ละฝั่งระบุแบงค์ที่ให้ออก — แบงค์จะสลับไปอีกฝั่งอัตโนมัติ</p>
     <div class="frow" style="margin-bottom:12px;">
@@ -616,29 +724,39 @@ function openExchange(){
       <div class="exch-col" style="border-color:var(--abr);">
         <div class="exch-col-hd" style="background:var(--adim);color:var(--amber);">
           ฝั่งซ้าย — แบงค์ที่ให้ออก
-          <div style="margin-top:6px;"><select class="fsel" id="xc_L" style="font-size:13px;">${opts}</select></div>
+          <div style="margin-top:6px;"><select class="fsel" id="xc_L" style="font-size:13px;" onchange="refreshExchangeCB()">${opts}</select></div>
         </div>
         <div class="exch-col-body">
+          <div id="xcbL" style="margin-bottom:8px;">${cbBar(cbL)}</div>
           <div class="tbar-sm"><span class="tl">ยอดให้</span><span class="tv" id="xL_tot">฿0</span></div>
-          ${billInp('xL',2)}
+          ${billInpWithLimit('xL',cbL)}
         </div>
       </div>
       <div class="exch-mid">⇄</div>
       <div class="exch-col" style="border-color:var(--gbr);">
         <div class="exch-col-hd" style="background:var(--gdim);color:var(--green);">
           ฝั่งขวา — แบงค์ที่ให้ออก
-          <div style="margin-top:6px;"><select class="fsel" id="xc_R" style="font-size:13px;">${opts}</select></div>
+          <div style="margin-top:6px;"><select class="fsel" id="xc_R" style="font-size:13px;" onchange="refreshExchangeCB()">${opts}</select></div>
         </div>
         <div class="exch-col-body">
+          <div id="xcbR" style="margin-bottom:8px;">${cbBar(cbR)}</div>
           <div class="tbar-sm"><span class="tl">ยอดให้</span><span class="tv" id="xR_tot">฿0</span></div>
-          ${billInp('xR',2)}
+          ${billInpWithLimit('xR',cbR)}
         </div>
       </div>
     </div>`;
   OM('แลกเงินระหว่างสาย',body,`<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-p" onclick="saveExchange()">บันทึกการแลก</button>`);
-  // set default selections
   document.getElementById('xc_L').value=leftDefault;
   document.getElementById('xc_R').value=rightDefault;
+}
+function refreshExchangeCB(){
+  // เมื่อ user เปลี่ยนสาย ให้อัปเดต cbBar แต่ไม่ re-render input (เพราะจะ reset ค่าที่กรอก)
+  const Lid=document.getElementById('xc_L').value;
+  const Rid=document.getElementById('xc_R').value;
+  const cbL=calcCB(Lid,S.month);
+  const cbR=calcCB(Rid,S.month);
+  const elL=document.getElementById('xcbL');if(elL)elL.innerHTML=cbBar(cbL);
+  const elR=document.getElementById('xcbR');if(elR)elR.innerHTML=cbBar(cbR);
 }
 async function saveExchange(){
   const d=document.getElementById('xc_d').value;
@@ -651,6 +769,13 @@ async function saveExchange(){
   const La=bv(Lblls), Ra=bv(Rblls);
   if(!d){toast('กรุณาเลือกวันที่');return;}
   if(La===0&&Ra===0){toast('กรุณาใส่แบงค์อย่างน้อยฝั่งเดียว');return;}
+  // validate แบงค์ไม่เกินที่มีแต่ละฝั่ง
+  const cbL=calcCB(Lid,S.month);
+  const cbR=calcCB(Rid,S.month);
+  const overL=BT.find(t=>Lblls[t]>(cbL[t]||0));
+  if(overL){toast(`ฝั่งซ้าย: แบงค์ ฿${BL[overL]} เกินจำนวนที่มี (มี ${fN(cbL[overL]||0)} ใบ)`);return;}
+  const overR=BT.find(t=>Rblls[t]>(cbR[t]||0));
+  if(overR){toast(`ฝั่งขวา: แบงค์ ฿${BL[overR]} เกินจำนวนที่มี (มี ${fN(cbR[overR]||0)} ใบ)`);return;}
   const Lshop=S.shops.find(s=>s.id===Lid);
   const Rshop=S.shops.find(s=>s.id===Rid);
   const mk2=S.month;
@@ -692,6 +817,7 @@ async function saveShop(){
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
 }
 
+function setYear(y){S.year=y;const months=Object.keys(Object.assign({},...Object.values(S.entries).map(e=>e))).filter(mk=>mk.startsWith(y));const cp=cpk();const all=new Set([...months,cp.startsWith(y)?cp:''].filter(Boolean));const sorted=[...all].sort();S.month=sorted[sorted.length-1]||cpk();render();}
 function setShop(id){S.shop=id;render();}
 function setMonth(m){S.month=m;render();}
 
