@@ -507,8 +507,8 @@ function renderSidebar(){
       });
       html+=`</div></div>`;
     });
-    if(adm)html+=`<button class="sadd" onclick="addGroup()">+ เพิ่มกลุ่ม</button>`;
   }
+  if(adm)html+=`<button class="sadd" onclick="addGroup()">+ เพิ่มกลุ่ม</button>`;
   // ── สายที่ไม่ได้อยู่กลุ่ม ──
   const ungrouped=S.shops.filter(sh=>!grouped.has(sh.id));
   if(ungrouped.length>0){
