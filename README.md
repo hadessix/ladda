@@ -46,6 +46,8 @@ routes (
   id          text PRIMARY KEY,
   name        text NOT NULL,
   color       text NOT NULL DEFAULT '#22c55e',
+  tab_flags   jsonb DEFAULT '{"count":true,"income":true,"expense":true,"exchange":true}',
+  sort_order  int DEFAULT 0,
   created_at  timestamp DEFAULT now()
 )
 
@@ -75,6 +77,22 @@ sessions (
   subs        jsonb,
   created_at  timestamp DEFAULT now(),
   UNIQUE(route_id, month_key)
+)
+
+-- 4. groups (กลุ่มสาย)
+groups (
+  id          text PRIMARY KEY,
+  name        text NOT NULL,
+  sort_order  int DEFAULT 0,
+  tab_flags   jsonb DEFAULT '{"count":true,"income":true,"expense":true,"exchange":true}'
+)
+
+-- 5. group_members (สมาชิกกลุ่ม)
+group_members (
+  group_id    text NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  route_id    text NOT NULL REFERENCES routes(id) ON DELETE CASCADE,
+  sort_order  int DEFAULT 0,
+  PRIMARY KEY (group_id, route_id)
 )
 ```
 
@@ -180,11 +198,15 @@ sessions (
 ALTER TABLE public.routes DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.entries DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sessions DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.groups DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.group_members DISABLE ROW LEVEL SECURITY;
 
 -- ให้ anon role เข้าถึงได้
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.routes TO anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.entries TO anon;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.sessions TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.groups TO anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.group_members TO anon;
 ```
 
 ---
@@ -213,10 +235,13 @@ wrangler pages deploy . --project-name=ladda --commit-dirty=true
 
 ```js
 S = {
-  shops:   [{ id, name, color }],
+  shops:   [{ id, name, color, tab_flags, sort_order }],
+  groups:  [{ id, name, sort_order, tab_flags }],
+  groupMembers: { [groupId]: [routeId, ...] },
   entries: { [routeId]: { [monthKey]: [ entry, ... ] } },
   sessions:{ [routeId]: { [monthKey]: { subs: [{ df, dt, bills }] } | null } },
-  shop:  "s1",
+  view:  { type: 'shop'|'group', id: string },
+  shop:  "s1",   // shortcut = view.id เมื่อ type==='shop'
   month: "2025-05",
   year:  "2025"
 }
@@ -245,8 +270,28 @@ AUTH = { role: 'user' | 'admin' }   // สถานะ login (in-memory)
 | `showApp()` | ซ่อนหน้า login, อัปเดต badge, เรียก loadAll() |
 | `logout()` | ลบ localStorage, แสดงหน้า login ใหม่ |
 | `isAdmin()` | คืน true ถ้า role === 'admin' |
-| `loadAll()` | โหลด routes/entries/sessions จาก Supabase ตอน init |
+| `loadAll()` | โหลด routes/entries/sessions/groups/group_members จาก Supabase |
 | `render()` | re-render ทุก component |
+| `renderSidebar()` | sidebar: กลุ่ม (บนสุด) + สายไม่มีกลุ่ม (ล่าง) |
+| `renderContent()` | router → renderShopContent() หรือ renderGroupContent() |
+| `renderShopContent()` | หน้าสาย (เดิม) — กรอง tab ตาม tab_flags |
+| `renderGroupContent()` | หน้าสรุปกลุ่ม — ยอดรวม + card แต่ละสาย |
+| `setView(type,id)` | เปลี่ยน view ปัจจุบัน (shop/group) แล้ว render() |
+| `curTabFlags()` | คืน tab_flags ของ view ปัจจุบัน |
+| `groupTot(gid)` | ยอดรวมของกลุ่ม |
+| `groupedRouteIds()` | Set ของ routeId ที่อยู่ในกลุ่มใดก็ได้ |
+| `addGroup()` | เปิด modal เพิ่มกลุ่ม (admin only) |
+| `saveGroup()` | บันทึกกลุ่มใหม่ + members ลง Supabase |
+| `editGroup(id)` | เปิด modal แก้ไขกลุ่ม |
+| `saveEditGroup(id)` | บันทึกการแก้ไขกลุ่ม + sync members |
+| `deleteGroup(id)` | ลบกลุ่ม (สายไม่ถูกลบ) |
+| `openCountGroup()` | ปุ่มนับเงินจากหน้ากลุ่ม → popup เลือกสาย |
+| `openIncomeGroup()` | ปุ่มรายรับจากหน้ากลุ่ม → popup เลือกสาย |
+| `openExpenseGroup()` | ปุ่มรายจ่ายจากหน้ากลุ่ม → popup เลือกสาย |
+| `pickShopThen(...)` | modal เลือกสายก่อนเปิด action |
+| `tfChips(flags,prefix)` | render toggle chip สำหรับ tab_flags |
+| `getTf(prefix)` | อ่านค่า tab_flags จาก chip ใน DOM |
+| `toggleGrpCard(id)` | ขยาย/ยุบ card สายในหน้าสรุปกลุ่ม |
 | `cpk()` | คืน month key ของงวดปัจจุบัน (เริ่มวันที่ 11) |
 | `bv(bills)` | คำนวณยอดเงินรวมจาก bills object |
 | `shopTot(sid)` | ยอดสุทธิของสาย (รวม open session) |
@@ -257,18 +302,18 @@ AUTH = { role: 'user' | 'admin' }   // สถานะ login (in-memory)
 | `sbGet/sbUpsert/sbDelete` | Supabase REST helpers |
 | `entryToRow/rowToEntry` | map JS ↔ Supabase fields |
 | `summarize()` | สรุปรอบนับเงิน → upsert entry + delete session |
-| `openExchange()` | เปิด modal แลกเงินระหว่างสาย (layout grid แถวตรงกัน) |
+| `openExchange()` | เปิด modal แลกเงินระหว่างสาย |
 | `refreshExchangeCB()` | อัปเดต cap + label "มี X ใบ" เมื่อเปลี่ยนสาย |
-| `billInpWithLimit(p,cb)` | render grid input แบงค์พร้อม cap — เก็บ cb ใน `_cbMap[p]` |
-| `billInpExchange(p,cb)` | render input แบงค์สำหรับ modal แลกเงิน (1 คอลัมน์, font 20px) |
-| `updBLimit(p)` | อัปเดตยอด real-time สำหรับ input ที่มี cap (อ่าน cb จาก `_cbMap`) |
-| `billInp(p)` | render grid input แบงค์ไม่มี cap (สำหรับ count/income) |
+| `billInpWithLimit(p,cb)` | render grid input แบงค์พร้อม cap |
+| `billInpExchange(p,cb)` | render input แบงค์สำหรับ modal แลกเงิน |
+| `updBLimit(p)` | อัปเดตยอด real-time สำหรับ input ที่มี cap |
+| `billInp(p)` | render grid input แบงค์ไม่มี cap |
 | `updB(p)` | อัปเดตยอด real-time สำหรับ input ไม่มี cap |
 | `addShop()` | เปิด modal เพิ่มสาย (admin only) |
-| `saveShop()` | บันทึกสายใหม่ลง Supabase |
-| `editShop(id)` | เปิด modal แก้ไขชื่อ + สีสาย (admin only) |
+| `saveShop()` | บันทึกสายใหม่ลง Supabase (รวม tab_flags) |
+| `editShop(id)` | เปิด modal แก้ไขชื่อ + สี + tab_flags (admin only) |
 | `saveEditShop(id)` | บันทึกการแก้ไขสาย |
-| `deleteShop(id)` | ลบสายและข้อมูลทั้งหมดออกจาก Supabase (admin only) |
+| `deleteShop(id)` | ลบสายและข้อมูลทั้งหมด + sync groupMembers |
 | `OM/CM` | เปิด/ปิด modal |
 | `toast(msg)` | แสดง notification ชั่วคราว |
 
@@ -282,6 +327,7 @@ AUTH = { role: 'user' | 'admin' }   // สถานะ login (in-memory)
 | 2025-05 | ย้ายแถบ "ยอดที่จ่ายออก" / "ยอดให้" ไปใต้ grid แบงค์ทั้งใน รายจ่าย และ แลกเงิน (ทั้งซ้าย-ขวา) |
 | 2026-05 | ปรับ modal แลกเงินระหว่างสาย: เอา cbBar ออก, เปลี่ยนเป็น layout grid แถวตรงกัน (display:contents), denomination เรียง 1 บรรทัด/แถว, font input 20px, เอาช่องวันที่/หมายเหตุออก ใช้ `today()` อัตโนมัติ |
 | 2026-05 | เพิ่มระบบ PIN login: ผู้ใช้ทั่วไป (1111) / ผู้ดูแล (0000) — จำ session ใน localStorage, ผู้ใช้ทั่วไปลบรายการไม่ได้, ผู้ดูแลจัดการสายได้ (เพิ่ม/แก้ไข/ลบ) |
+| 2026-05 | เพิ่มระบบ Group: admin สร้างกลุ่มสายได้, sidebar แสดงกลุ่มบนสุด + สายไม่มีกลุ่มด้านล่าง, หน้าสรุปกลุ่มแสดงยอดรวม + card แต่ละสาย, toggle tab_flags ต่อกลุ่ม/สาย |
 
 ---
 

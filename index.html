@@ -185,6 +185,32 @@ main{display:flex;flex:1;overflow:hidden;}
 .role-user{background:var(--bdim);border-color:var(--bbr);color:var(--blue);}
 /* shop manage buttons */
 .shop-actions{display:flex;gap:4px;margin-left:auto;}
+/* group in sidebar */
+.grp-box{margin:6px 8px;border:1px solid var(--border2);border-radius:8px;overflow:hidden;}
+.grp-hd{display:flex;align-items:center;gap:6px;padding:8px 10px;cursor:pointer;background:var(--bg3);border-left:3px solid transparent;}
+.grp-hd:hover{filter:brightness(1.1);}
+.grp-hd.active{border-left-color:var(--green);}
+.grp-hd.active .grp-name{color:var(--green);}
+.grp-name{font-size:12px;font-weight:600;flex:1;}
+.grp-amt{font-size:11px;font-family:var(--mono);color:var(--text2);}
+.grp-members{background:var(--bg2);}
+.grp-member{display:flex;align-items:center;gap:6px;padding:7px 10px 7px 20px;cursor:pointer;border-left:3px solid transparent;font-size:12px;}
+.grp-member:hover{background:var(--bg3);}
+.grp-member.active{background:var(--bg3);border-left-color:var(--green);color:var(--green);}
+.grp-member .sn{flex:1;font-size:12px;}
+.grp-member .sa{font-size:11px;font-family:var(--mono);color:var(--text2);}
+/* ungrouped section */
+.ssec-ungrouped{padding:8px 16px 4px;font-size:11px;color:var(--text3);letter-spacing:1px;margin-top:4px;}
+/* group summary content */
+.grp-summary-hd{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;gap:10px;flex-wrap:wrap;}
+.grp-route-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden;}
+.grp-route-card-hd{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg3);cursor:pointer;}
+.grp-route-card-body{padding:14px;display:none;}
+.grp-route-card-body.open{display:block;}
+/* tab_flags toggle */
+.tf-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;}
+.tf-chip{padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--bg3);color:var(--text2);font-size:12px;cursor:pointer;user-select:none;transition:.15s;}
+.tf-chip.on{background:var(--bdim);border-color:var(--bbr);color:var(--blue);}
 /* Round label */
 .round-sep{display:flex;align-items:center;gap:8px;margin:16px 0 10px;color:var(--text3);font-size:12px;}
 .round-sep::before,.round-sep::after{content:'';flex:1;height:1px;background:var(--border);}
@@ -364,21 +390,30 @@ function rowToEntry(r){
 // ─── state ───
 let S={
   shops:[],
+  groups:[],       // [{id,name,sort_order,tab_flags}]
+  groupMembers:{}, // {groupId:[routeId,...]}
   entries:{},   // entries[sid][monthKey] = [{...}]
   sessions:{},  // sessions[sid][monthKey] = {subs:[...]} | null
-  shop:null, month:cpk(), year:String(new Date().getFullYear())
+  shop:null,
+  view:{type:'shop',id:null}, // type: 'shop'|'group'
+  month:cpk(), year:String(new Date().getFullYear())
 };
 
 // ─── load all from Supabase ───
 async function loadAll(){
   document.getElementById('content').innerHTML='<div class="empty"><div class="ei">⏳</div><p>กำลังโหลดข้อมูล...</p></div>';
   try{
-    const [routes,entries,sessions]=await Promise.all([
-      sbGet('routes','order=created_at.asc'),
+    const [routes,entries,sessions,groups,gMembers]=await Promise.all([
+      sbGet('routes','order=sort_order.asc,created_at.asc'),
       sbGet('entries','order=created_at.asc'),
       sbGet('sessions','order=created_at.asc'),
+      sbGet('groups','order=sort_order.asc,id.asc'),
+      sbGet('group_members','order=sort_order.asc'),
     ]);
-    S.shops=routes.map(r=>({id:r.id,name:r.name,color:r.color}));
+    S.shops=routes.map(r=>({id:r.id,name:r.name,color:r.color,tab_flags:r.tab_flags||{count:true,income:true,expense:true,exchange:true},sort_order:r.sort_order||0}));
+    S.groups=groups.map(g=>({id:g.id,name:g.name,sort_order:g.sort_order||0,tab_flags:g.tab_flags||{count:true,income:true,expense:true,exchange:true}}));
+    S.groupMembers={};
+    gMembers.forEach(m=>{if(!S.groupMembers[m.group_id])S.groupMembers[m.group_id]=[];S.groupMembers[m.group_id].push(m.route_id);});
     S.entries={};
     entries.forEach(r=>{
       if(!S.entries[r.route_id])S.entries[r.route_id]={};
@@ -390,7 +425,12 @@ async function loadAll(){
       if(!S.sessions[r.route_id])S.sessions[r.route_id]={};
       S.sessions[r.route_id][r.month_key]={subs:r.subs||[]};
     });
-    if(S.shops.length>0&&!S.shop)S.shop=S.shops[0].id;
+    // set initial view
+    if(!S.view.id){
+      if(S.groups.length>0){S.view={type:'group',id:S.groups[0].id};}
+      else if(S.shops.length>0){S.view={type:'shop',id:S.shops[0].id};S.shop=S.shops[0].id;}
+    }
+    if(S.view.type==='shop')S.shop=S.view.id;
     render();
   }catch(err){
     document.getElementById('content').innerHTML=`<div class="empty"><div class="ei">❌</div><p>โหลดข้อมูลไม่สำเร็จ<br><small style="color:var(--text3)">${err.message}</small></p></div>`;
@@ -419,6 +459,81 @@ function grandTot(){return S.shops.reduce((s,sh)=>s+shopTot(sh.id),0);}
 
 // ─── RENDER ───
 function render(){renderTabs();renderSidebar();renderContent();document.getElementById('gtotal').textContent=fmt(grandTot());}
+
+// helper: รายชื่อ routeId ที่อยู่ในกลุ่มใดกลุ่มหนึ่ง
+function groupedRouteIds(){const s=new Set();Object.values(S.groupMembers).forEach(ids=>ids.forEach(id=>s.add(id)));return s;}
+// helper: ยอดรวมกลุ่ม
+function groupTot(gid){return(S.groupMembers[gid]||[]).reduce((s,id)=>s+shopTot(id),0);}
+// helper: tab_flags ของ view ปัจจุบัน
+function curTabFlags(){
+  if(S.view.type==='group'){const g=S.groups.find(x=>x.id===S.view.id);return g?.tab_flags||{count:true,income:true,expense:true,exchange:true};}
+  const sh=S.shops.find(x=>x.id===S.view.id);return sh?.tab_flags||{count:true,income:true,expense:true,exchange:true};
+}
+
+function renderSidebar(){
+  const sb=document.getElementById('sidebar');
+  const adm=isAdmin();
+  const grouped=groupedRouteIds();
+  let html='';
+  // ── กลุ่ม (บนสุด) ──
+  if(S.groups.length>0){
+    html+='<div class="ssec">กลุ่มสาย</div>';
+    S.groups.forEach(g=>{
+      const members=S.groupMembers[g.id]||[];
+      const isGrpActive=S.view.type==='group'&&S.view.id===g.id;
+      html+=`<div class="grp-box">
+        <div class="grp-hd${isGrpActive?' active':''}" onclick="setView('group','${g.id}')">
+          <span style="font-size:13px;">📁</span>
+          <span class="grp-name">${g.name}</span>
+          <span class="grp-amt">${fmt(groupTot(g.id))}</span>
+          ${adm?`<span onclick="event.stopPropagation()" style="display:flex;gap:3px;margin-left:4px;">
+            <button onclick="editGroup('${g.id}')" style="background:var(--bdim);border:1px solid var(--bbr);color:var(--blue);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;">✏️</button>
+            <button onclick="deleteGroup('${g.id}')" style="background:var(--rdim);border:1px solid var(--rbr);color:var(--red);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;">🗑</button>
+          </span>`:''}
+        </div>
+        <div class="grp-members">`;
+      members.forEach(rid=>{
+        const sh=S.shops.find(s=>s.id===rid);if(!sh)return;
+        const isActive=S.view.type==='shop'&&S.view.id===rid;
+        html+=`<div class="grp-member${isActive?' active':''}" onclick="setView('shop','${rid}')">
+          <span style="width:7px;height:7px;border-radius:50%;background:${sh.color};display:inline-block;flex-shrink:0;"></span>
+          <span class="sn">${sh.name}</span>
+          <span class="sa">${fmt(shopTot(sh.id))}</span>
+          ${adm?`<span onclick="event.stopPropagation()" style="display:flex;gap:3px;">
+            <button onclick="editShop('${sh.id}')" style="background:var(--bdim);border:1px solid var(--bbr);color:var(--blue);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;">✏️</button>
+            <button onclick="deleteShop('${sh.id}')" style="background:var(--rdim);border:1px solid var(--rbr);color:var(--red);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;">🗑</button>
+          </span>`:''}
+        </div>`;
+      });
+      html+=`</div></div>`;
+    });
+    if(adm)html+=`<button class="sadd" onclick="addGroup()">+ เพิ่มกลุ่ม</button>`;
+  }
+  // ── สายที่ไม่ได้อยู่กลุ่ม ──
+  const ungrouped=S.shops.filter(sh=>!grouped.has(sh.id));
+  if(ungrouped.length>0){
+    html+=`<div class="${S.groups.length>0?'ssec-ungrouped':'ssec'}">ร้านค้า / สาย</div>`;
+    ungrouped.forEach(sh=>{
+      const isActive=S.view.type==='shop'&&S.view.id===sh.id;
+      html+=`<div class="si${isActive?' active':''}" onclick="setView('shop','${sh.id}')">
+        <span style="width:8px;height:8px;border-radius:50%;background:${sh.color};display:inline-block;flex-shrink:0;"></span>
+        <span class="sn">${sh.name}</span><span class="sa">${fmt(shopTot(sh.id))}</span>
+        ${adm?`<span class="shop-actions" onclick="event.stopPropagation()">
+          <button onclick="editShop('${sh.id}')" style="background:var(--bdim);border:1px solid var(--bbr);color:var(--blue);border-radius:4px;padding:1px 6px;font-size:11px;cursor:pointer;">✏️</button>
+          <button onclick="deleteShop('${sh.id}')" style="background:var(--rdim);border:1px solid var(--rbr);color:var(--red);border-radius:4px;padding:1px 6px;font-size:11px;cursor:pointer;">🗑</button>
+        </span>`:''}
+      </div>`;
+    });
+  }
+  if(adm)html+=`<button class="sadd" onclick="addShop()">+ เพิ่มร้านค้า</button>`;
+  sb.innerHTML=html;
+  if(S.view.type==='group'){
+    const g=S.groups.find(x=>x.id===S.view.id);
+    document.getElementById('cur-shop').textContent=g?`📁 ${g.name}`:'';
+  } else {
+    document.getElementById('cur-shop').textContent=(S.shops.find(s=>s.id===S.view.id)||{}).name||'';
+  }
+}
 
 function renderTabs(){
   const bar=document.getElementById('tabs-bar');
@@ -473,28 +588,20 @@ function renderTabs(){
   bar.innerHTML=html;
 }
 
-function renderSidebar(){
-  const sb=document.getElementById('sidebar');
-  const adminControls=isAdmin();
-  sb.innerHTML='<div class="ssec">ร้านค้า / สาย</div>'+
-    S.shops.map(sh=>`<div class="si${sh.id===S.shop?' active':''}" onclick="setShop('${sh.id}')">
-      <span style="width:8px;height:8px;border-radius:50%;background:${sh.color};display:inline-block;flex-shrink:0;"></span>
-      <span class="sn">${sh.name}</span><span class="sa">${fmt(shopTot(sh.id))}</span>
-      ${adminControls?`<span class="shop-actions" onclick="event.stopPropagation()">
-        <button title="แก้ไข" onclick="editShop('${sh.id}')" style="background:var(--bdim);border:1px solid var(--bbr);color:var(--blue);border-radius:4px;padding:1px 6px;font-size:11px;cursor:pointer;">✏️</button>
-        <button title="ลบ" onclick="deleteShop('${sh.id}')" style="background:var(--rdim);border:1px solid var(--rbr);color:var(--red);border-radius:4px;padding:1px 6px;font-size:11px;cursor:pointer;">🗑</button>
-      </span>`:''}
-    </div>`).join('')+
-    (adminControls?'<button class="sadd" onclick="addShop()">+ เพิ่มร้านค้า</button>':'');
-  document.getElementById('cur-shop').textContent=(S.shops.find(s=>s.id===S.shop)||{}).name||'';
+function renderContent(){
+  if(S.view.type==='group') return renderGroupContent();
+  renderShopContent();
 }
 
-function renderContent(){
-  const shop=S.shops.find(s=>s.id===S.shop);
+// ── หน้าสาย (เดิม) ──
+function renderShopContent(){
+  const sid=S.view.id;
+  const shop=S.shops.find(s=>s.id===sid);
   if(!shop){document.getElementById('content').innerHTML='<div class="empty"><p>เลือกร้านค้า</p></div>';return;}
-  const entries=ge(S.shop,S.month);
-  const sess=gs(S.shop,S.month);
-
+  S.shop=sid;
+  const tf=curTabFlags();
+  const entries=ge(sid,S.month);
+  const sess=gs(sid,S.month);
   let tCount=0,tIncome=0,tExpense=0;
   entries.forEach(e=>{
     if(e.type==='count')tCount+=e.total||0;
@@ -503,28 +610,21 @@ function renderContent(){
   });
   if(sess)sess.subs.forEach(s=>tCount+=bv(s.bills||eb()));
   const net=tCount+tIncome-tExpense;
-
-  // ── cumulative bills = นับได้ + รายรับ - รายจ่าย(ที่ระบุแบงค์) - แลกออก + แลกเข้า + open session
   const cb=eb();
   entries.forEach(e=>{
-    if(e.type==='count'){
-      (e.subs||[]).forEach(s=>BT.forEach(t=>cb[t]+=(s.bills[t]||0)));
-    } else if(e.type==='income'||e.type==='exin'){
-      if(e.bills) BT.forEach(t=>cb[t]+=(e.bills[t]||0));
-    } else if(e.type==='expense'||e.type==='exout'){
-      if(e.bills) BT.forEach(t=>cb[t]-=(e.bills[t]||0));
-    }
+    if(e.type==='count')(e.subs||[]).forEach(s=>BT.forEach(t=>cb[t]+=(s.bills[t]||0)));
+    else if(e.type==='income'||e.type==='exin'){if(e.bills)BT.forEach(t=>cb[t]+=(e.bills[t]||0));}
+    else if(e.type==='expense'||e.type==='exout'){if(e.bills)BT.forEach(t=>cb[t]-=(e.bills[t]||0));}
   });
   if(sess)sess.subs.forEach(s=>BT.forEach(t=>cb[t]+=(s.bills[t]||0)));
   const hasBills=BT.some(t=>cb[t]!==0);
-
   let h=`<div class="mhdr">
     <div><div class="mtitle">${shop.name} — ${monthLbl(S.month)}</div><div class="mperiod">${periodLbl(S.month)}</div></div>
     <div class="abtns">
-      <button class="btn btn-g" onclick="openCount()">+ นับเงิน</button>
-      <button class="btn btn-b" onclick="openIncome()">+ รายรับ</button>
-      <button class="btn btn-a" onclick="openExpense()">+ รายจ่าย</button>
-      <button class="btn btn-p" onclick="openExchange()">⇄ แลกระหว่างสาย</button>
+      ${tf.count?`<button class="btn btn-g" onclick="openCount()">+ นับเงิน</button>`:''}
+      ${tf.income?`<button class="btn btn-b" onclick="openIncome()">+ รายรับ</button>`:''}
+      ${tf.expense?`<button class="btn btn-a" onclick="openExpense()">+ รายจ่าย</button>`:''}
+      ${tf.exchange?`<button class="btn btn-p" onclick="openExchange()">⇄ แลกระหว่างสาย</button>`:''}
     </div>
   </div>
   <div class="grid4">
@@ -533,52 +633,126 @@ function renderContent(){
     <div class="sc"><div class="lb">รายจ่าย</div><div class="vl" style="color:var(--amber)">${fmt(tExpense)}</div></div>
     <div class="sc"><div class="lb">ยอดสุทธิ</div><div class="vl ${net>=0?'pos':'neg'}">${fmt(net)}</div></div>
   </div>`;
-
   if(hasBills){
     h+=`<div class="cumul"><div class="clb">แบงค์คงเหลือในกล่อง (สะสมทั้งเดือน)</div><div class="chips">`+
-      BT.filter(t=>cb[t]!==0).map(t=>{
-        const neg=cb[t]<0;
-        return `<span class="pill ${BC[t]}" style="${neg?'outline:1px solid var(--red);opacity:.8;':''}">฿${BL[t]} × ${neg?'<span style="color:var(--red)">':''  }${fN(cb[t])}${neg?'</span>':''}</span>`;
-      }).join('')+
+      BT.filter(t=>cb[t]!==0).map(t=>{const neg=cb[t]<0;return`<span class="pill ${BC[t]}" style="${neg?'outline:1px solid var(--red);opacity:.8;':''}">฿${BL[t]} × ${neg?'<span style="color:var(--red)">':''}${fN(cb[t])}${neg?'</span>':''}</span>`;}).join('')+
     `</div></div>`;
   }
-
-  // ── open counting session ──
   if(sess){
     const sessTotal=sess.subs.reduce((s,e)=>s+bv(e.bills||eb()),0);
     const n=sess.subs.length;
-    h+=`<div class="sess">
-      <div class="sess-hd">
-        <div>
-          <div class="sess-title">📋 รอบนับเงิน — กำลังดำเนินการ</div>
-          <div class="sess-sub">${n} ครั้ง · สะสม ${fmt(sessTotal)}</div>
-        </div>
-        <div class="sess-btns">
-          <button class="btn btn-g btn-sm" onclick="addSubCount()">+ เพิ่มครั้ง</button>
-          <button class="btn btn-b btn-sm" onclick="summarize()">✓ สรุปรอบนี้</button>
-          <button class="btn btn-x btn-sm" onclick="cancelSess()">ยกเลิก</button>
-        </div>
-      </div>`;
+    h+=`<div class="sess"><div class="sess-hd"><div>
+      <div class="sess-title">📋 รอบนับเงิน — กำลังดำเนินการ</div>
+      <div class="sess-sub">${n} ครั้ง · สะสม ${fmt(sessTotal)}</div>
+    </div><div class="sess-btns">
+      <button class="btn btn-g btn-sm" onclick="addSubCount()">+ เพิ่มครั้ง</button>
+      <button class="btn btn-b btn-sm" onclick="summarize()">✓ สรุปรอบนี้</button>
+      <button class="btn btn-x btn-sm" onclick="cancelSess()">ยกเลิก</button>
+    </div></div>`;
     sess.subs.forEach((s,i)=>{
       const a=bv(s.bills||eb());
       const chips=BT.filter(t=>s.bills[t]>0).map(t=>`<span class="pill ${BC[t]}">฿${BL[t]}×${fN(s.bills[t])}</span>`).join(' ');
-      h+=`<div class="sub-row">
-        <div class="sub-rh"><span class="sub-rl">ครั้งที่ ${i+1} &nbsp;·&nbsp; ${s.df}${s.dt&&s.dt!==s.df?' – '+s.dt:''}</span><span class="sub-ra">${fmt(a)}</span></div>
-        <div class="chips">${chips||'<span style="font-size:12px;color:var(--text3)">ไม่มีแบงค์</span>'}</div>
-      </div>`;
+      h+=`<div class="sub-row"><div class="sub-rh"><span class="sub-rl">ครั้งที่ ${i+1} &nbsp;·&nbsp; ${s.df}${s.dt&&s.dt!==s.df?' – '+s.dt:''}</span><span class="sub-ra">${fmt(a)}</span></div><div class="chips">${chips||'<span style="font-size:12px;color:var(--text3)">ไม่มีแบงค์</span>'}</div></div>`;
     });
     h+=`</div>`;
   }
-
-  // ── saved entries ──
-  if(entries.length===0&&!sess){
-    h+=`<div class="empty"><div class="ei">📋</div><p>ยังไม่มีรายการ</p></div>`;
-  } else if(entries.length>0){
-    h+=`<div class="slbl">รายการที่บันทึกแล้ว</div>`;
-    h+=entries.map(renderEntry).join('');
-  }
+  if(entries.length===0&&!sess)h+=`<div class="empty"><div class="ei">📋</div><p>ยังไม่มีรายการ</p></div>`;
+  else if(entries.length>0){h+=`<div class="slbl">รายการที่บันทึกแล้ว</div>`;h+=entries.map(renderEntry).join('');}
   document.getElementById('content').innerHTML=h;
 }
+
+// ── หน้าสรุปกลุ่ม ──
+function renderGroupContent(){
+  const gid=S.view.id;
+  const grp=S.groups.find(g=>g.id===gid);
+  if(!grp){document.getElementById('content').innerHTML='<div class="empty"><p>ไม่พบกลุ่ม</p></div>';return;}
+  const tf=curTabFlags();
+  const memberIds=S.groupMembers[gid]||[];
+  const members=memberIds.map(id=>S.shops.find(s=>s.id===id)).filter(Boolean);
+
+  // รวมยอดทั้งกลุ่ม (เดือนปัจจุบัน)
+  let gtCount=0,gtIncome=0,gtExpense=0;
+  const gcb=eb();
+  members.forEach(sh=>{
+    const ents=ge(sh.id,S.month);
+    const sess=gs(sh.id,S.month);
+    ents.forEach(e=>{
+      if(e.type==='count'){gtCount+=e.total||0;(e.subs||[]).forEach(s=>BT.forEach(t=>gcb[t]+=(s.bills[t]||0)));}
+      else if(e.type==='income'||e.type==='exin'){gtIncome+=e.amount||0;if(e.bills)BT.forEach(t=>gcb[t]+=(e.bills[t]||0));}
+      else if(e.type==='expense'||e.type==='exout'){gtExpense+=e.amount||0;if(e.bills)BT.forEach(t=>gcb[t]-=(e.bills[t]||0));}
+    });
+    if(sess){sess.subs.forEach(s=>{gtCount+=bv(s.bills||eb());BT.forEach(t=>gcb[t]+=(s.bills[t]||0));});}
+  });
+  const gnet=gtCount+gtIncome-gtExpense;
+  const hasGBills=BT.some(t=>gcb[t]!==0);
+
+  let h=`<div class="mhdr">
+    <div><div class="mtitle">📁 ${grp.name} — ${monthLbl(S.month)}</div><div class="mperiod">${periodLbl(S.month)} · ${members.length} สาย</div></div>
+    <div class="abtns">
+      ${tf.count?`<button class="btn btn-g" onclick="openCountGroup()">+ นับเงิน</button>`:''}
+      ${tf.income?`<button class="btn btn-b" onclick="openIncomeGroup()">+ รายรับ</button>`:''}
+      ${tf.expense?`<button class="btn btn-a" onclick="openExpenseGroup()">+ รายจ่าย</button>`:''}
+      ${tf.exchange?`<button class="btn btn-p" onclick="openExchange()">⇄ แลกระหว่างสาย</button>`:''}
+    </div>
+  </div>
+  <div class="grid4">
+    <div class="sc"><div class="lb">ยอดนับได้ (รวม)</div><div class="vl pos">${fmt(gtCount)}</div></div>
+    <div class="sc"><div class="lb">รายรับ (รวม)</div><div class="vl" style="color:var(--blue)">${fmt(gtIncome)}</div></div>
+    <div class="sc"><div class="lb">รายจ่าย (รวม)</div><div class="vl" style="color:var(--amber)">${fmt(gtExpense)}</div></div>
+    <div class="sc"><div class="lb">ยอดสุทธิ (รวม)</div><div class="vl ${gnet>=0?'pos':'neg'}">${fmt(gnet)}</div></div>
+  </div>`;
+
+  if(hasGBills){
+    h+=`<div class="cumul"><div class="clb">แบงค์คงเหลือรวมทุกสายในกลุ่ม</div><div class="chips">`+
+      BT.filter(t=>gcb[t]!==0).map(t=>{const neg=gcb[t]<0;return`<span class="pill ${BC[t]}" style="${neg?'outline:1px solid var(--red);opacity:.8;':''}">฿${BL[t]} × ${neg?'<span style="color:var(--red)">':''}${fN(gcb[t])}${neg?'</span>':''}</span>`;}).join('')+
+    `</div></div>`;
+  }
+
+  // รายละเอียดแต่ละสาย
+  h+=`<div class="slbl">รายละเอียดแต่ละสาย</div>`;
+  members.forEach(sh=>{
+    const ents=ge(sh.id,S.month);
+    const sess=gs(sh.id,S.month);
+    let tc=0,ti=0,te=0;
+    ents.forEach(e=>{
+      if(e.type==='count')tc+=e.total||0;
+      else if(e.type==='income'||e.type==='exin')ti+=e.amount||0;
+      else if(e.type==='expense'||e.type==='exout')te+=e.amount||0;
+    });
+    if(sess)sess.subs.forEach(s=>tc+=bv(s.bills||eb()));
+    const snet=tc+ti-te;
+    const scb=eb();
+    ents.forEach(e=>{
+      if(e.type==='count')(e.subs||[]).forEach(s=>BT.forEach(t=>scb[t]+=(s.bills[t]||0)));
+      else if(e.type==='income'||e.type==='exin'){if(e.bills)BT.forEach(t=>scb[t]+=(e.bills[t]||0));}
+      else if(e.type==='expense'||e.type==='exout'){if(e.bills)BT.forEach(t=>scb[t]-=(e.bills[t]||0));}
+    });
+    if(sess)sess.subs.forEach(s=>BT.forEach(t=>scb[t]+=(s.bills[t]||0)));
+    const hasSBills=BT.some(t=>scb[t]!==0);
+    h+=`<div class="grp-route-card">
+      <div class="grp-route-card-hd" onclick="toggleGrpCard('${sh.id}')">
+        <span style="width:10px;height:10px;border-radius:50%;background:${sh.color};display:inline-block;flex-shrink:0;"></span>
+        <span style="flex:1;font-size:14px;font-weight:600;">${sh.name}</span>
+        <span style="font-family:var(--mono);font-size:15px;font-weight:600;color:${snet>=0?'var(--green)':'var(--red)'};">${fmt(snet)}</span>
+        <button onclick="event.stopPropagation();setView('shop','${sh.id}')" style="margin-left:8px;background:var(--bdim);border:1px solid var(--bbr);color:var(--blue);border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;">เปิด →</button>
+      </div>
+      <div class="grp-route-card-body" id="grc-${sh.id}">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;">
+          <div class="sc"><div class="lb">นับได้</div><div class="vl pos" style="font-size:14px;">${fmt(tc)}</div></div>
+          <div class="sc"><div class="lb">รายรับ</div><div class="vl" style="color:var(--blue);font-size:14px;">${fmt(ti)}</div></div>
+          <div class="sc"><div class="lb">รายจ่าย</div><div class="vl" style="color:var(--amber);font-size:14px;">${fmt(te)}</div></div>
+          <div class="sc"><div class="lb">สุทธิ</div><div class="vl ${snet>=0?'pos':'neg'}" style="font-size:14px;">${fmt(snet)}</div></div>
+        </div>
+        ${hasSBills?`<div class="cumul"><div class="clb">แบงค์คงเหลือ</div><div class="chips">`+BT.filter(t=>scb[t]!==0).map(t=>{const neg=scb[t]<0;return`<span class="pill ${BC[t]}" style="${neg?'outline:1px solid var(--red);opacity:.8;':''}">฿${BL[t]} × ${neg?'<span style="color:var(--red)">':''}${fN(scb[t])}${neg?'</span>':''}</span>`;}).join('')+`</div></div>`:''}
+        ${sess?`<div style="font-size:12px;color:var(--green);padding:6px 0;">📋 มีรอบนับเงินที่ยังเปิดอยู่ — สะสม ${fmt(sess.subs.reduce((s,e)=>s+bv(e.bills||eb()),0))}</div>`:''}
+        ${ents.length>0?`<div class="slbl" style="margin-top:8px;">รายการ</div>`+ents.map(renderEntry).join(''):'<div style="font-size:12px;color:var(--text3);padding:8px 0;">ยังไม่มีรายการ</div>'}
+      </div>
+    </div>`;
+  });
+  if(members.length===0)h+=`<div class="empty"><div class="ei">📭</div><p>ยังไม่มีสายในกลุ่มนี้</p></div>`;
+  document.getElementById('content').innerHTML=h;
+}
+function toggleGrpCard(id){const b=document.getElementById('grc-'+id);if(b)b.classList.toggle('open');}
 
 function renderEntry(e){
   const labels={count:'นับเงิน',income:'รายรับ',expense:'รายจ่าย',exin:'รับแลกเงิน',exout:'แลกเงินออก'};
@@ -628,7 +802,7 @@ function billTbl(bills,total){
 }
 
 function toggleE(id){const b=document.getElementById('eb-'+id);if(b)b.classList.toggle('open');}
-async function delE(ev,id){ev.stopPropagation();if(!confirm('ลบรายการนี้?'))return;try{await sbDelete('entries',`id=eq.${id}`);const l=ge(S.shop,S.month);const i=l.findIndex(e=>e.id===id);if(i>-1)l.splice(i,1);render();}catch(err){toast('ลบไม่สำเร็จ: '+err.message);console.error(err);}}
+async function delE(ev,id){ev.stopPropagation();if(!confirm('ลบรายการนี้?'))return;const sid=S.shop;try{await sbDelete('entries',`id=eq.${id}`);const l=ge(sid,S.month);const i=l.findIndex(e=>e.id===id);if(i>-1)l.splice(i,1);render();}catch(err){toast('ลบไม่สำเร็จ: '+err.message);console.error(err);}}
 
 // ─── MODAL helpers ───
 function OM(title,body,foot){document.getElementById('mtitle').textContent=title;document.getElementById('mbody').innerHTML=body;document.getElementById('mfoot').innerHTML=foot;document.getElementById('overlay').style.display='flex';}
@@ -969,9 +1143,12 @@ async function saveShop(){
   const n=document.getElementById('ns_n').value.trim(),c=document.getElementById('ns_c').value;
   if(!n){toast('กรุณาใส่ชื่อ');return;}
   const id='s'+Date.now();
+  const so=S.shops.length;
+  const tf={count:true,income:true,expense:true,exchange:true};
   try{
-    await sbUpsert('routes',{id,name:n,color:c});
-    S.shops.push({id,name:n,color:c});S.shop=id;CM();render();toast(`เพิ่ม "${n}" แล้ว ✓`);
+    await sbUpsert('routes',{id,name:n,color:c,tab_flags:tf,sort_order:so});
+    S.shops.push({id,name:n,color:c,tab_flags:tf,sort_order:so});
+    S.view={type:'shop',id};S.shop=id;CM();render();toast(`เพิ่ม "${n}" แล้ว ✓`);
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
 }
 
@@ -979,27 +1156,28 @@ function editShop(id){
   const shop=S.shops.find(s=>s.id===id);
   if(!shop)return;
   const colors=['#22c55e','#3b82f6','#f59e0b','#ef4444','#a855f7','#06b6d4','#f97316','#ec4899'];
+  const tf=shop.tab_flags||{count:true,income:true,expense:true,exchange:true};
   OM('แก้ไขสาย',`
     <div class="fg"><label class="flbl">ชื่อสาย</label><input type="text" class="finp" id="es_n" value="${shop.name}" placeholder="เช่น สาย D"></div>
     <div class="fg"><label class="flbl">สีประจำสาย</label>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">${colors.map(c=>`<div onclick="selC('${c}')" id="c_${c.slice(1)}" style="width:28px;height:28px;border-radius:50%;background:${c};cursor:pointer;border:2px solid transparent;transition:.1s;"></div>`).join('')}</div>
       <input type="hidden" id="es_c" value="${shop.color}">
-    </div>`,
+    </div>
+    <div class="fg"><label class="flbl">แท็บที่แสดง</label>${tfChips(tf,'es')}</div>`,
   `<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-b" onclick="saveEditShop('${id}')">บันทึก</button>`);
-  // mark current color
   document.querySelectorAll('[id^="c_"]').forEach(el=>el.style.borderColor='transparent');
   const cur=document.getElementById('c_'+shop.color.slice(1));
   if(cur)cur.style.borderColor='white';
-  // override selC to update es_c
   window._editSelC=(c)=>{document.getElementById('es_c').value=c;document.querySelectorAll('[id^="c_"]').forEach(el=>el.style.borderColor='transparent');const el=document.getElementById('c_'+c.slice(1));if(el)el.style.borderColor='white';};
   document.querySelectorAll('[id^="c_"]').forEach(el=>{const c=el.id.replace('c_','#');el.onclick=()=>window._editSelC(c);});
 }
 async function saveEditShop(id){
   const n=document.getElementById('es_n').value.trim(),c=document.getElementById('es_c').value;
   if(!n){toast('กรุณาใส่ชื่อ');return;}
+  const tf=getTf('es');
   try{
-    await sbUpsert('routes',{id,name:n,color:c});
-    const sh=S.shops.find(s=>s.id===id);if(sh){sh.name=n;sh.color=c;}
+    await sbUpsert('routes',{id,name:n,color:c,tab_flags:tf});
+    const sh=S.shops.find(s=>s.id===id);if(sh){sh.name=n;sh.color=c;sh.tab_flags=tf;}
     CM();render();toast(`แก้ไข "${n}" แล้ว ✓`);
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
 }
@@ -1011,17 +1189,158 @@ async function deleteShop(id){
     await sbDelete('routes',`id=eq.${id}`);
     S.shops=S.shops.filter(s=>s.id!==id);
     delete S.entries[id];delete S.sessions[id];
-    if(S.shop===id)S.shop=S.shops[0]?.id||null;
+    // ลบออกจาก groupMembers ด้วย
+    Object.keys(S.groupMembers).forEach(gid=>{S.groupMembers[gid]=S.groupMembers[gid].filter(rid=>rid!==id);});
+    if(S.view.id===id){
+      if(S.groups.length>0)S.view={type:'group',id:S.groups[0].id};
+      else S.view={type:'shop',id:S.shops[0]?.id||null};
+    }
+    if(S.view.type==='shop')S.shop=S.view.id;
     CM();render();toast(`ลบสาย "${shop.name}" แล้ว`);
   }catch(err){toast('ลบไม่สำเร็จ: '+err.message);console.error(err);}
 }
 
+function setView(type,id){S.view={type,id};if(type==='shop')S.shop=id;render();}
 function setYear(y){S.year=y;const months=Object.keys(Object.assign({},...Object.values(S.entries).map(e=>e))).filter(mk=>mk.startsWith(y));const cp=cpk();const all=new Set([...months,cp.startsWith(y)?cp:''].filter(Boolean));const sorted=[...all].sort();S.month=sorted[sorted.length-1]||cpk();render();}
-function setShop(id){S.shop=id;render();}
+function setShop(id){setView('shop',id);}
 function setMonth(m){S.month=m;render();}
 
-function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2800);}
+// ─── GROUP MANAGEMENT ───
+function tfChips(flags,prefix){
+  const tabs=[{k:'count',l:'นับเงิน'},{k:'income',l:'รายรับ'},{k:'expense',l:'รายจ่าย'},{k:'exchange',l:'แลกระหว่างสาย'}];
+  return`<div class="tf-row">`+tabs.map(t=>`<span class="tf-chip${flags[t.k]?' on':''}" id="${prefix}_${t.k}" onclick="toggleTf('${prefix}','${t.k}')">${t.l}</span>`).join('')+`</div>`;
+}
+function toggleTf(prefix,key){const el=document.getElementById(`${prefix}_${key}`);if(el)el.classList.toggle('on');}
+function getTf(prefix){const keys=['count','income','expense','exchange'];const f={};keys.forEach(k=>{f[k]=document.getElementById(`${prefix}_${k}`)?.classList.contains('on')??true;});return f;}
 
+function addGroup(){
+  const availShops=S.shops.filter(sh=>!groupedRouteIds().has(sh.id));
+  const defFlags={count:true,income:true,expense:true,exchange:true};
+  OM('เพิ่มกลุ่มสาย',`
+    <div class="fg"><label class="flbl">ชื่อกลุ่ม</label><input type="text" class="finp" id="ng_n" placeholder="เช่น กลุ่มสีเขียว"></div>
+    <div class="fg"><label class="flbl">เลือกสายที่จะอยู่ในกลุ่มนี้</label>
+      <div id="ng_shops" style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">
+        ${availShops.length===0?'<p style="font-size:12px;color:var(--text3);">ไม่มีสายที่ยังไม่ได้อยู่กลุ่ม</p>':
+          availShops.map(sh=>`<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 8px;border:1px solid var(--border);border-radius:6px;">
+            <input type="checkbox" value="${sh.id}" style="width:14px;height:14px;">
+            <span style="width:8px;height:8px;border-radius:50%;background:${sh.color};display:inline-block;"></span>
+            <span style="font-size:13px;">${sh.name}</span>
+          </label>`).join('')}
+      </div>
+    </div>
+    <div class="fg"><label class="flbl">แท็บที่แสดง</label>${tfChips(defFlags,'ng')}
+    </div>`,
+  `<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-g" onclick="saveGroup()">เพิ่มกลุ่ม</button>`);
+}
+
+async function saveGroup(){
+  const n=document.getElementById('ng_n').value.trim();
+  if(!n){toast('กรุณาใส่ชื่อกลุ่ม');return;}
+  const checked=[...document.querySelectorAll('#ng_shops input[type=checkbox]:checked')].map(i=>i.value);
+  const tf=getTf('ng');
+  const id='g'+Date.now();
+  const so=S.groups.length;
+  try{
+    await sbUpsert('groups',{id,name:n,sort_order:so,tab_flags:tf});
+    if(checked.length>0){
+      await sbUpsert('group_members',checked.map((rid,i)=>({group_id:id,route_id:rid,sort_order:i})));
+    }
+    S.groups.push({id,name:n,sort_order:so,tab_flags:tf});
+    S.groupMembers[id]=checked;
+    S.view={type:'group',id};
+    CM();render();toast(`เพิ่มกลุ่ม "${n}" แล้ว ✓`);
+  }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
+}
+
+function editGroup(id){
+  const grp=S.groups.find(g=>g.id===id);if(!grp)return;
+  const curMembers=new Set(S.groupMembers[id]||[]);
+  const otherGrouped=new Set();
+  S.groups.filter(g=>g.id!==id).forEach(g=>(S.groupMembers[g.id]||[]).forEach(rid=>otherGrouped.add(rid)));
+  const availShops=S.shops.filter(sh=>!otherGrouped.has(sh.id));
+  const tf=grp.tab_flags||{count:true,income:true,expense:true,exchange:true};
+  OM('แก้ไขกลุ่มสาย',`
+    <div class="fg"><label class="flbl">ชื่อกลุ่ม</label><input type="text" class="finp" id="eg_n" value="${grp.name}"></div>
+    <div class="fg"><label class="flbl">สายในกลุ่มนี้</label>
+      <div id="eg_shops" style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">
+        ${availShops.map(sh=>`<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 8px;border:1px solid var(--border);border-radius:6px;">
+          <input type="checkbox" value="${sh.id}" ${curMembers.has(sh.id)?'checked':''} style="width:14px;height:14px;">
+          <span style="width:8px;height:8px;border-radius:50%;background:${sh.color};display:inline-block;"></span>
+          <span style="font-size:13px;">${sh.name}</span>
+        </label>`).join('')}
+      </div>
+    </div>
+    <div class="fg"><label class="flbl">แท็บที่แสดง</label>${tfChips(tf,'eg')}
+    </div>`,
+  `<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-b" onclick="saveEditGroup('${id}')">บันทึก</button>`);
+}
+
+async function saveEditGroup(id){
+  const n=document.getElementById('eg_n').value.trim();
+  if(!n){toast('กรุณาใส่ชื่อกลุ่ม');return;}
+  const checked=[...document.querySelectorAll('#eg_shops input[type=checkbox]:checked')].map(i=>i.value);
+  const tf=getTf('eg');
+  try{
+    await sbUpsert('groups',{id,name:n,tab_flags:tf});
+    await sbDelete('group_members',`group_id=eq.${id}`);
+    if(checked.length>0)await sbUpsert('group_members',checked.map((rid,i)=>({group_id:id,route_id:rid,sort_order:i})));
+    const grp=S.groups.find(g=>g.id===id);if(grp){grp.name=n;grp.tab_flags=tf;}
+    S.groupMembers[id]=checked;
+    CM();render();toast(`แก้ไขกลุ่ม "${n}" แล้ว ✓`);
+  }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
+}
+
+async function deleteGroup(id){
+  const grp=S.groups.find(g=>g.id===id);if(!grp)return;
+  if(!confirm(`ลบกลุ่ม "${grp.name}" ? (สายในกลุ่มจะไม่ถูกลบ)`))return;
+  try{
+    await sbDelete('groups',`id=eq.${id}`);
+    S.groups=S.groups.filter(g=>g.id!==id);
+    delete S.groupMembers[id];
+    if(S.view.id===id)S.view=S.groups.length>0?{type:'group',id:S.groups[0].id}:{type:'shop',id:S.shops[0]?.id||null};
+    CM();render();toast(`ลบกลุ่ม "${grp.name}" แล้ว`);
+  }catch(err){toast('ลบไม่สำเร็จ: '+err.message);console.error(err);}
+}
+
+// ─── GROUP ACTION BUTTONS — เลือกสายก่อนเปิด modal ───
+function openCountGroup(){
+  const members=(S.groupMembers[S.view.id]||[]).map(id=>S.shops.find(s=>s.id===id)).filter(Boolean);
+  if(members.length===0){toast('ไม่มีสายในกลุ่ม');return;}
+  if(members.length===1){setView('shop',members[0].id);openCount();return;}
+  pickShopThen(members,'นับเงิน','openCount','count');
+}
+function openIncomeGroup(){
+  const members=(S.groupMembers[S.view.id]||[]).map(id=>S.shops.find(s=>s.id===id)).filter(Boolean);
+  if(members.length===0){toast('ไม่มีสายในกลุ่ม');return;}
+  if(members.length===1){setView('shop',members[0].id);openIncome();return;}
+  pickShopThen(members,'รายรับ','openIncome','income');
+}
+function openExpenseGroup(){
+  const members=(S.groupMembers[S.view.id]||[]).map(id=>S.shops.find(s=>s.id===id)).filter(Boolean);
+  if(members.length===0){toast('ไม่มีสายในกลุ่ม');return;}
+  if(members.length===1){setView('shop',members[0].id);openExpense();return;}
+  pickShopThen(members,'รายจ่าย','openExpense','expense');
+}
+function pickShopThen(members,label,fn,type){
+  const colorMap={count:'btn-g',income:'btn-b',expense:'btn-a'};
+  OM(`เลือกสายสำหรับ${label}`,
+    `<p style="font-size:13px;color:var(--text2);margin-bottom:12px;">เลือกสายที่ต้องการบันทึก${label}:</p>`+
+    members.map(sh=>`<button onclick="pickShopAndDo('${sh.id}','${fn}')" style="display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;margin-bottom:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-family:var(--font);font-size:14px;">
+      <span style="width:10px;height:10px;border-radius:50%;background:${sh.color};display:inline-block;"></span>
+      ${sh.name} <span style="margin-left:auto;font-family:var(--mono);font-size:13px;color:var(--text2);">${fmt(shopTot(sh.id))}</span>
+    </button>`).join(''),
+    `<button class="btn btn-x" onclick="CM()">ยกเลิก</button>`);
+}
+function pickShopAndDo(sid,fn){
+  const gid=S.view.id;
+  S.view={type:'shop',id:sid};S.shop=sid;
+  CM();
+  setTimeout(()=>{window[fn]();},50);
+  // จำ gid เพื่อ return กลับหลัง render
+  window._returnToGroup=gid;
+}
+
+function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2800);}
 
 authInit();
 </script>
