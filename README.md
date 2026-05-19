@@ -125,8 +125,10 @@ sessions (
 - บันทึกเป็น `expense` entry
 
 ### 6. แลกเงินระหว่างสาย
-- UI 2 คอลัมน์ — ระบุแบงค์ที่ให้ออกแต่ละฝั่ง
-- ยอดแต่ละฝั่งอัปเดต real-time แสดงใต้ grid แบงค์
+- UI 2 คอลัมน์ — ซ้าย/ขวาตรงกันทุก denomination ด้วย CSS grid แถวเดียวกัน
+- แต่ละ denomination เรียงลงมา 1 บรรทัด/1 แถว (1000 → 500 → 100 → 50 → 20 → เหรียญ)
+- แสดง "มี X ใบ" ในแต่ละช่อง — cap อัตโนมัติ ใส่เกินไม่ได้
+- ไม่มีช่องวันที่/หมายเหตุ — วันที่บันทึกตามวันจริง real-time
 - บันทึก exout/exin ทั้ง 2 ฝั่งพร้อมกันใน transaction เดียว
 
 ---
@@ -206,8 +208,10 @@ S = {
 | `sbGet/sbUpsert/sbDelete` | Supabase REST helpers |
 | `entryToRow/rowToEntry` | map JS ↔ Supabase fields |
 | `summarize()` | สรุปรอบนับเงิน → upsert entry + delete session |
-| `openExchange()` | เปิด modal แลกเงินระหว่างสาย |
+| `openExchange()` | เปิด modal แลกเงินระหว่างสาย (layout grid แถวตรงกัน) |
+| `refreshExchangeCB()` | อัปเดต cap + label "มี X ใบ" เมื่อเปลี่ยนสาย |
 | `billInpWithLimit(p,cb)` | render grid input แบงค์พร้อม cap — เก็บ cb ใน `_cbMap[p]` |
+| `billInpExchange(p,cb)` | render input แบงค์สำหรับ modal แลกเงิน (1 คอลัมน์, font 20px) |
 | `updBLimit(p)` | อัปเดตยอด real-time สำหรับ input ที่มี cap (อ่าน cb จาก `_cbMap`) |
 | `billInp(p)` | render grid input แบงค์ไม่มี cap (สำหรับ count/income) |
 | `updB(p)` | อัปเดตยอด real-time สำหรับ input ไม่มี cap |
@@ -222,6 +226,7 @@ S = {
 |---|---|
 | 2025-05 | `updBLimit` ไม่ทำงาน — สาเหตุ: `JSON.stringify` ใน oninput attribute ทำให้ double quotes ชนกัน → SyntaxError แก้โดยเพิ่ม `_cbMap` global เก็บ cb แยกตาม prefix แทน |
 | 2025-05 | ย้ายแถบ "ยอดที่จ่ายออก" / "ยอดให้" ไปใต้ grid แบงค์ทั้งใน รายจ่าย และ แลกเงิน (ทั้งซ้าย-ขวา) |
+| 2026-05 | ปรับ modal แลกเงินระหว่างสาย: เอา cbBar ออก, เปลี่ยนเป็น layout grid แถวตรงกัน (display:contents), denomination เรียง 1 บรรทัด/แถว, font input 20px, เอาช่องวันที่/หมายเหตุออก ใช้ `today()` อัตโนมัติ |
 
 ---
 

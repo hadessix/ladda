@@ -147,6 +147,18 @@ main{display:flex;flex:1;overflow:hidden;}
 .tbar-sm .tl{font-size:12px;color:var(--text2);}
 .tbar-sm .tv{font-family:var(--mono);font-size:16px;font-weight:600;color:var(--green);}
 .bgrid2{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;}
+/* exchange single-column grid — rows align across left/right columns */
+.bgrid-ex{display:grid;grid-template-columns:1fr;gap:0;}
+.bgrid-ex .bcell{border-radius:0;border-left:none;border-right:none;border-top:none;border-bottom:1px solid var(--border);background:transparent;padding:10px 12px;}
+.bgrid-ex .bcell:first-child{border-top:1px solid var(--border);}
+.bgrid-ex .bcell label{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
+.bgrid-ex .bcell input{font-size:20px;width:100%;}
+.bgrid-ex .bsub{font-size:13px;color:var(--text3);margin-top:2px;}
+.exch-col-body{padding:0;}
+/* make both columns same height rows by using CSS grid on the outer cols */
+.exch-cols{display:grid;grid-template-columns:1fr 36px 1fr;gap:0;align-items:start;}
+.exch-rows{display:grid;grid-template-columns:1fr 36px 1fr;gap:0;}
+.exch-row-mid{display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--border);}
 .empty{text-align:center;padding:48px 20px;color:var(--text3);}
 .empty .ei{font-size:36px;margin-bottom:8px;}
 .toast{position:fixed;bottom:24px;right:24px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 16px;font-size:13px;z-index:9999;animation:si .2s ease;color:var(--text);max-width:280px;}
@@ -518,6 +530,13 @@ function billInpWithLimit(p,cb){
     return`<div class="bcell"><label><span class="pill ${BC[t]}">฿${BL[t]}</span><span style="font-size:10px;color:var(--text3);margin-left:4px;">มี ${fN(max)}</span></label><input type="number" min="0" max="${max}" value="0" id="${p}_${t}" oninput="updBLimit('${p}')" inputmode="numeric"><div class="bsub" id="${p}s_${t}">= ฿0</div></div>`;
   }).join('')+`</div>`;
 }
+function billInpExchange(p,cb){
+  _cbMap[p]=cb;
+  return BT.map(t=>{
+    const max=cb[t]||0;
+    return`<div class="bcell" style="border-radius:0;border-left:none;border-right:none;border-top:none;border-bottom:1px solid var(--border);background:transparent;padding:10px 12px;"><label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span class="pill ${BC[t]}">฿${BL[t]}</span><span style="font-size:11px;color:var(--text3);">มี ${fN(max)} ใบ</span></label><input type="number" min="0" max="${max}" value="0" id="${p}_${t}" oninput="updBLimit('${p}')" inputmode="numeric" style="font-size:20px;width:100%;background:transparent;border:none;color:var(--text);font-family:var(--mono);font-weight:500;"><div class="bsub" style="font-size:13px;" id="${p}s_${t}">= ฿0</div></div>`;
+  }).join('');
+}
 function updBLimit(p){
   const cb=_cbMap[p]||{};
   let tot=0,over=false;
@@ -715,60 +734,82 @@ function openExchange(){
   const leftDefault=S.shops[0].id, rightDefault=S.shops[1].id;
   const cbL=calcCB(leftDefault,S.month);
   const cbR=calcCB(rightDefault,S.month);
+  // build rows: header + one row per denomination + total bar
+  const hdrRow=`<div style="display:contents;">
+    <div style="padding:10px 12px;background:var(--adim);border-bottom:1px solid var(--border);">
+      <div style="font-size:13px;font-weight:600;color:var(--amber);margin-bottom:6px;">ฝั่งซ้าย — ให้ออก</div>
+      <select class="fsel" id="xc_L" style="font-size:14px;width:100%;" onchange="refreshExchangeCB()">${opts}</select>
+    </div>
+    <div style="background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--purple);">⇄</div>
+    <div style="padding:10px 12px;background:var(--gdim);border-bottom:1px solid var(--border);">
+      <div style="font-size:13px;font-weight:600;color:var(--green);margin-bottom:6px;">ฝั่งขวา — ให้ออก</div>
+      <select class="fsel" id="xc_R" style="font-size:14px;width:100%;" onchange="refreshExchangeCB()">${opts}</select>
+    </div>
+  </div>`;
+  const denomRows=BT.map(t=>{
+    const maxL=cbL[t]||0, maxR=cbR[t]||0;
+    return`<div style="display:contents;">
+      <div style="padding:10px 12px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);">
+        <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span class="pill ${BC[t]}">฿${BL[t]}</span><span style="font-size:11px;color:var(--text3);">มี ${fN(maxL)} ใบ</span></label>
+        <input type="number" min="0" max="${maxL}" value="0" id="xL_${t}" oninput="updBLimit('xL')" inputmode="numeric" style="font-size:20px;width:100%;background:transparent;border:none;color:var(--text);font-family:var(--mono);font-weight:500;">
+        <div style="font-size:13px;color:var(--text3);margin-top:2px;font-family:var(--mono);" id="xLs_${t}">= ฿0</div>
+      </div>
+      <div style="background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--border2);font-size:12px;">—</div>
+      <div style="padding:10px 12px;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">
+        <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span class="pill ${BC[t]}">฿${BL[t]}</span><span style="font-size:11px;color:var(--text3);">มี ${fN(maxR)} ใบ</span></label>
+        <input type="number" min="0" max="${maxR}" value="0" id="xR_${t}" oninput="updBLimit('xR')" inputmode="numeric" style="font-size:20px;width:100%;background:transparent;border:none;color:var(--text);font-family:var(--mono);font-weight:500;">
+        <div style="font-size:13px;color:var(--text3);margin-top:2px;font-family:var(--mono);" id="xRs_${t}">= ฿0</div>
+      </div>
+    </div>`;
+  }).join('');
+  const totRow=`<div style="display:contents;">
+    <div style="padding:10px 12px;"><span style="font-size:13px;color:var(--text2);">ยอดให้</span> <span class="tv" id="xL_tot" style="font-family:var(--mono);font-size:18px;font-weight:600;color:var(--amber);">฿0</span></div>
+    <div style="background:var(--bg2);"></div>
+    <div style="padding:10px 12px;"><span style="font-size:13px;color:var(--text2);">ยอดให้</span> <span class="tv" id="xR_tot" style="font-family:var(--mono);font-size:18px;font-weight:600;color:var(--green);">฿0</span></div>
+  </div>`;
   const body=`
     <p style="font-size:13px;color:var(--text2);margin-bottom:14px;">แต่ละฝั่งระบุแบงค์ที่ให้ออก — แบงค์จะสลับไปอีกฝั่งอัตโนมัติ</p>
-    <div class="frow" style="margin-bottom:12px;">
-      <div class="fg"><label class="flbl">วันที่</label><input type="date" class="finp" id="xc_d" value="${today()}"></div>
-      <div class="fg"><label class="flbl">หมายเหตุ</label><input type="text" class="finp" id="xc_n" placeholder="เช่น จ่ายเงินเดือน"></div>
-    </div>
-    <div class="exch-cols">
-      <div class="exch-col" style="border-color:var(--abr);">
-        <div class="exch-col-hd" style="background:var(--adim);color:var(--amber);">
-          ฝั่งซ้าย — แบงค์ที่ให้ออก
-          <div style="margin-top:6px;"><select class="fsel" id="xc_L" style="font-size:13px;" onchange="refreshExchangeCB()">${opts}</select></div>
-        </div>
-        <div class="exch-col-body">
-          <div id="xcbL" style="margin-bottom:8px;">${cbBar(cbL)}</div>
-          ${billInpWithLimit('xL',cbL)}
-          <div class="tbar-sm"><span class="tl">ยอดให้</span><span class="tv" id="xL_tot">฿0</span></div>
-        </div>
-      </div>
-      <div class="exch-mid">⇄</div>
-      <div class="exch-col" style="border-color:var(--gbr);">
-        <div class="exch-col-hd" style="background:var(--gdim);color:var(--green);">
-          ฝั่งขวา — แบงค์ที่ให้ออก
-          <div style="margin-top:6px;"><select class="fsel" id="xc_R" style="font-size:13px;" onchange="refreshExchangeCB()">${opts}</select></div>
-        </div>
-        <div class="exch-col-body">
-          <div id="xcbR" style="margin-bottom:8px;">${cbBar(cbR)}</div>
-          ${billInpWithLimit('xR',cbR)}
-          <div class="tbar-sm"><span class="tl">ยอดให้</span><span class="tv" id="xR_tot">฿0</span></div>
-        </div>
-      </div>
+    <div style="display:grid;grid-template-columns:1fr 36px 1fr;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+      ${hdrRow}${denomRows}${totRow}
     </div>`;
   OM('แลกเงินระหว่างสาย',body,`<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-p" onclick="saveExchange()">บันทึกการแลก</button>`);
   document.getElementById('xc_L').value=leftDefault;
   document.getElementById('xc_R').value=rightDefault;
+  _cbMap['xL']=cbL;
+  _cbMap['xR']=cbR;
 }
 function refreshExchangeCB(){
-  // เมื่อ user เปลี่ยนสาย ให้อัปเดต cbBar แต่ไม่ re-render input (เพราะจะ reset ค่าที่กรอก)
   const Lid=document.getElementById('xc_L').value;
   const Rid=document.getElementById('xc_R').value;
   const cbL=calcCB(Lid,S.month);
   const cbR=calcCB(Rid,S.month);
-  const elL=document.getElementById('xcbL');if(elL)elL.innerHTML=cbBar(cbL);
-  const elR=document.getElementById('xcbR');if(elR)elR.innerHTML=cbBar(cbR);
+  _cbMap['xL']=cbL;
+  _cbMap['xR']=cbR;
+  BT.forEach(t=>{
+    const inpL=document.getElementById(`xL_${t}`);
+    const inpR=document.getElementById(`xR_${t}`);
+    if(inpL){inpL.max=cbL[t]||0;inpL.value=0;}
+    if(inpR){inpR.max=cbR[t]||0;inpR.value=0;}
+    // update "มี X ใบ" labels — they're the second child of each label
+    const lblL=inpL?.closest('div')?.querySelector('label span:last-child');
+    const lblR=inpR?.closest('div')?.querySelector('label span:last-child');
+    if(lblL)lblL.textContent=`มี ${fN(cbL[t]||0)} ใบ`;
+    if(lblR)lblR.textContent=`มี ${fN(cbR[t]||0)} ใบ`;
+    const sL=document.getElementById(`xLs_${t}`);if(sL)sL.textContent='= ฿0';
+    const sR=document.getElementById(`xRs_${t}`);if(sR)sR.textContent='= ฿0';
+  });
+  const tL=document.getElementById('xL_tot');if(tL)tL.textContent='฿0';
+  const tR=document.getElementById('xR_tot');if(tR)tR.textContent='฿0';
 }
 async function saveExchange(){
-  const d=document.getElementById('xc_d').value;
-  const n=document.getElementById('xc_n').value;
+  const d=today();
+  const n='';
   const Lid=document.getElementById('xc_L').value;
   const Rid=document.getElementById('xc_R').value;
   if(Lid===Rid){toast('กรุณาเลือกสายที่ต่างกัน');return;}
   const Lblls=gb('xL');
   const Rblls=gb('xR');
   const La=bv(Lblls), Ra=bv(Rblls);
-  if(!d){toast('กรุณาเลือกวันที่');return;}
   if(La===0&&Ra===0){toast('กรุณาใส่แบงค์อย่างน้อยฝั่งเดียว');return;}
   // validate แบงค์ไม่เกินที่มีแต่ละฝั่ง
   const cbL=calcCB(Lid,S.month);
