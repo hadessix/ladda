@@ -525,7 +525,8 @@ function updBLimit(p,cb){
     const max=cb[String(t)]??cb[t]??0;
     if(v>max){v=max;inp.value=max;inp.style.color='var(--red)';over=true;}
     else inp.style.color='';
-    const val=(t==='coin'?1:t)*v;
+    const denom=t==='coin'?1:parseInt(t);
+    const val=denom*v;
     tot+=val;
     const s=document.getElementById(`${p}s_${t}`);
     if(s)s.textContent=`= ฿${fN(val)}`;
