@@ -410,8 +410,8 @@ async function loadAll(){
       sbGet('groups','order=sort_order.asc,id.asc'),
       sbGet('group_members','order=sort_order.asc'),
     ]);
-    S.shops=routes.map(r=>({id:r.id,name:r.name,color:r.color,tab_flags:r.tab_flags||{count:true,income:true,expense:true,exchange:true},sort_order:r.sort_order||0}));
-    S.groups=groups.map(g=>({id:g.id,name:g.name,sort_order:g.sort_order||0,tab_flags:g.tab_flags||{count:true,income:true,expense:true,exchange:true}}));
+    S.shops=routes.map(r=>({id:r.id,name:r.name,color:r.color,tab_flags:r.tab_flags||{count:true,income:true,expense:true,exchange:true,payowner:false},sort_order:r.sort_order||0}));
+    S.groups=groups.map(g=>({id:g.id,name:g.name,sort_order:g.sort_order||0,is_owner:g.is_owner||false,tab_flags:g.tab_flags||{count:true,income:true,expense:true,exchange:true,payowner:false}}));
     S.groupMembers={};
     gMembers.forEach(m=>{if(!S.groupMembers[m.group_id])S.groupMembers[m.group_id]=[];S.groupMembers[m.group_id].push(m.route_id);});
     S.entries={};
@@ -466,8 +466,8 @@ function groupedRouteIds(){const s=new Set();Object.values(S.groupMembers).forEa
 function groupTot(gid){return(S.groupMembers[gid]||[]).reduce((s,id)=>s+shopTot(id),0);}
 // helper: tab_flags ของ view ปัจจุบัน
 function curTabFlags(){
-  if(S.view.type==='group'){const g=S.groups.find(x=>x.id===S.view.id);return g?.tab_flags||{count:true,income:true,expense:true,exchange:true};}
-  const sh=S.shops.find(x=>x.id===S.view.id);return sh?.tab_flags||{count:true,income:true,expense:true,exchange:true};
+  if(S.view.type==='group'){const g=S.groups.find(x=>x.id===S.view.id);return g?.tab_flags||{count:true,income:true,expense:true,exchange:true,payowner:false};}
+  const sh=S.shops.find(x=>x.id===S.view.id);return sh?.tab_flags||{count:true,income:true,expense:true,exchange:true,payowner:false};
 }
 
 function renderSidebar(){
@@ -483,7 +483,7 @@ function renderSidebar(){
       const isGrpActive=S.view.type==='group'&&S.view.id===g.id;
       html+=`<div class="grp-box">
         <div class="grp-hd${isGrpActive?' active':''}" onclick="setView('group','${g.id}')">
-          <span style="font-size:13px;">📁</span>
+          <span style="font-size:13px;">${g.is_owner?'⭐':'📁'}</span>
           <span class="grp-name">${g.name}</span>
           <span class="grp-amt">${fmt(groupTot(g.id))}</span>
           ${adm?`<span onclick="event.stopPropagation()" style="display:flex;gap:3px;margin-left:4px;">
@@ -624,7 +624,8 @@ function renderShopContent(){
       ${tf.count?`<button class="btn btn-g" onclick="openCount()">+ นับเงิน</button>`:''}
       ${tf.income?`<button class="btn btn-b" onclick="openIncome()">+ รายรับ</button>`:''}
       ${tf.expense?`<button class="btn btn-a" onclick="openExpense()">+ รายจ่าย</button>`:''}
-      ${tf.exchange?`<button class="btn btn-p" onclick="openExchange()">⇄ แลกระหว่างสาย</button>`:''}
+      ${tf.exchange?`<button class="btn btn-p" onclick="openExchange(true,'${sid}')">⇄ แลกระหว่างสาย</button>`:''}
+      ${tf.payowner?`<button class="btn btn-a" onclick="openPayOwner('${sid}')">💸 จ่ายเฮียรวย</button>`:''}
     </div>
   </div>
   <div class="grid4">
@@ -692,7 +693,8 @@ function renderGroupContent(){
       ${tf.count?`<button class="btn btn-g" onclick="openCountGroup()">+ นับเงิน</button>`:''}
       ${tf.income?`<button class="btn btn-b" onclick="openIncomeGroup()">+ รายรับ</button>`:''}
       ${tf.expense?`<button class="btn btn-a" onclick="openExpenseGroup()">+ รายจ่าย</button>`:''}
-      ${tf.exchange?`<button class="btn btn-p" onclick="openExchange()">⇄ แลกระหว่างสาย</button>`:''}
+      ${tf.exchange?`<button class="btn btn-p" onclick="openExchange(false,null)">⇄ แลกระหว่างสาย</button>`:''}
+      ${tf.payowner?`<button class="btn btn-a" onclick="openPayOwnerGroup('${gid}')">💸 จ่ายเฮียรวย</button>`:''}
     </div>
   </div>
   <div class="grid4">
@@ -1018,61 +1020,106 @@ async function saveExpense(){
 }
 
 // ─── EXCHANGE between shops — two-column UI ───
-function openExchange(){
-  if(S.shops.length<2){toast('ต้องมีสายอย่างน้อย 2 สาย');return;}
-  const opts=S.shops.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-  const leftDefault=S.shops[0].id, rightDefault=S.shops[1].id;
+// fromShop=true → ฝั่งซ้าย lock เป็น lockedId, ฝั่งขวาเลือกได้ (standalone routes + groups, ยกเว้นกลุ่มของตัวเอง)
+// fromShop=false → ทั้ง 2 ฝั่งเลือกได้ (group view เดิม)
+function openExchange(fromShop,lockedId){
+  // หา group ที่ lockedId อยู่
+  const myGroupId=fromShop?Object.keys(S.groupMembers).find(gid=>S.groupMembers[gid].includes(lockedId)):null;
+  // สร้าง options ฝั่งขวา: standalone routes + groups (ยกเว้น route ที่อยู่ใน group ใดก็ตาม และยกเว้น group ของตัวเอง)
+  const groupedIds=groupedRouteIds();
+  const rightRoutes=fromShop
+    ?S.shops.filter(s=>!groupedIds.has(s.id)&&s.id!==lockedId)
+    :S.shops;
+  const rightGroups=fromShop
+    ?S.groups.filter(g=>g.id!==myGroupId)
+    :S.groups;
+  if(fromShop&&rightRoutes.length===0&&rightGroups.length===0){toast('ไม่มีสายหรือกลุ่มที่สามารถแลกได้');return;}
+  if(!fromShop&&S.shops.length<2){toast('ต้องมีสายอย่างน้อย 2 สาย');return;}
+
+  // left options (ถ้า fromShop ล็อค)
+  const leftShop=fromShop?S.shops.find(s=>s.id===lockedId):null;
+  const leftName=leftShop?.name||'';
+
+  // right options: routes ก่อน แล้ว groups
+  const rightOpts=[
+    ...rightRoutes.map(s=>`<option value="r:${s.id}">${s.name}</option>`),
+    ...rightGroups.map(g=>`<option value="g:${g.id}">📁 ${g.name}</option>`)
+  ].join('');
+
+  // left options (กรณี fromShop=false เลือกได้)
+  const leftAllOpts=S.shops.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+
+  const leftDefault=fromShop?lockedId:S.shops[0]?.id;
+  const rightDefault=fromShop?(rightRoutes[0]?`r:${rightRoutes[0].id}`:(rightGroups[0]?`g:${rightGroups[0].id}`:'')):S.shops[1]?.id;
+
   const cbL=calcCB(leftDefault,S.month);
-  const cbR=calcCB(rightDefault,S.month);
-  // build rows: header + one row per denomination + total bar
+  const cbR=fromShop&&rightDefault?.startsWith('g:')
+    ?calcCBGroup(rightDefault.slice(2),S.month)
+    :calcCB(fromShop?rightDefault?.slice(2)||'':rightDefault,S.month);
+
   const hdrRow=`<div style="display:contents;">
     <div style="padding:10px 12px;background:var(--adim);border-bottom:1px solid var(--border);">
       <div style="font-size:13px;font-weight:600;color:var(--amber);margin-bottom:6px;">ฝั่งซ้าย — ให้ออก</div>
-      <select class="fsel" id="xc_L" style="font-size:14px;width:100%;" onchange="refreshExchangeCB()">${opts}</select>
+      ${fromShop
+        ?`<div style="font-size:14px;font-weight:600;color:var(--text);padding:6px 0;">${leftName}</div><input type="hidden" id="xc_L" value="${leftDefault}">`
+        :`<select class="fsel" id="xc_L" style="font-size:14px;width:100%;" onchange="refreshExchangeCB(false)">${leftAllOpts}</select>`}
     </div>
     <div style="background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--purple);">⇄</div>
     <div style="padding:10px 12px;background:var(--gdim);border-bottom:1px solid var(--border);">
-      <div style="font-size:13px;font-weight:600;color:var(--green);margin-bottom:6px;">ฝั่งขวา — ให้ออก</div>
-      <select class="fsel" id="xc_R" style="font-size:14px;width:100%;" onchange="refreshExchangeCB()">${opts}</select>
+      <div style="font-size:13px;font-weight:600;color:var(--green);margin-bottom:6px;">ฝั่งขวา — รับ</div>
+      <select class="fsel" id="xc_R" style="font-size:14px;width:100%;" onchange="refreshExchangeCB(${fromShop})">${rightOpts}</select>
     </div>
   </div>`;
+
   const denomRows=BT.map(t=>{
     const maxL=cbL[t]||0, maxR=cbR[t]||0;
     return`<div style="display:contents;">
       <div style="padding:10px 12px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);">
-        <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span class="pill ${BC[t]}">฿${BL[t]}</span><span style="font-size:11px;color:var(--text3);">มี ${fN(maxL)} ใบ</span></label>
+        <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span class="pill ${BC[t]}">฿${BL[t]}</span><span id="xlbl_L_${t}" style="font-size:11px;color:var(--text3);">มี ${fN(maxL)} ใบ</span></label>
         <input type="number" min="0" max="${maxL}" value="0" id="xL_${t}" oninput="updBLimit('xL')" inputmode="numeric" style="font-size:20px;width:100%;background:transparent;border:none;color:var(--text);font-family:var(--mono);font-weight:500;">
         <div style="font-size:13px;color:var(--text3);margin-top:2px;font-family:var(--mono);" id="xLs_${t}">= ฿0</div>
       </div>
       <div style="background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--border2);font-size:12px;">—</div>
       <div style="padding:10px 12px;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">
-        <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span class="pill ${BC[t]}">฿${BL[t]}</span><span style="font-size:11px;color:var(--text3);">มี ${fN(maxR)} ใบ</span></label>
+        <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span class="pill ${BC[t]}">฿${BL[t]}</span><span id="xlbl_R_${t}" style="font-size:11px;color:var(--text3);">มี ${fN(maxR)} ใบ</span></label>
         <input type="number" min="0" max="${maxR}" value="0" id="xR_${t}" oninput="updBLimit('xR')" inputmode="numeric" style="font-size:20px;width:100%;background:transparent;border:none;color:var(--text);font-family:var(--mono);font-weight:500;">
         <div style="font-size:13px;color:var(--text3);margin-top:2px;font-family:var(--mono);" id="xRs_${t}">= ฿0</div>
       </div>
     </div>`;
   }).join('');
+
   const totRow=`<div style="display:contents;">
     <div style="padding:10px 12px;"><span style="font-size:13px;color:var(--text2);">ยอดให้</span> <span class="tv" id="xL_tot" style="font-family:var(--mono);font-size:18px;font-weight:600;color:var(--amber);">฿0</span></div>
     <div style="background:var(--bg2);"></div>
     <div style="padding:10px 12px;"><span style="font-size:13px;color:var(--text2);">ยอดให้</span> <span class="tv" id="xR_tot" style="font-family:var(--mono);font-size:18px;font-weight:600;color:var(--green);">฿0</span></div>
   </div>`;
+
   const body=`
     <p style="font-size:13px;color:var(--text2);margin-bottom:14px;">แต่ละฝั่งระบุแบงค์ที่ให้ออก — แบงค์จะสลับไปอีกฝั่งอัตโนมัติ</p>
     <div style="display:grid;grid-template-columns:1fr 36px 1fr;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
       ${hdrRow}${denomRows}${totRow}
     </div>`;
-  OM('แลกเงินระหว่างสาย',body,`<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-p" onclick="saveExchange()">บันทึกการแลก</button>`);
-  document.getElementById('xc_L').value=leftDefault;
-  document.getElementById('xc_R').value=rightDefault;
+  OM('แลกเงินระหว่างสาย',body,`<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-p" onclick="saveExchange(${fromShop})">บันทึกการแลก</button>`);
+  if(!fromShop)document.getElementById('xc_L').value=leftDefault;
+  document.getElementById('xc_R').value=rightDefault||'';
   _cbMap['xL']=cbL;
   _cbMap['xR']=cbR;
 }
-function refreshExchangeCB(){
+
+// คำนวณ CB รวมของ group (route แรก)
+function calcCBGroup(gid,mk){
+  const firstId=(S.groupMembers[gid]||[])[0];
+  if(!firstId)return eb();
+  return calcCB(firstId,mk);
+}
+
+function refreshExchangeCB(fromShop){
   const Lid=document.getElementById('xc_L').value;
-  const Rid=document.getElementById('xc_R').value;
+  const Rval=document.getElementById('xc_R').value;
   const cbL=calcCB(Lid,S.month);
-  const cbR=calcCB(Rid,S.month);
+  const isRGroup=Rval?.startsWith('g:');
+  const Rid=isRGroup?Rval.slice(2):Rval;
+  const cbR=isRGroup?calcCBGroup(Rid,S.month):calcCB(Rid,S.month);
   _cbMap['xL']=cbL;
   _cbMap['xR']=cbR;
   BT.forEach(t=>{
@@ -1080,9 +1127,8 @@ function refreshExchangeCB(){
     const inpR=document.getElementById(`xR_${t}`);
     if(inpL){inpL.max=cbL[t]||0;inpL.value=0;}
     if(inpR){inpR.max=cbR[t]||0;inpR.value=0;}
-    // update "มี X ใบ" labels — they're the second child of each label
-    const lblL=inpL?.closest('div')?.querySelector('label span:last-child');
-    const lblR=inpR?.closest('div')?.querySelector('label span:last-child');
+    const lblL=document.getElementById(`xlbl_L_${t}`);
+    const lblR=document.getElementById(`xlbl_R_${t}`);
     if(lblL)lblL.textContent=`มี ${fN(cbL[t]||0)} ใบ`;
     if(lblR)lblR.textContent=`มี ${fN(cbR[t]||0)} ใบ`;
     const sL=document.getElementById(`xLs_${t}`);if(sL)sL.textContent='= ฿0';
@@ -1091,32 +1137,63 @@ function refreshExchangeCB(){
   const tL=document.getElementById('xL_tot');if(tL)tL.textContent='฿0';
   const tR=document.getElementById('xR_tot');if(tR)tR.textContent='฿0';
 }
-async function saveExchange(){
+
+async function saveExchange(fromShop){
   const d=today();
-  const n='';
   const Lid=document.getElementById('xc_L').value;
-  const Rid=document.getElementById('xc_R').value;
-  if(Lid===Rid){toast('กรุณาเลือกสายที่ต่างกัน');return;}
+  const Rval=document.getElementById('xc_R').value;
+  const isRGroup=Rval?.startsWith('g:');
+  const Rid=isRGroup?Rval.slice(2):Rval;
+  if(!isRGroup&&Lid===Rid){toast('กรุณาเลือกสายที่ต่างกัน');return;}
   const Lblls=gb('xL');
   const Rblls=gb('xR');
   const La=bv(Lblls), Ra=bv(Rblls);
   if(La===0&&Ra===0){toast('กรุณาใส่แบงค์อย่างน้อยฝั่งเดียว');return;}
-  // validate แบงค์ไม่เกินที่มีแต่ละฝั่ง
   const cbL=calcCB(Lid,S.month);
-  const cbR=calcCB(Rid,S.month);
   const overL=BT.find(t=>Lblls[t]>(cbL[t]||0));
   if(overL){toast(`ฝั่งซ้าย: แบงค์ ฿${BL[overL]} เกินจำนวนที่มี (มี ${fN(cbL[overL]||0)} ใบ)`);return;}
-  const overR=BT.find(t=>Rblls[t]>(cbR[t]||0));
-  if(overR){toast(`ฝั่งขวา: แบงค์ ฿${BL[overR]} เกินจำนวนที่มี (มี ${fN(cbR[overR]||0)} ใบ)`);return;}
+  if(!isRGroup){
+    const cbR=calcCB(Rid,S.month);
+    const overR=BT.find(t=>Rblls[t]>(cbR[t]||0));
+    if(overR){toast(`ฝั่งขวา: แบงค์ ฿${BL[overR]} เกินจำนวนที่มี (มี ${fN(cbR[overR]||0)} ใบ)`);return;}
+  }
   const Lshop=S.shops.find(s=>s.id===Lid);
-  const Rshop=S.shops.find(s=>s.id===Rid);
   const mk2=S.month;
   const entriesToSave=[];
   const localEntries=[];
-  if(La>0){const e={id:uid(),type:'exout',df:d,dt:d,amount:La,title:`แลกออก → ${Rshop?.name}`,note:n,bills:Lblls,oid:Rid};entriesToSave.push(entryToRow(e,Lid,mk2));localEntries.push({sid:Lid,e});}
-  if(Ra>0){const e={id:uid(),type:'exin',df:d,dt:d,amount:Ra,title:`รับแลก ← ${Rshop?.name}`,note:n,bills:Rblls,oid:Rid};entriesToSave.push(entryToRow(e,Lid,mk2));localEntries.push({sid:Lid,e});}
-  if(Ra>0){const e={id:uid(),type:'exout',df:d,dt:d,amount:Ra,title:`แลกออก → ${Lshop?.name}`,note:n,bills:Rblls,oid:Lid};entriesToSave.push(entryToRow(e,Rid,mk2));localEntries.push({sid:Rid,e});}
-  if(La>0){const e={id:uid(),type:'exin',df:d,dt:d,amount:La,title:`รับแลก ← ${Lshop?.name}`,note:n,bills:Lblls,oid:Lid};entriesToSave.push(entryToRow(e,Rid,mk2));localEntries.push({sid:Rid,e});}
+
+  if(isRGroup){
+    // ฝั่งขวาเป็น group → exin บันทึกที่ route แรกของ group
+    const Rgrp=S.groups.find(g=>g.id===Rid);
+    const RfirstId=(S.groupMembers[Rid]||[])[0];
+    const RfirstName=RfirstId?S.shops.find(s=>s.id===RfirstId)?.name||'?':'?';
+    const Rname=Rgrp?.name||'?';
+    if(La>0){
+      const e={id:uid(),type:'exout',df:d,dt:d,amount:La,title:`แลกออก → ${Rname}`,note:'',bills:Lblls,oid:RfirstId||Rid};
+      entriesToSave.push(entryToRow(e,Lid,mk2));localEntries.push({sid:Lid,e});
+    }
+    if(Ra>0&&RfirstId){
+      const cbR=calcCB(RfirstId,S.month);
+      const overR=BT.find(t=>Rblls[t]>(cbR[t]||0));
+      if(overR){toast(`ฝั่งขวา: แบงค์ ฿${BL[overR]} เกินจำนวนที่มี`);return;}
+      const e={id:uid(),type:'exout',df:d,dt:d,amount:Ra,title:`แลกออก → ${Lshop?.name}`,note:'',bills:Rblls,oid:Lid};
+      entriesToSave.push(entryToRow(e,RfirstId,mk2));localEntries.push({sid:RfirstId,e});
+    }
+    if(La>0&&RfirstId){
+      const e={id:uid(),type:'exin',df:d,dt:d,amount:La,title:`รับแลก ← ${Lshop?.name}`,note:'',bills:Lblls,oid:Lid};
+      entriesToSave.push(entryToRow(e,RfirstId,mk2));localEntries.push({sid:RfirstId,e});
+    }
+    if(Ra>0){
+      const e={id:uid(),type:'exin',df:d,dt:d,amount:Ra,title:`รับแลก ← ${Rname}`,note:'',bills:Rblls,oid:RfirstId||Rid};
+      entriesToSave.push(entryToRow(e,Lid,mk2));localEntries.push({sid:Lid,e});
+    }
+  } else {
+    const Rshop=S.shops.find(s=>s.id===Rid);
+    if(La>0){const e={id:uid(),type:'exout',df:d,dt:d,amount:La,title:`แลกออก → ${Rshop?.name}`,note:'',bills:Lblls,oid:Rid};entriesToSave.push(entryToRow(e,Lid,mk2));localEntries.push({sid:Lid,e});}
+    if(Ra>0){const e={id:uid(),type:'exin',df:d,dt:d,amount:Ra,title:`รับแลก ← ${Rshop?.name}`,note:'',bills:Rblls,oid:Rid};entriesToSave.push(entryToRow(e,Lid,mk2));localEntries.push({sid:Lid,e});}
+    if(Ra>0){const e={id:uid(),type:'exout',df:d,dt:d,amount:Ra,title:`แลกออก → ${Lshop?.name}`,note:'',bills:Rblls,oid:Lid};entriesToSave.push(entryToRow(e,Rid,mk2));localEntries.push({sid:Rid,e});}
+    if(La>0){const e={id:uid(),type:'exin',df:d,dt:d,amount:La,title:`รับแลก ← ${Lshop?.name}`,note:'',bills:Lblls,oid:Lid};entriesToSave.push(entryToRow(e,Rid,mk2));localEntries.push({sid:Rid,e});}
+  }
   try{
     await sbUpsert('entries',entriesToSave);
     localEntries.forEach(({sid,e})=>ge(sid,mk2).push(e));
@@ -1125,6 +1202,59 @@ async function saveExchange(){
     toast(diff>0?`บันทึกแล้ว (ยอดต่างกัน ${fmt(diff)} — ตรวจสอบด้วย)`:'แลกเงินบันทึกแล้ว ✓');
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
 }
+
+// ─── จ่ายเฮียรวย (shop view) ───
+function openPayOwner(fromSid){
+  const ownerGrp=S.groups.find(g=>g.is_owner);
+  if(!ownerGrp){toast('ยังไม่ได้ตั้งกลุ่มเฮียรวย — admin ตั้งได้ที่แก้ไขกลุ่ม');return;}
+  const ownerFirstId=(S.groupMembers[ownerGrp.id]||[])[0];
+  if(!ownerFirstId){toast('กลุ่มเฮียรวยยังไม่มีสาย');return;}
+  const cb=calcCB(fromSid,S.month);
+  const body=`
+    ${cbBar(cb)}
+    <div style="height:10px;"></div>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">ระบุแบงค์ที่จ่ายออก → <strong style="color:var(--amber);">${ownerGrp.name}</strong></p>
+    ${billInpWithLimit('po',cb)}
+    <div class="tbar"><span class="tl">ยอดที่จ่าย</span><span class="tv" id="po_tot">฿0</span></div>`;
+  OM(`💸 จ่ายเฮียรวย`,body,`<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-a" onclick="savePayOwner('${fromSid}','${ownerGrp.id}','${ownerFirstId}')">บันทึก</button>`);
+}
+
+// ─── จ่ายเฮียรวย (group view — pickShop ก่อน) ───
+function openPayOwnerGroup(gid){
+  const members=(S.groupMembers[gid]||[]).map(id=>S.shops.find(s=>s.id===id)).filter(Boolean);
+  if(members.length===0){toast('ไม่มีสายในกลุ่ม');return;}
+  if(members.length===1){openPayOwner(members[0].id);return;}
+  const ownerGrp=S.groups.find(g=>g.is_owner);
+  if(!ownerGrp){toast('ยังไม่ได้ตั้งกลุ่มเฮียรวย');return;}
+  OM(`เลือกสายสำหรับจ่ายเฮียรวย`,
+    `<p style="font-size:13px;color:var(--text2);margin-bottom:12px;">เลือกสายที่ต้องการจ่ายให้ <strong style="color:var(--amber);">${ownerGrp.name}</strong>:</p>`+
+    members.map(sh=>`<button onclick="CM();setTimeout(()=>openPayOwner('${sh.id}'),50)" style="display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;margin-bottom:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);cursor:pointer;font-family:var(--font);font-size:14px;">
+      <span style="width:10px;height:10px;border-radius:50%;background:${sh.color};display:inline-block;"></span>
+      ${sh.name} <span style="margin-left:auto;font-family:var(--mono);font-size:13px;color:var(--text2);">${fmt(shopTot(sh.id))}</span>
+    </button>`).join(''),
+    `<button class="btn btn-x" onclick="CM()">ยกเลิก</button>`);
+}
+
+async function savePayOwner(fromSid,ownerGid,ownerFirstId){
+  const bills=gb('po');
+  const amount=bv(bills);
+  if(amount===0){toast('กรุณาใส่แบงค์ที่จ่ายออก');return;}
+  const cb=calcCB(fromSid,S.month);
+  const over=BT.find(t=>bills[t]>(cb[t]||0));
+  if(over){toast(`แบงค์ ฿${BL[over]} เกินจำนวนที่มีในกล่อง`);return;}
+  const ownerGrp=S.groups.find(g=>g.id===ownerGid);
+  const fromShop=S.shops.find(s=>s.id===fromSid);
+  const d=today();const mk2=S.month;
+  const eOut={id:uid(),type:'exout',df:d,dt:d,amount,title:`จ่ายเฮียรวย → ${ownerGrp?.name}`,note:'',bills,oid:ownerFirstId};
+  const eIn={id:uid(),type:'exin',df:d,dt:d,amount,title:`รับจาก ${fromShop?.name}`,note:'',bills,oid:fromSid};
+  try{
+    await sbUpsert('entries',[entryToRow(eOut,fromSid,mk2),entryToRow(eIn,ownerFirstId,mk2)]);
+    ge(fromSid,mk2).push(eOut);
+    ge(ownerFirstId,mk2).push(eIn);
+    CM();render();toast(`จ่ายเฮียรวย ${fmt(amount)} แล้ว ✓`);
+  }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
+}
+
 
 // ─── ADD SHOP ───
 function addShop(){
@@ -1144,7 +1274,7 @@ async function saveShop(){
   if(!n){toast('กรุณาใส่ชื่อ');return;}
   const id='s'+Date.now();
   const so=S.shops.length;
-  const tf={count:true,income:true,expense:true,exchange:true};
+  const tf={count:true,income:true,expense:true,exchange:true,payowner:false};
   try{
     await sbUpsert('routes',{id,name:n,color:c,tab_flags:tf,sort_order:so});
     S.shops.push({id,name:n,color:c,tab_flags:tf,sort_order:so});
@@ -1156,7 +1286,7 @@ function editShop(id){
   const shop=S.shops.find(s=>s.id===id);
   if(!shop)return;
   const colors=['#22c55e','#3b82f6','#f59e0b','#ef4444','#a855f7','#06b6d4','#f97316','#ec4899'];
-  const tf=shop.tab_flags||{count:true,income:true,expense:true,exchange:true};
+  const tf=shop.tab_flags||{count:true,income:true,expense:true,exchange:true,payowner:false};
   OM('แก้ไขสาย',`
     <div class="fg"><label class="flbl">ชื่อสาย</label><input type="text" class="finp" id="es_n" value="${shop.name}" placeholder="เช่น สาย D"></div>
     <div class="fg"><label class="flbl">สีประจำสาย</label>
@@ -1207,17 +1337,21 @@ function setMonth(m){S.month=m;render();}
 
 // ─── GROUP MANAGEMENT ───
 function tfChips(flags,prefix){
-  const tabs=[{k:'count',l:'นับเงิน'},{k:'income',l:'รายรับ'},{k:'expense',l:'รายจ่าย'},{k:'exchange',l:'แลกระหว่างสาย'}];
+  const tabs=[{k:'count',l:'นับเงิน'},{k:'income',l:'รายรับ'},{k:'expense',l:'รายจ่าย'},{k:'exchange',l:'แลกระหว่างสาย'},{k:'payowner',l:'จ่ายเฮียรวย'}];
   return`<div class="tf-row">`+tabs.map(t=>`<span class="tf-chip${flags[t.k]?' on':''}" id="${prefix}_${t.k}" onclick="toggleTf('${prefix}','${t.k}')">${t.l}</span>`).join('')+`</div>`;
 }
 function toggleTf(prefix,key){const el=document.getElementById(`${prefix}_${key}`);if(el)el.classList.toggle('on');}
-function getTf(prefix){const keys=['count','income','expense','exchange'];const f={};keys.forEach(k=>{f[k]=document.getElementById(`${prefix}_${k}`)?.classList.contains('on')??true;});return f;}
+function getTf(prefix){const keys=['count','income','expense','exchange','payowner'];const f={};keys.forEach(k=>{f[k]=document.getElementById(`${prefix}_${k}`)?.classList.contains('on')??true;});return f;}
 
 function addGroup(){
   const availShops=S.shops.filter(sh=>!groupedRouteIds().has(sh.id));
-  const defFlags={count:true,income:true,expense:true,exchange:true};
+  const defFlags={count:true,income:true,expense:true,exchange:true,payowner:false};
   OM('เพิ่มกลุ่มสาย',`
     <div class="fg"><label class="flbl">ชื่อกลุ่ม</label><input type="text" class="finp" id="ng_n" placeholder="เช่น กลุ่มสีเขียว"></div>
+    <div class="fg"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:6px;">
+      <input type="checkbox" id="ng_owner" style="width:14px;height:14px;">
+      <span style="font-size:13px;">⭐ ตั้งกลุ่มนี้เป็น <strong style="color:var(--amber);">เฮียรวย</strong> (รับเงินจากแท็บจ่ายเฮียรวย)</span>
+    </label></div>
     <div class="fg"><label class="flbl">เลือกสายที่จะอยู่ในกลุ่มนี้</label>
       <div id="ng_shops" style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">
         ${availShops.length===0?'<p style="font-size:12px;color:var(--text3);">ไม่มีสายที่ยังไม่ได้อยู่กลุ่ม</p>':
@@ -1238,14 +1372,20 @@ async function saveGroup(){
   if(!n){toast('กรุณาใส่ชื่อกลุ่ม');return;}
   const checked=[...document.querySelectorAll('#ng_shops input[type=checkbox]:checked')].map(i=>i.value);
   const tf=getTf('ng');
+  const is_owner=document.getElementById('ng_owner')?.checked||false;
   const id='g'+Date.now();
   const so=S.groups.length;
   try{
-    await sbUpsert('groups',{id,name:n,sort_order:so,tab_flags:tf});
+    // ถ้าตั้งเป็นเฮียรวย ให้ unset กลุ่มอื่นก่อน
+    if(is_owner){
+      const prev=S.groups.filter(g=>g.is_owner);
+      for(const g of prev){await sbUpsert('groups',{id:g.id,name:g.name,sort_order:g.sort_order,tab_flags:g.tab_flags,is_owner:false});g.is_owner=false;}
+    }
+    await sbUpsert('groups',{id,name:n,sort_order:so,tab_flags:tf,is_owner});
     if(checked.length>0){
       await sbUpsert('group_members',checked.map((rid,i)=>({group_id:id,route_id:rid,sort_order:i})));
     }
-    S.groups.push({id,name:n,sort_order:so,tab_flags:tf});
+    S.groups.push({id,name:n,sort_order:so,tab_flags:tf,is_owner});
     S.groupMembers[id]=checked;
     S.view={type:'group',id};
     CM();render();toast(`เพิ่มกลุ่ม "${n}" แล้ว ✓`);
@@ -1258,9 +1398,13 @@ function editGroup(id){
   const otherGrouped=new Set();
   S.groups.filter(g=>g.id!==id).forEach(g=>(S.groupMembers[g.id]||[]).forEach(rid=>otherGrouped.add(rid)));
   const availShops=S.shops.filter(sh=>!otherGrouped.has(sh.id));
-  const tf=grp.tab_flags||{count:true,income:true,expense:true,exchange:true};
+  const tf=grp.tab_flags||{count:true,income:true,expense:true,exchange:true,payowner:false};
   OM('แก้ไขกลุ่มสาย',`
     <div class="fg"><label class="flbl">ชื่อกลุ่ม</label><input type="text" class="finp" id="eg_n" value="${grp.name}"></div>
+    <div class="fg"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:6px;">
+      <input type="checkbox" id="eg_owner" ${grp.is_owner?'checked':''} style="width:14px;height:14px;">
+      <span style="font-size:13px;">⭐ ตั้งกลุ่มนี้เป็น <strong style="color:var(--amber);">เฮียรวย</strong> (รับเงินจากแท็บจ่ายเฮียรวย)</span>
+    </label></div>
     <div class="fg"><label class="flbl">สายในกลุ่มนี้</label>
       <div id="eg_shops" style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">
         ${availShops.map(sh=>`<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 8px;border:1px solid var(--border);border-radius:6px;">
@@ -1280,11 +1424,17 @@ async function saveEditGroup(id){
   if(!n){toast('กรุณาใส่ชื่อกลุ่ม');return;}
   const checked=[...document.querySelectorAll('#eg_shops input[type=checkbox]:checked')].map(i=>i.value);
   const tf=getTf('eg');
+  const is_owner=document.getElementById('eg_owner')?.checked||false;
   try{
-    await sbUpsert('groups',{id,name:n,tab_flags:tf});
+    // ถ้าตั้งเป็นเฮียรวย ให้ unset กลุ่มอื่นก่อน
+    if(is_owner){
+      const prev=S.groups.filter(g=>g.is_owner&&g.id!==id);
+      for(const g of prev){await sbUpsert('groups',{id:g.id,name:g.name,sort_order:g.sort_order,tab_flags:g.tab_flags,is_owner:false});g.is_owner=false;}
+    }
+    await sbUpsert('groups',{id,name:n,tab_flags:tf,is_owner});
     await sbDelete('group_members',`group_id=eq.${id}`);
     if(checked.length>0)await sbUpsert('group_members',checked.map((rid,i)=>({group_id:id,route_id:rid,sort_order:i})));
-    const grp=S.groups.find(g=>g.id===id);if(grp){grp.name=n;grp.tab_flags=tf;}
+    const grp=S.groups.find(g=>g.id===id);if(grp){grp.name=n;grp.tab_flags=tf;grp.is_owner=is_owner;}
     S.groupMembers[id]=checked;
     CM();render();toast(`แก้ไขกลุ่ม "${n}" แล้ว ✓`);
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}

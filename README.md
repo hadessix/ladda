@@ -46,7 +46,7 @@ routes (
   id          text PRIMARY KEY,
   name        text NOT NULL,
   color       text NOT NULL DEFAULT '#22c55e',
-  tab_flags   jsonb DEFAULT '{"count":true,"income":true,"expense":true,"exchange":true}',
+  tab_flags   jsonb DEFAULT '{"count":true,"income":true,"expense":true,"exchange":true,"payowner":false}',
   sort_order  int DEFAULT 0,
   created_at  timestamp DEFAULT now()
 )
@@ -84,7 +84,8 @@ groups (
   id          text PRIMARY KEY,
   name        text NOT NULL,
   sort_order  int DEFAULT 0,
-  tab_flags   jsonb DEFAULT '{"count":true,"income":true,"expense":true,"exchange":true}'
+  is_owner    boolean DEFAULT false,     -- true = กลุ่มเฮียรวย (รับเงินจากแท็บจ่ายเฮียรวย)
+  tab_flags   jsonb DEFAULT '{"count":true,"income":true,"expense":true,"exchange":true,"payowner":false}'
 )
 
 -- 5. group_members (สมาชิกกลุ่ม)
@@ -103,8 +104,8 @@ group_members (
 | `count` | รอบนับเงิน (มี subs[]) | +total |
 | `income` | รายรับพิเศษ | +amount |
 | `expense` | รายจ่าย | -amount |
-| `exin` | รับแลกเงินจากสายอื่น | +amount |
-| `exout` | แลกเงินออกไปสายอื่น | -amount |
+| `exin` | รับแลกเงินจากสายอื่น / รับจากจ่ายเฮียรวย | +amount |
+| `exout` | แลกเงินออกไปสายอื่น / จ่ายเฮียรวย | -amount |
 
 ### bills object
 
@@ -188,6 +189,15 @@ group_members (
 - แสดง "มี X ใบ" ในแต่ละช่อง — cap อัตโนมัติ ใส่เกินไม่ได้
 - ไม่มีช่องวันที่/หมายเหตุ — วันที่บันทึกตามวันจริง real-time
 - บันทึก exout/exin ทั้ง 2 ฝั่งพร้อมกันใน transaction เดียว
+- **shop view**: ฝั่งซ้าย lock เป็นสายปัจจุบัน, ฝั่งขวาเลือก route standalone หรือ group ได้ — route ที่อยู่ใน group ใดก็ตามจะไม่ขึ้นให้เลือก และ group ของตัวเองก็ถูก filter ออกด้วย
+- **group view**: ทั้ง 2 ฝั่งเลือกได้อิสระ (พฤติกรรมเดิม)
+
+### 7. จ่ายเฮียรวย
+- แท็บพิเศษ — admin เปิดให้สายหรือกลุ่มได้ผ่าน "แท็บที่แสดง"
+- admin ตั้งได้ว่า group ไหนคือ "เฮียรวย" ผ่าน checkbox ✏️ แก้ไขกลุ่ม → "⭐ ตั้งกลุ่มนี้เป็นเฮียรวย"
+- UI 1 ฝั่ง (เฉพาะผู้จ่าย) — มี cap แบงค์ตามกล่อง
+- บันทึก `exout` ที่สายผู้จ่าย + `exin` ที่ route แรกของกลุ่มเฮียรวย
+- group เฮียรวยแสดงไอคอน ⭐ ใน sidebar
 
 ---
 
@@ -302,8 +312,13 @@ AUTH = { role: 'user' | 'admin' }   // สถานะ login (in-memory)
 | `sbGet/sbUpsert/sbDelete` | Supabase REST helpers |
 | `entryToRow/rowToEntry` | map JS ↔ Supabase fields |
 | `summarize()` | สรุปรอบนับเงิน → upsert entry + delete session |
-| `openExchange()` | เปิด modal แลกเงินระหว่างสาย |
-| `refreshExchangeCB()` | อัปเดต cap + label "มี X ใบ" เมื่อเปลี่ยนสาย |
+| `openExchange(fromShop,lockedId)` | เปิด modal แลกเงิน — fromShop=true ล็อคฝั่งซ้าย, ฝั่งขวาเลือก route/group ได้ |
+| `refreshExchangeCB(fromShop)` | อัปเดต cap + label "มี X ใบ" เมื่อเปลี่ยนสาย/กลุ่มปลายทาง |
+| `saveExchange(fromShop)` | บันทึกการแลก รองรับทั้ง route และ group เป็นปลายทาง |
+| `calcCBGroup(gid,mk)` | คำนวณแบงค์คงเหลือของ route แรกใน group |
+| `openPayOwner(fromSid)` | เปิด modal จ่ายเฮียรวย (1 ฝั่ง) จาก shop view |
+| `openPayOwnerGroup(gid)` | เปิด modal เลือกสายก่อนจ่ายเฮียรวย จาก group view |
+| `savePayOwner(fromSid,ownerGid,ownerFirstId)` | บันทึก exout ที่สายผู้จ่าย + exin ที่ route แรกของกลุ่มเฮียรวย |
 | `billInpWithLimit(p,cb)` | render grid input แบงค์พร้อม cap |
 | `billInpExchange(p,cb)` | render input แบงค์สำหรับ modal แลกเงิน |
 | `updBLimit(p)` | อัปเดตยอด real-time สำหรับ input ที่มี cap |
@@ -328,6 +343,8 @@ AUTH = { role: 'user' | 'admin' }   // สถานะ login (in-memory)
 | 2026-05 | ปรับ modal แลกเงินระหว่างสาย: เอา cbBar ออก, เปลี่ยนเป็น layout grid แถวตรงกัน (display:contents), denomination เรียง 1 บรรทัด/แถว, font input 20px, เอาช่องวันที่/หมายเหตุออก ใช้ `today()` อัตโนมัติ |
 | 2026-05 | เพิ่มระบบ PIN login: ผู้ใช้ทั่วไป (1111) / ผู้ดูแล (0000) — จำ session ใน localStorage, ผู้ใช้ทั่วไปลบรายการไม่ได้, ผู้ดูแลจัดการสายได้ (เพิ่ม/แก้ไข/ลบ) |
 | 2026-05 | เพิ่มระบบ Group: admin สร้างกลุ่มสายได้, sidebar แสดงกลุ่มบนสุด + สายไม่มีกลุ่มด้านล่าง, หน้าสรุปกลุ่มแสดงยอดรวม + card แต่ละสาย, toggle tab_flags ต่อกลุ่ม/สาย |
+| 2026-05 | เพิ่มแท็บ "จ่ายเฮียรวย": admin ตั้ง group ใดก็ได้เป็นเฮียรวย (is_owner flag), UI 1 ฝั่งมี cap, บันทึก exout+exin ที่ route แรกของกลุ่มเฮียรวย, group เฮียรวยแสดง ⭐ ใน sidebar |
+| 2026-05 | แก้ shop view แลกระหว่างสาย: ฝั่งซ้าย lock เป็นสายปัจจุบัน, ฝั่งขวาเลือกได้เฉพาะ standalone routes + groups (route ที่อยู่ใน group ใดก็ตามถูก filter ออก รวมถึง group ของตัวเอง) |
 
 ---
 
