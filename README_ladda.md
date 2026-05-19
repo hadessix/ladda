@@ -1,6 +1,7 @@
 # 💰 น้องลัดดา — Cash Counter
 
-แอปนับเงินและบันทึกรายรับ-รายจ่ายแบบ multi-route สำหรับธุรกิจที่มีหลายสาย ทำงานเป็น single HTML file ไม่ต้องติดตั้ง เปิดผ่าน browser ได้เลย
+แอปนับเงินและบันทึกรายรับ-รายจ่ายแบบ multi-route สำหรับธุรกิจที่มีหลายสาย
+ทำงานเป็น single HTML file ไม่ต้องติดตั้ง เปิดผ่าน browser ได้เลย
 
 ---
 
@@ -8,8 +9,8 @@
 
 ```
 C:\นับเงินอี้อ๋า\
-├── index.html         ← ไฟล์หลัก
-└── README.md    ← ไฟล์นี้
+├── index.html      ← ไฟล์หลัก
+└── README.md       ← ไฟล์นี้
 ```
 
 ---
@@ -88,6 +89,7 @@ sessions (
 | `exout` | แลกเงินออกไปสายอื่น | -amount |
 
 ### bills object
+
 ```js
 { 1000: n, 500: n, 100: n, 50: n, 20: n, coin: n }
 // coin = จำนวนเหรียญ (คิดเหรียญละ ฿1)
@@ -103,18 +105,29 @@ sessions (
 - ดู grand total รวมทุกสายที่ header
 
 ### 2. ระบบงวดรายเดือน
-- แสดง tab ย้อนหลัง 7 เดือน + เดือนปัจจุบัน
 - รอบบัญชีเริ่มวันที่ 11 ของเดือน ถึง 10 ของเดือนถัดไป
+- tab แสดงแยกตามปี (พ.ศ.) และเดือนที่มีข้อมูล + เดือนปัจจุบันเสมอ
 
 ### 3. การนับเงิน (Count Session)
 - เปิด session ก่อน แล้วเพิ่มได้หลายครั้ง (ครั้งที่ 1, 2, 3…)
 - แต่ละครั้งระบุ: วันที่เริ่ม, วันที่สิ้นสุด, จำนวนแบงค์แต่ละชนิด
+- ยอดอัปเดต real-time ขณะกรอกแบงค์
 - กด **สรุปรอบ** → บันทึกเป็น entry ถาวรลง Supabase
 
-### 4. รายรับ / รายจ่าย / แลกเงินระหว่างสาย
-- รายรับ: ระบุแบงค์ที่รับ (บังคับ) — ยอดคำนวณอัตโนมัติ
-- รายจ่าย: ระบุแบงค์ที่จ่ายออก (บังคับ อย่างน้อย 1 ใบ) — ยอดคำนวณอัตโนมัติ ไม่ต้องกรอกตัวเลขเอง จำกัดไม่เกินแบงค์ที่มีในกล่อง
-- แลกเงิน: UI 2 คอลัมน์ บันทึก exout/exin ทั้ง 2 ฝั่งพร้อมกัน
+### 4. รายรับ
+- ระบุแบงค์ที่รับ (บังคับ) — ยอดคำนวณอัตโนมัติ real-time
+- บันทึกเป็น `income` entry
+
+### 5. รายจ่าย
+- ระบุแบงค์ที่จ่ายออก (บังคับ อย่างน้อย 1 ใบ)
+- ยอดคำนวณอัตโนมัติ real-time — แสดงใต้ grid แบงค์
+- จำกัดไม่เกินแบงค์ที่มีในกล่อง (cap per denomination)
+- บันทึกเป็น `expense` entry
+
+### 6. แลกเงินระหว่างสาย
+- UI 2 คอลัมน์ — ระบุแบงค์ที่ให้ออกแต่ละฝั่ง
+- ยอดแต่ละฝั่งอัปเดต real-time แสดงใต้ grid แบงค์
+- บันทึก exout/exin ทั้ง 2 ฝั่งพร้อมกันใน transaction เดียว
 
 ---
 
@@ -136,7 +149,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.sessions TO anon;
 
 ## วิธี Deploy / Update
 
-เมื่อแก้ไข `ladda.html` แล้วต้องการ deploy ขึ้น Cloudflare:
+เมื่อแก้ไข `index.html` แล้วต้องการ deploy ขึ้น Cloudflare:
 
 ```bash
 cd "C:/นับเงินอี้อ๋า"
@@ -146,7 +159,7 @@ wrangler pages deploy . --project-name=ladda --commit-dirty=true
 หรือถ้าต้องการ push ขึ้น GitHub ด้วย:
 
 ```bash
-git add ladda.html
+git add index.html
 git commit -m "update"
 git push
 wrangler pages deploy . --project-name=ladda --commit-dirty=true
@@ -158,19 +171,12 @@ wrangler pages deploy . --project-name=ladda --commit-dirty=true
 
 ```js
 S = {
-  shops: [{ id, name, color }],
-  entries: {
-    [routeId]: {
-      [monthKey]: [ entry, ... ]   // monthKey = "YYYY-MM"
-    }
-  },
-  sessions: {
-    [routeId]: {
-      [monthKey]: { subs: [ { df, dt, bills } ] } | null
-    }
-  },
-  shop: "s1",
-  month: "2025-05"
+  shops:   [{ id, name, color }],
+  entries: { [routeId]: { [monthKey]: [ entry, ... ] } },
+  sessions:{ [routeId]: { [monthKey]: { subs: [{ df, dt, bills }] } | null } },
+  shop:  "s1",
+  month: "2025-05",
+  year:  "2025"
 }
 ```
 
@@ -194,14 +200,28 @@ S = {
 | `bv(bills)` | คำนวณยอดเงินรวมจาก bills object |
 | `shopTot(sid)` | ยอดสุทธิของสาย (รวม open session) |
 | `grandTot()` | ยอดรวมทุกสาย |
+| `calcCB(sid,mk)` | คำนวณแบงค์คงเหลือในกล่อง ณ เดือนนั้น |
 | `ge(sid,mk)` | ดึง / สร้าง entries array |
 | `gs/ss/cs` | get / set / clear open session |
 | `sbGet/sbUpsert/sbDelete` | Supabase REST helpers |
 | `entryToRow/rowToEntry` | map JS ↔ Supabase fields |
 | `summarize()` | สรุปรอบนับเงิน → upsert entry + delete session |
 | `openExchange()` | เปิด modal แลกเงินระหว่างสาย |
+| `billInpWithLimit(p,cb)` | render grid input แบงค์พร้อม cap — เก็บ cb ใน `_cbMap[p]` |
+| `updBLimit(p)` | อัปเดตยอด real-time สำหรับ input ที่มี cap (อ่าน cb จาก `_cbMap`) |
+| `billInp(p)` | render grid input แบงค์ไม่มี cap (สำหรับ count/income) |
+| `updB(p)` | อัปเดตยอด real-time สำหรับ input ไม่มี cap |
 | `OM/CM` | เปิด/ปิด modal |
 | `toast(msg)` | แสดง notification ชั่วคราว |
+
+---
+
+## Bug fixes ที่แก้ไปแล้ว
+
+| วันที่ | รายการ |
+|---|---|
+| 2025-05 | `updBLimit` ไม่ทำงาน — สาเหตุ: `JSON.stringify` ใน oninput attribute ทำให้ double quotes ชนกัน → SyntaxError แก้โดยเพิ่ม `_cbMap` global เก็บ cb แยกตาม prefix แทน |
+| 2025-05 | ย้ายแถบ "ยอดที่จ่ายออก" / "ยอดให้" ไปใต้ grid แบงค์ทั้งใน รายจ่าย และ แลกเงิน (ทั้งซ้าย-ขวา) |
 
 ---
 
