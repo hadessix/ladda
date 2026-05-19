@@ -10,7 +10,7 @@
 ```
 C:\นับเงินอี้อ๋า\
 ├── index.html      ← ไฟล์หลัก
-└── README.md       ← ไฟล์นี้
+└── README.md          ← ไฟล์นี้
 ```
 
 ---
@@ -31,7 +31,7 @@ C:\นับเงินอี้อ๋า\
 
 | รายการ | ค่า |
 |---|---|
-| **URL แอป** | https://b2f47ce5.index-b0j.pages.dev/index.html |
+| **URL แอป** | https://e34ef8d2.ladda-b0j.pages.dev/ |
 | **GitHub repo** | https://github.com/hadessix/ladda |
 | **Supabase URL** | https://lsxnbdhyfsuqhopzuwls.supabase.co |
 | **Supabase anon key** | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxzeG5iZGh5ZnN1cWhvcHp1d2xzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxOTEyMjQsImV4cCI6MjA5NDc2NzIyNH0.yQUghPf7xNmPclMYNg1fX2c2ST9CTYsXl3-VjLRM2tA` |
