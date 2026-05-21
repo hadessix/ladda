@@ -917,6 +917,8 @@ async function summarize(){
     ge(S.shop,S.month).push(entry);
     cs(S.shop,S.month);
     render();toast(`สรุปรอบ ${prevRounds+1} แล้ว — ${n} ครั้ง รวม ${fmt(total)} ✓`);
+    const _tf=curTabFlags();const _og=S.groups.find(g=>g.is_owner);
+    if(_tf.payowner&&_og&&(S.groupMembers[_og.id]||[]).length>0){setTimeout(()=>openPayOwner(S.shop),400);}
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
 }
 async function cancelSess(){if(!confirm('ยกเลิกรอบปัจจุบัน? ข้อมูลจะหาย'))return;try{await sbDelete('sessions',`route_id=eq.${S.shop}&month_key=eq.${S.month}`);cs(S.shop,S.month);render();toast('ยกเลิกรอบแล้ว');}catch(err){toast('ลบไม่สำเร็จ: '+err.message);console.error(err);}}
@@ -1020,14 +1022,15 @@ function openExchange(fromShop,lockedId){
   const myGroupId=fromShop?Object.keys(S.groupMembers).find(gid=>S.groupMembers[gid].includes(lockedId)):null;
   // สร้าง options ฝั่งขวา: standalone routes + groups (ยกเว้น route ที่อยู่ใน group ใดก็ตาม และยกเว้น group ของตัวเอง)
   const groupedIds=groupedRouteIds();
+  if(fromShop&&bv(calcCB(lockedId,S.month))===0){toast('ไม่มีเงินในกล่อง ไม่สามารถแลกได้');return;}
   const rightRoutes=fromShop
-    ?S.shops.filter(s=>!groupedIds.has(s.id)&&s.id!==lockedId)
-    :S.shops;
+    ?S.shops.filter(s=>!groupedIds.has(s.id)&&s.id!==lockedId&&bv(calcCB(s.id,S.month))>0)
+    :S.shops.filter(s=>bv(calcCB(s.id,S.month))>0);
   const rightGroups=fromShop
-    ?S.groups.filter(g=>g.id!==myGroupId)
-    :S.groups;
-  if(fromShop&&rightRoutes.length===0&&rightGroups.length===0){toast('ไม่มีสายหรือกลุ่มที่สามารถแลกได้');return;}
-  if(!fromShop&&S.shops.length<2){toast('ต้องมีสายอย่างน้อย 2 สาย');return;}
+    ?S.groups.filter(g=>g.id!==myGroupId&&bv(calcCBGroup(g.id,S.month))>0)
+    :S.groups.filter(g=>bv(calcCBGroup(g.id,S.month))>0);
+  if(fromShop&&rightRoutes.length===0&&rightGroups.length===0){toast('ไม่มีสายหรือกลุ่มที่มีเงินสำหรับแลก');return;}
+  if(!fromShop&&S.shops.filter(s=>bv(calcCB(s.id,S.month))>0).length<2){toast('ต้องมีสายที่มีเงินอย่างน้อย 2 สาย');return;}
 
   // left options (ถ้า fromShop ล็อค)
   const leftShop=fromShop?S.shops.find(s=>s.id===lockedId):null;
@@ -1039,11 +1042,12 @@ function openExchange(fromShop,lockedId){
     ...rightGroups.map(g=>`<option value="g:${g.id}">📁 ${g.name}</option>`)
   ].join('');
 
-  // left options (กรณี fromShop=false เลือกได้)
-  const leftAllOpts=S.shops.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  // left options (กรณี fromShop=false เลือกได้ — เฉพาะสายที่มีเงิน)
+  const cashShops=S.shops.filter(s=>bv(calcCB(s.id,S.month))>0);
+  const leftAllOpts=cashShops.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
 
-  const leftDefault=fromShop?lockedId:S.shops[0]?.id;
-  const rightDefault=fromShop?(rightRoutes[0]?`r:${rightRoutes[0].id}`:(rightGroups[0]?`g:${rightGroups[0].id}`:'')):S.shops[1]?.id;
+  const leftDefault=fromShop?lockedId:cashShops[0]?.id;
+  const rightDefault=fromShop?(rightRoutes[0]?`r:${rightRoutes[0].id}`:(rightGroups[0]?`g:${rightGroups[0].id}`:'')):cashShops[1]?.id;
 
   const cbL=calcCB(leftDefault,S.month);
   const cbR=fromShop&&rightDefault?.startsWith('g:')
