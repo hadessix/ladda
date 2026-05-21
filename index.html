@@ -483,7 +483,7 @@ function renderSidebar(){
       const isGrpActive=S.view.type==='group'&&S.view.id===g.id;
       html+=`<div class="grp-box">
         <div class="grp-hd${isGrpActive?' active':''}" onclick="setView('group','${g.id}')">
-          <span style="font-size:13px;">${g.is_owner?'⭐':'📁'}</span>
+          <span style="font-size:13px;">${g.is_owner?'⭐':g.tab_flags?.auto_collect?'⚡':'📁'}</span>
           <span class="grp-name">${g.name}</span>
           <span class="grp-amt">${fmt(groupTot(g.id))}</span>
           ${adm?`<span onclick="event.stopPropagation()" style="display:flex;gap:3px;margin-left:4px;">
@@ -916,9 +916,21 @@ async function summarize(){
     await sbDelete('sessions',`route_id=eq.${S.shop}&month_key=eq.${S.month}`);
     ge(S.shop,S.month).push(entry);
     cs(S.shop,S.month);
-    render();toast(`สรุปรอบ ${prevRounds+1} แล้ว — ${n} ครั้ง รวม ${fmt(total)} ✓`);
-    const _tf=curTabFlags();const _og=S.groups.find(g=>g.is_owner);
-    if(_tf.payowner&&_og&&(S.groupMembers[_og.id]||[]).length>0){setTimeout(()=>openPayOwner(S.shop),400);}
+    // ── auto-collect: โอนเงินเข้ากลุ่มถ้าเปิดใช้ ──
+    const _gid=Object.keys(S.groupMembers).find(gid=>(S.groupMembers[gid]||[]).includes(S.shop));
+    const _grp=_gid?S.groups.find(g=>g.id===_gid):null;
+    const _collector=_gid?(S.groupMembers[_gid]||[])[0]:null;
+    if(_grp?.tab_flags?.auto_collect&&_collector&&_collector!==S.shop){
+      const d=today(),mk2=S.month,sid=S.shop;
+      const fromName=S.shops.find(s=>s.id===sid)?.name||'?';
+      const eOut={id:uid(),type:'exout',df:d,dt:d,amount:total,title:`โอนเข้ากลุ่ม ${_grp.name}`,note:'',bills:tb,oid:_collector};
+      const eIn={id:uid(),type:'exin',df:d,dt:d,amount:total,title:`รับจาก ${fromName}`,note:'',bills:tb,oid:sid};
+      await sbUpsert('entries',[entryToRow(eOut,sid,mk2),entryToRow(eIn,_collector,mk2)]);
+      ge(sid,mk2).push(eOut);ge(_collector,mk2).push(eIn);
+      render();toast(`สรุปรอบ ${prevRounds+1} แล้ว · โอน ${fmt(total)} เข้ากลุ่ม ${_grp.name} ✓`);
+    } else {
+      render();toast(`สรุปรอบ ${prevRounds+1} แล้ว — ${n} ครั้ง รวม ${fmt(total)} ✓`);
+    }
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
 }
 async function cancelSess(){if(!confirm('ยกเลิกรอบปัจจุบัน? ข้อมูลจะหาย'))return;try{await sbDelete('sessions',`route_id=eq.${S.shop}&month_key=eq.${S.month}`);cs(S.shop,S.month);render();toast('ยกเลิกรอบแล้ว');}catch(err){toast('ลบไม่สำเร็จ: '+err.message);console.error(err);}}
@@ -1047,12 +1059,12 @@ function openExchange(fromShop,lockedId){
   const leftAllOpts=cashShops.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
 
   const leftDefault=fromShop?lockedId:cashShops[0]?.id;
-  const rightDefault=fromShop?(rightRoutes[0]?`r:${rightRoutes[0].id}`:(rightGroups[0]?`g:${rightGroups[0].id}`:'')):cashShops[1]?.id;
+  const rightDefault=fromShop?(rightRoutes[0]?`r:${rightRoutes[0].id}`:(rightGroups[0]?`g:${rightGroups[0].id}`:'')):cashShops[1]?`r:${cashShops[1].id}`:'';
 
   const cbL=calcCB(leftDefault,S.month);
-  const cbR=fromShop&&rightDefault?.startsWith('g:')
+  const cbR=rightDefault?.startsWith('g:')
     ?calcCBGroup(rightDefault.slice(2),S.month)
-    :calcCB(fromShop?rightDefault?.slice(2)||'':rightDefault,S.month);
+    :calcCB(rightDefault?.replace(/^r:/,'')||'',S.month);
 
   const hdrRow=`<div style="display:contents;">
     <div style="padding:10px 12px;background:var(--adim);border-bottom:1px solid var(--border);">
@@ -1115,7 +1127,7 @@ function refreshExchangeCB(fromShop){
   const Rval=document.getElementById('xc_R').value;
   const cbL=calcCB(Lid,S.month);
   const isRGroup=Rval?.startsWith('g:');
-  const Rid=isRGroup?Rval.slice(2):Rval;
+  const Rid=(isRGroup||Rval?.startsWith('r:'))?Rval.slice(2):Rval;
   const cbR=isRGroup?calcCBGroup(Rid,S.month):calcCB(Rid,S.month);
   _cbMap['xL']=cbL;
   _cbMap['xR']=cbR;
@@ -1143,6 +1155,7 @@ async function saveExchange(fromShop){
   const Rid=isRGroup?Rval.slice(2):Rval;
   if(!isRGroup&&Lid===Rid){toast('กรุณาเลือกสายที่ต่างกัน');return;}
   if(isRGroup&&(S.groupMembers[Rid]||[]).includes(Lid)){toast('ไม่สามารถแลกเงินกับกลุ่มของตัวเองได้');return;}
+
   const Lblls=gb('xL');
   const Rblls=gb('xR');
   const La=bv(Lblls), Ra=bv(Rblls);
@@ -1349,6 +1362,10 @@ function addGroup(){
       <input type="checkbox" id="ng_owner" style="width:14px;height:14px;">
       <span style="font-size:13px;">⭐ ตั้งกลุ่มนี้เป็น <strong style="color:var(--amber);">เฮียรวย</strong> (รับเงินจากแท็บจ่ายเฮียรวย)</span>
     </label></div>
+    <div class="fg"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:6px;">
+      <input type="checkbox" id="ng_auto" style="width:14px;height:14px;">
+      <span style="font-size:13px;">⚡ โอนเงินเข้ากลุ่มอัตโนมัติเมื่อสายย่อยสรุปรอบ (ยกเว้นสายแรก)</span>
+    </label></div>
     <div class="fg"><label class="flbl">เลือกสายที่จะอยู่ในกลุ่มนี้</label>
       <div id="ng_shops" style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">
         ${availShops.length===0?'<p style="font-size:12px;color:var(--text3);">ไม่มีสายที่ยังไม่ได้อยู่กลุ่ม</p>':
@@ -1369,6 +1386,7 @@ async function saveGroup(){
   if(!n){toast('กรุณาใส่ชื่อกลุ่ม');return;}
   const checked=[...document.querySelectorAll('#ng_shops input[type=checkbox]:checked')].map(i=>i.value);
   const tf=getTf('ng');
+  tf.auto_collect=document.getElementById('ng_auto')?.checked||false;
   const is_owner=document.getElementById('ng_owner')?.checked||false;
   const id='g'+Date.now();
   const so=S.groups.length;
@@ -1402,6 +1420,10 @@ function editGroup(id){
       <input type="checkbox" id="eg_owner" ${grp.is_owner?'checked':''} style="width:14px;height:14px;">
       <span style="font-size:13px;">⭐ ตั้งกลุ่มนี้เป็น <strong style="color:var(--amber);">เฮียรวย</strong> (รับเงินจากแท็บจ่ายเฮียรวย)</span>
     </label></div>
+    <div class="fg"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:6px;">
+      <input type="checkbox" id="eg_auto" ${tf.auto_collect?'checked':''} style="width:14px;height:14px;">
+      <span style="font-size:13px;">⚡ โอนเงินเข้ากลุ่มอัตโนมัติเมื่อสายย่อยสรุปรอบ (ยกเว้นสายแรก)</span>
+    </label></div>
     <div class="fg"><label class="flbl">สายในกลุ่มนี้</label>
       <div id="eg_shops" style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">
         ${availShops.map(sh=>`<label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 8px;border:1px solid var(--border);border-radius:6px;">
@@ -1421,6 +1443,7 @@ async function saveEditGroup(id){
   if(!n){toast('กรุณาใส่ชื่อกลุ่ม');return;}
   const checked=[...document.querySelectorAll('#eg_shops input[type=checkbox]:checked')].map(i=>i.value);
   const tf=getTf('eg');
+  tf.auto_collect=document.getElementById('eg_auto')?.checked||false;
   const is_owner=document.getElementById('eg_owner')?.checked||false;
   try{
     // ถ้าตั้งเป็นเฮียรวย ให้ unset กลุ่มอื่นก่อน
