@@ -602,14 +602,16 @@ function renderShopContent(){
   const tf=curTabFlags();
   const entries=ge(sid,S.month);
   const sess=gs(sid,S.month);
-  let tCount=0,tIncome=0,tExpense=0;
+  let tCount=0,tIncome=0,tExpense=0,tExIn=0,tExOut=0;
   entries.forEach(e=>{
     if(e.type==='count')tCount+=e.total||0;
-    else if(e.type==='income'||e.type==='exin')tIncome+=e.amount||0;
-    else if(e.type==='expense'||e.type==='exout')tExpense+=e.amount||0;
+    else if(e.type==='income')tIncome+=e.amount||0;
+    else if(e.type==='expense')tExpense+=e.amount||0;
+    else if(e.type==='exin')tExIn+=e.amount||0;
+    else if(e.type==='exout')tExOut+=e.amount||0;
   });
   if(sess)sess.subs.forEach(s=>tCount+=bv(s.bills||eb()));
-  const net=tCount+tIncome-tExpense;
+  const net=tCount+tIncome-tExpense+tExIn-tExOut;
   const cb=eb();
   entries.forEach(e=>{
     if(e.type==='count')(e.subs||[]).forEach(s=>BT.forEach(t=>cb[t]+=(s.bills[t]||0)));
@@ -672,19 +674,21 @@ function renderGroupContent(){
   const members=memberIds.map(id=>S.shops.find(s=>s.id===id)).filter(Boolean);
 
   // รวมยอดทั้งกลุ่ม (เดือนปัจจุบัน)
-  let gtCount=0,gtIncome=0,gtExpense=0;
+  let gtCount=0,gtIncome=0,gtExpense=0,gtExIn=0,gtExOut=0;
   const gcb=eb();
   members.forEach(sh=>{
     const ents=ge(sh.id,S.month);
     const sess=gs(sh.id,S.month);
     ents.forEach(e=>{
       if(e.type==='count'){gtCount+=e.total||0;(e.subs||[]).forEach(s=>BT.forEach(t=>gcb[t]+=(s.bills[t]||0)));}
-      else if(e.type==='income'||e.type==='exin'){gtIncome+=e.amount||0;if(e.bills)BT.forEach(t=>gcb[t]+=(e.bills[t]||0));}
-      else if(e.type==='expense'||e.type==='exout'){gtExpense+=e.amount||0;if(e.bills)BT.forEach(t=>gcb[t]-=(e.bills[t]||0));}
+      else if(e.type==='income'){gtIncome+=e.amount||0;if(e.bills)BT.forEach(t=>gcb[t]+=(e.bills[t]||0));}
+      else if(e.type==='expense'){gtExpense+=e.amount||0;if(e.bills)BT.forEach(t=>gcb[t]-=(e.bills[t]||0));}
+      else if(e.type==='exin'){gtExIn+=e.amount||0;if(e.bills)BT.forEach(t=>gcb[t]+=(e.bills[t]||0));}
+      else if(e.type==='exout'){gtExOut+=e.amount||0;if(e.bills)BT.forEach(t=>gcb[t]-=(e.bills[t]||0));}
     });
     if(sess){sess.subs.forEach(s=>{gtCount+=bv(s.bills||eb());BT.forEach(t=>gcb[t]+=(s.bills[t]||0));});}
   });
-  const gnet=gtCount+gtIncome-gtExpense;
+  const gnet=gtCount+gtIncome-gtExpense+gtExIn-gtExOut;
   const hasGBills=BT.some(t=>gcb[t]!==0);
 
   let h=`<div class="mhdr">
@@ -715,14 +719,16 @@ function renderGroupContent(){
   members.forEach(sh=>{
     const ents=ge(sh.id,S.month);
     const sess=gs(sh.id,S.month);
-    let tc=0,ti=0,te=0;
+    let tc=0,ti=0,te=0,tei=0,teo=0;
     ents.forEach(e=>{
       if(e.type==='count')tc+=e.total||0;
-      else if(e.type==='income'||e.type==='exin')ti+=e.amount||0;
-      else if(e.type==='expense'||e.type==='exout')te+=e.amount||0;
+      else if(e.type==='income')ti+=e.amount||0;
+      else if(e.type==='expense')te+=e.amount||0;
+      else if(e.type==='exin')tei+=e.amount||0;
+      else if(e.type==='exout')teo+=e.amount||0;
     });
     if(sess)sess.subs.forEach(s=>tc+=bv(s.bills||eb()));
-    const snet=tc+ti-te;
+    const snet=tc+ti-te+tei-teo;
     const scb=eb();
     ents.forEach(e=>{
       if(e.type==='count')(e.subs||[]).forEach(s=>BT.forEach(t=>scb[t]+=(s.bills[t]||0)));
