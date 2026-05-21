@@ -458,7 +458,7 @@ function shopTot(sid){
 function grandTot(){return S.shops.reduce((s,sh)=>s+shopTot(sh.id),0);}
 
 // ─── RENDER ───
-function render(){renderTabs();renderSidebar();renderContent();document.getElementById('gtotal').textContent=fmt(grandTot());}
+function render(){if(window._returnToGroup){S.view={type:'group',id:window._returnToGroup};window._returnToGroup=null;}renderTabs();renderSidebar();renderContent();document.getElementById('gtotal').textContent=fmt(grandTot());}
 
 // helper: รายชื่อ routeId ที่อยู่ในกลุ่มใดกลุ่มหนึ่ง
 function groupedRouteIds(){const s=new Set();Object.values(S.groupMembers).forEach(ids=>ids.forEach(id=>s.add(id)));return s;}
@@ -804,7 +804,7 @@ function billTbl(bills,total){
 }
 
 function toggleE(id){const b=document.getElementById('eb-'+id);if(b)b.classList.toggle('open');}
-async function delE(ev,id){ev.stopPropagation();if(!confirm('ลบรายการนี้?'))return;const sid=S.shop;try{await sbDelete('entries',`id=eq.${id}`);const l=ge(sid,S.month);const i=l.findIndex(e=>e.id===id);if(i>-1)l.splice(i,1);render();}catch(err){toast('ลบไม่สำเร็จ: '+err.message);console.error(err);}}
+async function delE(ev,id){ev.stopPropagation();if(!confirm('ลบรายการนี้?'))return;let sid=S.shop;for(const rid of Object.keys(S.entries)){if((S.entries[rid][S.month]||[]).some(e=>e.id===id)){sid=rid;break;}}try{await sbDelete('entries',`id=eq.${id}`);const l=ge(sid,S.month);const i=l.findIndex(e=>e.id===id);if(i>-1)l.splice(i,1);render();}catch(err){toast('ลบไม่สำเร็จ: '+err.message);console.error(err);}}
 
 // ─── MODAL helpers ───
 function OM(title,body,foot){document.getElementById('mtitle').textContent=title;document.getElementById('mbody').innerHTML=body;document.getElementById('mfoot').innerHTML=foot;document.getElementById('overlay').style.display='flex';}
@@ -821,13 +821,6 @@ function billInpWithLimit(p,cb){
     const max=cb[t]||0;
     return`<div class="bcell"><label><span class="pill ${BC[t]}">฿${BL[t]}</span><span style="font-size:10px;color:var(--text3);margin-left:4px;">มี ${fN(max)}</span></label><input type="number" min="0" max="${max}" value="0" id="${p}_${t}" oninput="updBLimit('${p}')" inputmode="numeric"><div class="bsub" id="${p}s_${t}">= ฿0</div></div>`;
   }).join('')+`</div>`;
-}
-function billInpExchange(p,cb){
-  _cbMap[p]=cb;
-  return BT.map(t=>{
-    const max=cb[t]||0;
-    return`<div class="bcell" style="border-radius:0;border-left:none;border-right:none;border-top:none;border-bottom:1px solid var(--border);background:transparent;padding:10px 12px;"><label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span class="pill ${BC[t]}">฿${BL[t]}</span><span style="font-size:11px;color:var(--text3);">มี ${fN(max)} ใบ</span></label><input type="number" min="0" max="${max}" value="0" id="${p}_${t}" oninput="updBLimit('${p}')" inputmode="numeric" style="font-size:20px;width:100%;background:transparent;border:none;color:var(--text);font-family:var(--mono);font-weight:500;"><div class="bsub" style="font-size:13px;" id="${p}s_${t}">= ฿0</div></div>`;
-  }).join('');
 }
 function updBLimit(p){
   const cb=_cbMap[p]||{};
@@ -1145,6 +1138,7 @@ async function saveExchange(fromShop){
   const isRGroup=Rval?.startsWith('g:');
   const Rid=isRGroup?Rval.slice(2):Rval;
   if(!isRGroup&&Lid===Rid){toast('กรุณาเลือกสายที่ต่างกัน');return;}
+  if(isRGroup&&(S.groupMembers[Rid]||[]).includes(Lid)){toast('ไม่สามารถแลกเงินกับกลุ่มของตัวเองได้');return;}
   const Lblls=gb('xL');
   const Rblls=gb('xR');
   const La=bv(Lblls), Ra=bv(Rblls);
@@ -1166,7 +1160,6 @@ async function saveExchange(fromShop){
     // ฝั่งขวาเป็น group → exin บันทึกที่ route แรกของ group
     const Rgrp=S.groups.find(g=>g.id===Rid);
     const RfirstId=(S.groupMembers[Rid]||[])[0];
-    const RfirstName=RfirstId?S.shops.find(s=>s.id===RfirstId)?.name||'?':'?';
     const Rname=Rgrp?.name||'?';
     if(La>0){
       const e={id:uid(),type:'exout',df:d,dt:d,amount:La,title:`แลกออก → ${Rname}`,note:'',bills:Lblls,oid:RfirstId||Rid};
