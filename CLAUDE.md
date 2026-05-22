@@ -36,7 +36,7 @@ Everything lives in `index.html` in this order:
    - Data loading (`loadAll`)
    - Auth (`authInit`, `sha256`, `pinCheck`, `showApp`, `logout`, `isAdmin`)
    - Render functions (`render`, `renderSidebar`, `renderContent`, `renderShopContent`, `renderGroupContent`)
-   - Overview page (`showOverview`, `backToMain`, `renderOverview`, `toggleOvVisible`, `ovPrevMonth`, `ovNextMonth`)
+   - Overview page (`showOverview`, `backToMain`, `renderOverview`, `renderOvTabs`, `toggleOvVisible`, `setOvYear`, `setOvMonth`)
    - Feature logic (count sessions, income, expense, exchange, payowner, auto-collect)
    - Modal helpers (`OM`, `CM`, `toast`)
 
@@ -171,6 +171,7 @@ RLS is disabled; anon key has full CRUD on all tables (accessed only via Worker)
 - **ไม่แสดง**: สายย่อยที่อยู่ในกลุ่มแยกรายสาย
 - `viewer_visible` เก็บใน `tab_flags` jsonb ของทั้ง routes และ groups
 - admin เข้า overview ได้จากปุ่ม "📊 ภาพรวม" ที่ header; มีปุ่ม "← หน้าหลัก" กลับ
+- **Navigation**: tab ปี (BE) → tab เดือน (`#ov-tabs-bar`); เดือนที่ > `cpk()` จะไม่แสดง; `S.ovYear` เก็บปีที่เลือกใน overview
 
 ## Key Patterns
 
@@ -210,7 +211,10 @@ RLS is disabled; anon key has full CRUD on all tables (accessed only via Worker)
 | `backToMain()` | ปิดหน้า overview กลับ main app |
 | `renderOverview()` | render การ์ดกลุ่ม+standalone shops; admin เห็นทั้งหมด, viewer เห็นเฉพาะ visible |
 | `toggleOvVisible(type,id)` | admin toggle viewer_visible → upsert routes/groups → re-render |
-| `ovPrevMonth/ovNextMonth()` | สลับเดือนใน overview |
+| `renderOvTabs()` | render year+month tabs ใน overview; กรอง > cpk() ออก |
+| `setOvYear(y)` | เลือกปีใน overview → renderOvTabs + renderOverview |
+| `setOvMonth(mk)` | เลือกเดือนใน overview → renderOvTabs + renderOverview |
+| `fmtMk(k)` | format month key เป็น "เดือนนี้" หรือ "[N] ชื่อเดือน"; ใช้ทั้ง main page และ overview |
 | `_ovCalc(ids)` | helper คำนวณยอดรวมจาก shop id หลายสาย |
 | `groupTot(gid)` | ยอดรวมของกลุ่ม |
 | `groupedRouteIds()` | Set ของ routeId ที่อยู่ในกลุ่ม |
