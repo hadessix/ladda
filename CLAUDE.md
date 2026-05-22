@@ -13,13 +13,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Deploy
 
 ```bash
-# Git push + deploy (ทำทีเดียว)
-git add index.html
-git commit -m "message"
-git push
-wrangler pages deploy . --project-name=ladda --commit-dirty=true
+# Deploy Worker (เมื่อแก้ worker.js)
+wrangler deploy
 
-# Deploy อย่างเดียว
+# Deploy Pages (เมื่อแก้ index.html)
+git add index.html && git commit -m "msg" && git push
 wrangler pages deploy . --project-name=ladda --commit-dirty=true
 ```
 
@@ -29,15 +27,16 @@ No local dev server needed — open `index.html` directly in a browser to test.
 
 Everything lives in `index.html` in this order:
 1. **`<style>`** — all CSS (CSS variables in `:root`, dark theme)
-2. **`<body>`** — login screen (`#login-screen`) + app shell (`#app`) with header, sidebar, tabs, content area
+2. **`<body>`** — overview screen (`#overview-screen`) + login screen (`#login-screen`) + app shell (`#app`)
 3. **`<script>`** — all JavaScript, structured as:
    - Constants & utilities (`BT`, `bv`, `cpk`, `fmt`, `uid`, `today`)
-   - Supabase config + REST helpers (`sbGet`, `sbUpsert`, `sbDelete`)
+   - Worker API helpers (`_wToken`, `_wFetch`, `sbGet`, `sbUpsert`, `sbDelete`)
    - Field mappers (`entryToRow`, `rowToEntry`)
    - Global state (`S`, `AUTH`)
    - Data loading (`loadAll`)
    - Auth (`authInit`, `sha256`, `pinCheck`, `showApp`, `logout`, `isAdmin`)
    - Render functions (`render`, `renderSidebar`, `renderContent`, `renderShopContent`, `renderGroupContent`)
+   - Overview page (`showOverview`, `backToMain`, `renderOverview`, `toggleOvVisible`, `ovPrevMonth`, `ovNextMonth`)
    - Feature logic (count sessions, income, expense, exchange, payowner, auto-collect)
    - Modal helpers (`OM`, `CM`, `toast`)
 
@@ -56,7 +55,8 @@ S = {
   year:  "YYYY"
 }
 
-AUTH = { role: 'user' | 'admin' }  // persisted in localStorage key: 'ladda_role'
+AUTH = { role: 'user' | 'admin' | 'viewer' }  // persisted in localStorage: 'ladda_role'
+// Token: localStorage 'ladda_token' (JWT issued by Worker, 30-day expiry)
 ```
 
 ## Supabase Schema
@@ -66,7 +66,7 @@ routes (
   id          text PRIMARY KEY,
   name        text NOT NULL,
   color       text NOT NULL DEFAULT '#22c55e',
-  tab_flags   jsonb DEFAULT '{"count":true,"income":true,"expense":true,"exchange":true,"payowner":false,"auto_collect":false}',
+  tab_flags   jsonb DEFAULT '{"count":true,"income":true,"expense":true,"exchange":true,"payowner":false,"auto_collect":false,"viewer_visible":false}',
   sort_order  int DEFAULT 0,
   created_at  timestamp DEFAULT now()
 )
@@ -101,8 +101,8 @@ groups (
   id          text PRIMARY KEY,
   name        text NOT NULL,
   sort_order  int DEFAULT 0,
-  is_owner    boolean DEFAULT false,   -- true = เฮียรวย group
-  tab_flags   jsonb DEFAULT '{"count":true,"income":true,"expense":true,"exchange":true,"payowner":false,"auto_collect":false}'
+  is_owner    boolean DEFAULT false,
+  tab_flags   jsonb DEFAULT '{"count":true,"income":true,"expense":true,"exchange":true,"payowner":false,"auto_collect":false,"viewer_visible":false}'
 )
 
 group_members (
@@ -113,7 +113,7 @@ group_members (
 )
 ```
 
-RLS is disabled; anon key has full CRUD on all tables.
+RLS is disabled; anon key has full CRUD on all tables (accessed only via Worker).
 
 ### Entry types
 
@@ -122,8 +122,8 @@ RLS is disabled; anon key has full CRUD on all tables.
 | `count` | รอบนับเงิน (has `subs[]`) | +total |
 | `income` | รายรับพิเศษ | +amount |
 | `expense` | รายจ่าย | -amount |
-| `exin` | รับแลกเงินจากสายอื่น / รับจากจ่ายเฮียรวย / รับ auto-collect | +amount |
-| `exout` | แลกเงินออกไปสายอื่น / จ่ายเฮียรวย / โอน auto-collect | -amount |
+| `exin` | รับแลกเงิน / รับจากจ่ายเฮียรวย / รับ auto-collect | +amount |
+| `exout` | แลกเงินออก / จ่ายเฮียรวย / โอน auto-collect | -amount |
 
 > **Summary cards**: `tIncome` = `income` only, `tExpense` = `expense` only — exin/exout ไม่นับในช่องรายรับ/รายจ่าย แต่รวมใน net: `net = tCount + tIncome − tExpense + tExIn − tExOut`
 
@@ -139,35 +139,53 @@ RLS is disabled; anon key has full CRUD on all tables.
 
 ```
 เปิดแอป
-  └─ มี ladda_role ใน localStorage?
-        ├─ ใช่ → showApp() → loadAll() → render()
+  └─ มี ladda_role + ladda_token ใน localStorage?
+        ├─ ใช่ → showApp()
+        │         ├─ admin/user → main app (#app)
+        │         └─ viewer     → overview screen (#overview-screen)
         └─ ไม่ → แสดงหน้า password input
-                   └─ กรอก PIN → pinCheck() (async, SHA-256)
-                         ├─ hash ตรงกับ HASH_USER  → role=user  (ดู + เพิ่ม, ลบไม่ได้)
-                         ├─ hash ตรงกับ HASH_ADMIN → role=admin (ทุกอย่าง)
-                         └─ ผิด → แสดง error, ล้าง input
+                   └─ กรอก PIN → sha256(PIN) → POST /auth (Worker)
+                         ├─ admin  → token + role → main app
+                         ├─ user   → token + role → main app
+                         ├─ viewer → token + role → overview screen (read-only)
+                         └─ ผิด   → error, ล้าง input
 ```
 
-- PIN จริงไม่เคยอยู่ใน source — มีแค่ SHA-256 hash (`HASH_USER`, `HASH_ADMIN`)
-- `sha256(str)` ใช้ `crypto.subtle.digest` (Web Crypto API, built-in browser)
+- PIN จริงและ hash ไม่มีใน source code เลย — อยู่แค่ใน Cloudflare Worker env vars
 - `isAdmin()` guards all delete/manage actions
-- Logout: กด badge role ที่ header → ลบ localStorage → แสดงหน้า login ใหม่
+- Logout: ลบ `ladda_role` + `ladda_token` → แสดงหน้า login
+
+## Roles
+
+| Role | PIN | สิทธิ์ |
+|---|---|---|
+| `admin` | (Worker secret) | ทุกอย่าง รวมถึงลบ จัดการสาย/กลุ่ม ตั้งค่า overview |
+| `user` | (Worker secret) | ดู + เพิ่มข้อมูล, ลบไม่ได้, จัดการสายไม่ได้ |
+| `viewer` | (Worker secret) | เข้าได้เฉพาะหน้าภาพรวม (overview), ดูอย่างเดียว |
+
+## Overview Page (`#overview-screen`)
+
+- **viewer**: เห็นเฉพาะกลุ่ม/สายที่ `viewer_visible: true`
+- **admin**: เห็นทุกกลุ่ม/สาย + ปุ่ม 👁️ บนการ์ดเพื่อ toggle การแสดงผล; การ์ดที่ซ่อนจะ opacity 0.45
+- แสดง: กลุ่มร้านค้า (ยอดรวมทั้งกลุ่ม) + สายที่ไม่มีกลุ่ม
+- **ไม่แสดง**: สายย่อยที่อยู่ในกลุ่มแยกรายสาย
+- `viewer_visible` เก็บใน `tab_flags` jsonb ของทั้ง routes และ groups
+- admin เข้า overview ได้จากปุ่ม "📊 ภาพรวม" ที่ header; มีปุ่ม "← หน้าหลัก" กลับ
 
 ## Key Patterns
 
 - **bills object**: `{ 1000: n, 500: n, 100: n, 50: n, 20: n, coin: n }` — `coin` = ฿1 each; use `bv(bills)` to compute total
 - **month_key**: `"YYYY-MM"` — fiscal period starts on 11th of month; `cpk()` returns current period key
-- **tab_flags**: `{ count, income, expense, exchange, payowner, auto_collect }` — controls which tabs show per route/group; `curTabFlags()` returns flags for current view
+- **tab_flags**: `{ count, income, expense, exchange, payowner, auto_collect, viewer_visible }` — controls tabs + visibility; `curTabFlags()` returns flags for current view
 - **`_cbMap` global**: stores bill-input callbacks by prefix to avoid JSON.stringify/double-quote conflicts in inline `oninput` attributes
 - **`calcCB(sid, mk)`**: computes cumulative bills in cash box at a given month by replaying all entries
 - **Exchange modal** (`openExchange(fromShop, lockedId)`):
-  - Right dropdown uses `r:${id}` prefix for routes, `g:${id}` for groups
-  - Routes/groups with zero balance are filtered out (cannot be selected)
-  - Self-exchange validation: route cannot exchange with itself or its own group
-  - `fromShop=true` → left side locks to current route
-- **Pay-owner tab**: enabled via `tab_flags.payowner`; target group must have `is_owner=true`; saves `exout` at payer + `exin` at first route of owner group
-- **Auto-collect** (`tab_flags.auto_collect` on group): after sub-shop summarizes a count round, auto-creates `exout` (from sub-shop) + `exin` (to first route = collector) immediately; first route of group is always the collector and is exempt
-- **Count session**: open session → add multiple subs (each with date range + bills) → **สามารถแก้ไขแต่ละ sub ได้ก่อนสรุป** → กด "สรุปรอบ" → upsert entry + delete session; หลังสรุปแก้ไขไม่ได้
+  - Right dropdown: `r:${id}` prefix for routes, `g:${id}` for groups
+  - Routes/groups with zero balance filtered out
+  - Self-exchange validation: cannot exchange with self or own group
+- **Pay-owner tab**: `tab_flags.payowner`; target group must have `is_owner=true`; saves exout+exin
+- **Auto-collect** (`tab_flags.auto_collect` on group): after sub-shop summarizes, auto exout→exin to first route (collector); first route is exempt
+- **Count session**: open → add subs → **แก้ไข sub ได้ก่อนสรุป** → สรุปรอบ → finalized entry; หลังสรุปแก้ไขไม่ได้
 - **Sidebar icon**: `⭐` = is_owner group, `⚡` = auto_collect group, `📁` = normal group
 
 ## Function Reference
@@ -175,90 +193,72 @@ RLS is disabled; anon key has full CRUD on all tables.
 | Function | หน้าที่ |
 |---|---|
 | `authInit()` | ตรวจ localStorage → showApp() หรือแสดงหน้า login |
-| `sha256(str)` | async — SHA-256 hash via Web Crypto API |
-| `pinCheck()` | async — hash input → เทียบ HASH_USER/HASH_ADMIN → set role + showApp() |
-| `showApp()` | ซ่อนหน้า login, อัปเดต badge, เรียก loadAll() |
-| `logout()` | ลบ localStorage, แสดงหน้า login ใหม่ |
+| `sha256(str)` | async — SHA-256 via Web Crypto API |
+| `pinCheck()` | async — hash → POST Worker /auth → token + role → showApp() |
+| `showApp()` | ซ่อน login; viewer→overview, admin/user→app |
+| `logout()` | ลบ localStorage token+role, ซ่อน overview+app, แสดง login |
 | `isAdmin()` | คืน true ถ้า role === 'admin' |
-| `loadAll()` | โหลด routes/entries/sessions/groups/group_members จาก Supabase |
+| `loadAll()` | โหลดข้อมูลทั้งหมดจาก Worker/Supabase |
 | `render()` | re-render ทุก component |
-| `renderSidebar()` | sidebar: กลุ่ม (บนสุด) + สายไม่มีกลุ่ม (ล่าง) |
+| `renderSidebar()` | sidebar: กลุ่ม + สายไม่มีกลุ่ม |
 | `renderContent()` | router → renderShopContent() หรือ renderGroupContent() |
-| `renderShopContent()` | หน้าสาย — กรอง tab ตาม tab_flags |
-| `renderGroupContent()` | หน้าสรุปกลุ่ม — ยอดรวม + card แต่ละสาย |
-| `setView(type,id)` | เปลี่ยน view ปัจจุบัน แล้ว render() |
+| `renderShopContent()` | หน้าสาย |
+| `renderGroupContent()` | หน้าสรุปกลุ่ม |
+| `setView(type,id)` | เปลี่ยน view แล้ว render() |
 | `curTabFlags()` | คืน tab_flags ของ view ปัจจุบัน |
+| `showOverview()` | เปิดหน้า overview (admin badge + back button) |
+| `backToMain()` | ปิดหน้า overview กลับ main app |
+| `renderOverview()` | render การ์ดกลุ่ม+standalone shops; admin เห็นทั้งหมด, viewer เห็นเฉพาะ visible |
+| `toggleOvVisible(type,id)` | admin toggle viewer_visible → upsert routes/groups → re-render |
+| `ovPrevMonth/ovNextMonth()` | สลับเดือนใน overview |
+| `_ovCalc(ids)` | helper คำนวณยอดรวมจาก shop id หลายสาย |
 | `groupTot(gid)` | ยอดรวมของกลุ่ม |
-| `groupedRouteIds()` | Set ของ routeId ที่อยู่ในกลุ่มใดก็ได้ |
-| `cpk()` | คืน month key ของงวดปัจจุบัน (เริ่มวันที่ 11) |
-| `bv(bills)` | คำนวณยอดเงินรวมจาก bills object |
-| `shopTot(sid)` | ยอดสุทธิของสาย (รวม open session) |
+| `groupedRouteIds()` | Set ของ routeId ที่อยู่ในกลุ่ม |
+| `cpk()` | คืน month key ปัจจุบัน |
+| `bv(bills)` | คำนวณยอดจาก bills object |
+| `shopTot(sid)` | ยอดสุทธิของสาย |
 | `grandTot()` | ยอดรวมทุกสาย |
-| `calcCB(sid,mk)` | คำนวณแบงค์คงเหลือในกล่อง ณ เดือนนั้น |
-| `calcCBGroup(gid,mk)` | คำนวณแบงค์คงเหลือของ route แรกใน group |
-| `ge(sid,mk)` | ดึง / สร้าง entries array |
-| `gs/ss/cs` | get / set / clear open session |
-| `sbGet/sbUpsert/sbDelete` | Supabase REST helpers |
+| `calcCB(sid,mk)` | แบงค์คงเหลือในกล่อง ณ เดือนนั้น |
+| `calcCBGroup(gid,mk)` | แบงค์คงเหลือของ route แรกใน group |
+| `ge/gs/ss/cs` | entries array / get/set/clear session |
+| `sbGet/sbUpsert/sbDelete` | Worker API helpers (ต้องมี token) |
 | `entryToRow/rowToEntry` | map JS ↔ Supabase fields |
-| `openCount()` | เริ่มรอบนับเงิน หรือ addSubCount() ถ้ามี session อยู่แล้ว |
-| `addSubCount()` | เพิ่ม sub ครั้งใหม่ใน session ที่เปิดอยู่ |
-| `editSubCount(idx)` | เปิด modal แก้ไข sub ครั้งที่ idx (0-based) ใน session ที่ยังเปิด |
-| `saveEditSub(idx)` | บันทึกการแก้ไข sub → upsert session ใน Supabase |
-| `summarize()` | สรุปรอบนับเงิน → upsert entry + delete session + auto-collect ถ้าเปิด |
-| `cancelSess()` | ยกเลิกและลบ session ที่เปิดอยู่ |
-| `openExchange(fromShop,lockedId)` | เปิด modal แลกเงิน (กรอง zero-balance ออก) |
-| `refreshExchangeCB(fromShop)` | อัปเดต cap + label "มี X ใบ" เมื่อเปลี่ยนปลายทาง |
-| `saveExchange(fromShop)` | บันทึกการแลก รองรับ route (`r:id`) และ group (`g:id`) เป็นปลายทาง |
-| `openPayOwner(fromSid)` | เปิด modal จ่ายเฮียรวย จาก shop view |
-| `openPayOwnerGroup(gid)` | เปิด modal เลือกสายก่อนจ่ายเฮียรวย จาก group view |
-| `savePayOwner(fromSid,ownerGid,ownerFirstId)` | บันทึก exout+exin สำหรับจ่ายเฮียรวย |
-| `billInpWithLimit(p,cb)` | render grid input แบงค์พร้อม cap |
-| `updBLimit(p)` | อัปเดตยอด real-time สำหรับ input ที่มี cap |
-| `billInp(p)` | render grid input แบงค์ไม่มี cap |
-| `updB(p)` | อัปเดตยอด real-time สำหรับ input ไม่มี cap |
-| `addShop/saveShop` | เพิ่มสายใหม่ (admin only) |
-| `editShop/saveEditShop(id)` | แก้ไขชื่อ + สี + tab_flags สาย (admin only) |
-| `deleteShop(id)` | ลบสายและข้อมูลทั้งหมด + sync groupMembers |
-| `addGroup/saveGroup` | เพิ่มกลุ่มใหม่ (admin only) |
-| `editGroup/saveEditGroup(id)` | แก้ไขกลุ่ม + sync members + auto_collect checkbox |
-| `deleteGroup(id)` | ลบกลุ่ม (สายไม่ถูกลบ) |
-| `pickShopThen(...)` | modal เลือกสายก่อนเปิด action |
-| `tfChips(flags,prefix)` | render toggle chip สำหรับ tab_flags |
-| `getTf(prefix)` | อ่านค่า tab_flags จาก chip ใน DOM |
-| `toggleGrpCard(id)` | ขยาย/ยุบ card สายในหน้าสรุปกลุ่ม |
-| `OM/CM` | เปิด/ปิด modal |
-| `toast(msg)` | แสดง notification ชั่วคราว |
+| `openCount()` | เริ่มรอบนับเงิน หรือ addSubCount() |
+| `addSubCount()` | เพิ่ม sub ครั้งใหม่ |
+| `editSubCount(idx)` | แก้ไข sub ครั้งที่ idx (เฉพาะ session ที่ยังเปิด) |
+| `saveEditSub(idx)` | บันทึกการแก้ไข sub |
+| `summarize()` | สรุปรอบ → entry + auto-collect |
+| `cancelSess()` | ยกเลิก session |
+| `openExchange/saveExchange` | modal แลกเงิน |
+| `refreshExchangeCB(fromShop)` | อัปเดต cap เมื่อเปลี่ยนปลายทาง |
+| `openPayOwner/openPayOwnerGroup/savePayOwner` | จ่ายเฮียรวย |
+| `billInp/billInpWithLimit/updB/updBLimit/gb` | bill input helpers |
+| `addShop/saveShop/editShop/saveEditShop/deleteShop` | จัดการสาย (admin) |
+| `addGroup/saveGroup/editGroup/saveEditGroup/deleteGroup` | จัดการกลุ่ม (admin) |
+| `tfChips/getTf/toggleTf` | tab_flags chip UI |
+| `toggleGrpCard(id)` | ขยาย/ยุบ card ใน group view |
+| `OM/CM/toast` | modal open/close, notification |
 
 ## Security
 
 | Layer | สถานะ | รายละเอียด |
 |---|---|---|
-| PIN hashing | ✅ Done | SHA-256 — source มีแค่ WORKER_URL ไม่มี hash ไม่มี PIN |
-| Cloudflare Worker proxy | ✅ Done | `worker.js` — secrets อยู่ใน Cloudflare env, ไม่มีใน source เลย |
-| Supabase RLS | 🔲 TODO | ต้องทำหลัง Worker (ต้องมี auth token จริง) |
+| PIN hashing | ✅ Done | hash อยู่ใน Worker env เท่านั้น ไม่มีใน source |
+| Cloudflare Worker proxy | ✅ Done | ไม่มี Supabase key ใน source; JWT token 30 วัน |
+| Supabase RLS | 🔲 TODO | ยังใช้ anon key (ผ่าน Worker); RLS จริงต้องการ auth token |
 
-### Worker Details
+### Worker (`worker.js`)
 - URL: `https://ladda-api.hades-six.workers.dev`
-- Endpoints: `POST /auth` (ตรวจ PIN hash → ออก JWT), `GET|POST|DELETE /api/:table` (proxy → Supabase)
-- Secrets (ตั้งผ่าน `wrangler secret put`): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `HASH_USER`, `HASH_ADMIN`, `JWT_SECRET`
-- Token อายุ 30 วัน, เก็บใน `localStorage.ladda_token`
-- ถ้า Worker คืน 401 → `logout()` อัตโนมัติ
-
-### Deploy Commands
-```bash
-# Deploy Worker (เมื่อแก้ worker.js)
-wrangler deploy
-
-# Deploy Pages (เมื่อแก้ index.html)
-git add index.html && git commit -m "msg" && git push
-wrangler pages deploy . --project-name=ladda --commit-dirty=true
-```
+- `POST /auth` → ตรวจ hash → ออก JWT (role: admin/user/viewer)
+- `GET|POST|DELETE /api/:table` → validate JWT → proxy ไป Supabase
+- Secrets: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `HASH_USER`, `HASH_ADMIN`, `HASH_VIEWER`, `JWT_SECRET`
+- 401 จาก Worker → `logout()` อัตโนมัติ
 
 ## Roadmap
 
-- [x] SHA-256 PIN hashing
-- [x] Cloudflare Worker API proxy (ไม่มี key ใดๆ ใน source)
+- [x] SHA-256 PIN hashing + Cloudflare Worker proxy
+- [x] Viewer role + Overview page
 - [ ] Supabase RLS per authenticated user
-- [ ] PWA — manifest + service worker (iOS/Android Add to Home Screen)
+- [ ] PWA — manifest + service worker
 - [ ] Export รายงาน (PDF / Excel)
 - [ ] Cross-system integration กับระบบน้ำแข็ง
