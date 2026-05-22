@@ -200,24 +200,18 @@ main{display:flex;flex:1;overflow:hidden;}
 .ov-vis-off{background:var(--bg);border-color:var(--border);color:var(--text3);}
 @media(max-width:600px){.ov-total-row{grid-template-columns:repeat(2,1fr);}.ov-hdr{padding:10px 12px;}}
 /* LOGIN */
-#login-screen{position:fixed;inset:0;background:var(--bg);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;}
-.login-box{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;width:100%;max-width:360px;padding:32px 28px;}
-.login-logo{font-size:28px;font-weight:700;color:var(--green);text-align:center;margin-bottom:4px;}
-.login-sub{font-size:13px;color:var(--text3);text-align:center;margin-bottom:28px;}
-.login-pin{display:flex;gap:10px;justify-content:center;margin:16px 0;}
-.pin-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--border2);background:transparent;transition:.15s;}
-.pin-dot.filled{background:var(--green);border-color:var(--green);}
-.numpad{display:none;}
-.np-btn{display:none;}
-.pin-inp{width:100%;padding:12px 16px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);font-size:18px;font-family:var(--mono);letter-spacing:3px;text-align:center;margin:12px 0 8px;outline:none;box-sizing:border-box;}
-.pin-inp:focus{border-color:var(--green);box-shadow:0 0 0 2px var(--gdim);}
-.pin-submit{width:100%;padding:13px;border-radius:8px;border:none;background:var(--green);color:#000;font-size:15px;font-weight:700;cursor:pointer;letter-spacing:.5px;}
-.pin-submit:hover{opacity:.88;}
-.np-btn:active{transform:scale(.94);}
-.np-btn.del{font-size:15px;color:var(--text2);}
-.np-btn.zero{grid-column:2;}
-.login-err{text-align:center;font-size:13px;color:var(--red);min-height:20px;margin-top:10px;}
-.login-role-label{text-align:center;font-size:12px;color:var(--text3);margin-bottom:16px;}
+#login-screen{position:fixed;inset:0;background:url('login-bg.jpg') center 20%/cover no-repeat;z-index:2000;display:flex;align-items:flex-end;justify-content:center;padding:0 16px 36px;}
+.login-box{width:100%;max-width:390px;background:rgba(90,45,5,0.52);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,205,60,0.45);border-radius:22px;padding:22px 22px 26px;box-shadow:0 8px 40px rgba(0,0,0,0.55),inset 0 1px 0 rgba(255,230,100,0.25);}
+.pin-wrap{display:flex;align-items:center;gap:10px;background:rgba(0,0,0,0.42);border:1px solid rgba(255,200,60,0.35);border-radius:50px;padding:2px 18px;margin-bottom:14px;}
+.pin-wrap-icon{font-size:18px;line-height:1;flex-shrink:0;}
+.pin-inp{flex:1;background:transparent;border:none;color:#fff;font-size:20px;font-family:var(--mono);letter-spacing:4px;padding:12px 0;outline:none;}
+.pin-inp::placeholder{color:rgba(255,255,255,0.35);letter-spacing:2px;font-size:16px;}
+.pin-submit{width:100%;padding:14px;border-radius:50px;border:none;background:linear-gradient(135deg,#ffe55a 0%,#f5a520 55%,#c97800 100%);color:#3d1a00;font-size:16px;font-weight:800;cursor:pointer;letter-spacing:2px;box-shadow:0 4px 20px rgba(200,120,0,0.5),inset 0 1px 0 rgba(255,255,180,0.4);transition:opacity .15s,transform .1s;}
+.pin-submit:hover{opacity:.9;transform:translateY(-1px);}
+.pin-submit:active{transform:translateY(0);}
+.pin-submit:disabled{opacity:.6;cursor:default;transform:none;}
+.login-err{text-align:center;font-size:13px;color:#ffcc44;min-height:18px;margin-top:12px;}
+.login-role-label{text-align:center;font-size:13px;color:rgba(255,220,130,0.85);margin-bottom:14px;}
 /* role badge in header */
 .role-badge{font-size:11px;padding:3px 8px;border-radius:5px;border:1px solid;cursor:pointer;}
 .role-admin{background:var(--adim);border-color:var(--abr);color:var(--amber);}
@@ -291,12 +285,13 @@ main{display:flex;flex:1;overflow:hidden;}
 <!-- LOGIN SCREEN -->
 <div id="login-screen">
   <div class="login-box">
-    <div class="login-logo">💰 น้องลัดดา</div>
-    <div class="login-sub">ระบบนับเงิน Multi-Route</div>
     <div class="login-role-label" id="login-role-label">กรอก PIN เพื่อเข้าสู่ระบบ</div>
-    <input type="password" class="pin-inp" id="pin-inp" placeholder="••••••••••" autocomplete="off" onkeydown="if(event.key==='Enter')pinCheck()">
-    <button class="pin-submit" onclick="pinCheck()">เข้าสู่ระบบ</button>
-    <div class="login-err" id="login-err" style="margin-top:10px;"></div>
+    <div class="pin-wrap">
+      <span class="pin-wrap-icon">🔒</span>
+      <input type="password" class="pin-inp" id="pin-inp" placeholder="••••••••••" autocomplete="off" onkeydown="if(event.key==='Enter')pinCheck()">
+    </div>
+    <button class="pin-submit" onclick="pinCheck()">🐉 LOG IN</button>
+    <div class="login-err" id="login-err"></div>
   </div>
 </div>
 
@@ -365,7 +360,7 @@ async function pinCheck(){
   }catch(err){
     document.getElementById('login-err').textContent='เชื่อมต่อไม่ได้ ลองใหม่';
   }finally{
-    if(btn){btn.disabled=false;btn.textContent='เข้าสู่ระบบ';}
+    if(btn){btn.disabled=false;btn.textContent='🐉 LOG IN';}
   }
 }
 function showApp(){
