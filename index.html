@@ -277,14 +277,15 @@ main{display:flex;flex:1;overflow:hidden;}
 
 <script>
 // ─── AUTH ───
-const HASH_USER='bb57944abbc9de55d47630b644a5743aad2709a8e82a0c144ef0b0624e19b4b1';
-const HASH_ADMIN='6874ea31dbe09619d77644323ba64c379d4c58f3b10e615c3958e6be1021fd01';
+// No PIN hashes or Supabase keys here — all secrets live in the Cloudflare Worker
+const WORKER_URL='https://ladda-api.hades-six.workers.dev';
 async function sha256(str){const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');}
 let AUTH={role:null}; // role: 'user' | 'admin'
 
 function authInit(){
   const saved=localStorage.getItem('ladda_role');
-  if(saved==='user'||saved==='admin'){
+  const token=localStorage.getItem('ladda_token');
+  if((saved==='user'||saved==='admin')&&token){
     AUTH.role=saved;
     showApp();
   }
@@ -294,14 +295,25 @@ function authInit(){
 async function pinCheck(){
   const v=(document.getElementById('pin-inp')?.value||'').trim();
   if(!v){document.getElementById('login-err').textContent='กรุณากรอก PIN';return;}
-  const h=await sha256(v);
-  if(h===HASH_ADMIN){
-    AUTH.role='admin';localStorage.setItem('ladda_role','admin');showApp();
-  } else if(h===HASH_USER){
-    AUTH.role='user';localStorage.setItem('ladda_role','user');showApp();
-  } else {
-    document.getElementById('login-err').textContent='PIN ไม่ถูกต้อง ลองใหม่อีกครั้ง';
-    const inp=document.getElementById('pin-inp');if(inp){inp.value='';inp.focus();}
+  const btn=document.querySelector('.pin-submit');
+  if(btn){btn.disabled=true;btn.textContent='กำลังตรวจสอบ…';}
+  try{
+    const h=await sha256(v);
+    const r=await fetch(`${WORKER_URL}/auth`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({hash:h})});
+    if(r.ok){
+      const{token,role}=await r.json();
+      AUTH.role=role;
+      localStorage.setItem('ladda_role',role);
+      localStorage.setItem('ladda_token',token);
+      showApp();
+    } else {
+      document.getElementById('login-err').textContent='PIN ไม่ถูกต้อง ลองใหม่อีกครั้ง';
+      const inp=document.getElementById('pin-inp');if(inp){inp.value='';inp.focus();}
+    }
+  }catch(err){
+    document.getElementById('login-err').textContent='เชื่อมต่อไม่ได้ ลองใหม่';
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='เข้าสู่ระบบ';}
   }
 }
 function showApp(){
@@ -318,9 +330,11 @@ function showApp(){
 function logout(){
   if(!confirm('ออกจากระบบ?'))return;
   localStorage.removeItem('ladda_role');
-  AUTH.role=null;_pin='';updatePinDots();
+  localStorage.removeItem('ladda_token');
+  AUTH.role=null;
   document.getElementById('login-err').textContent='';
   document.getElementById('login-screen').style.display='flex';
+  const inp=document.getElementById('pin-inp');if(inp){inp.value='';inp.focus();}
 }
 function isAdmin(){return AUTH.role==='admin';}
 
@@ -339,22 +353,25 @@ const fN=n=>(Math.round(n)).toLocaleString('th-TH');
 const uid=()=>'e'+Date.now()+Math.floor(Math.random()*999);
 const today=()=>new Date().toISOString().split('T')[0];
 
-// ─── Supabase config ───
-const SB_URL='https://lsxnbdhyfsuqhopzuwls.supabase.co';
-const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxzeG5iZGh5ZnN1cWhvcHp1d2xzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxOTEyMjQsImV4cCI6MjA5NDc2NzIyNH0.yQUghPf7xNmPclMYNg1fX2c2ST9CTYsXl3-VjLRM2tA';
-const sbH={'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY};
-
+// ─── Worker API helpers (no Supabase keys in source) ───
+function _wToken(){return localStorage.getItem('ladda_token')||'';}
+async function _wFetch(path,opts={}){
+  const headers={'Content-Type':'application/json','Authorization':'Bearer '+_wToken(),...(opts.headers||{})};
+  const r=await fetch(`${WORKER_URL}/api/${path}`,{...opts,headers});
+  if(r.status===401){logout();throw new Error('session หมดอายุ กรุณา login ใหม่');}
+  return r;
+}
 async function sbGet(table,params=''){
-  const r=await fetch(`${SB_URL}/rest/v1/${table}?${params}`,{headers:sbH});
+  const r=await _wFetch(`${table}?${params}`);
   if(!r.ok)throw new Error(`sbGet ${table}: ${r.status}`);
   return r.json();
 }
 async function sbUpsert(table,data,opts=''){
-  const r=await fetch(`${SB_URL}/rest/v1/${table}?${opts}`,{method:'POST',headers:{...sbH,'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(data)});
+  const r=await _wFetch(`${table}?${opts}`,{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(data)});
   if(!r.ok){const t=await r.text();throw new Error(`sbUpsert ${table}: ${r.status} ${t}`);}
 }
 async function sbDelete(table,params){
-  const r=await fetch(`${SB_URL}/rest/v1/${table}?${params}`,{method:'DELETE',headers:sbH});
+  const r=await _wFetch(`${table}?${params}`,{method:'DELETE'});
   if(!r.ok)throw new Error(`sbDelete ${table}: ${r.status}`);
 }
 
