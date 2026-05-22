@@ -367,12 +367,14 @@ async function pinCheck(){
 function showApp(){
   document.getElementById('login-screen').style.display='none';
   if(AUTH.role==='viewer'){
+    document.getElementById('app').style.display='none'; // viewer ห้ามเข้า main app
     const badge=document.getElementById('ov-badge');
     if(badge){badge.textContent='👁️ ผู้เข้าชม';badge.className='role-badge role-viewer';}
     document.getElementById('overview-screen').style.display='flex';
     loadAll().then(()=>renderOverview());
     return;
   }
+  document.getElementById('app').style.display='flex'; // admin/user เท่านั้น
   const btn=document.getElementById('role-btn');
   if(AUTH.role==='admin'){
     btn.textContent='👑 ผู้ดูแล';btn.className='role-badge role-admin';
@@ -390,6 +392,7 @@ function logout(){
   AUTH.role=null;
   document.getElementById('login-err').textContent='';
   document.getElementById('overview-screen').style.display='none';
+  document.getElementById('app').style.display='none'; // reset — login screen จะ cover อยู่แล้ว
   const ovbtn=document.getElementById('ov-nav-btn');if(ovbtn)ovbtn.style.display='none';
   document.getElementById('login-screen').style.display='flex';
   const inp=document.getElementById('pin-inp');if(inp){inp.value='';inp.focus();}
@@ -1037,6 +1040,7 @@ function showOverview(){
   renderOverview();
 }
 function backToMain(){
+  if(!isAdmin())return; // viewer ห้ามกลับ main app
   document.getElementById('overview-screen').style.display='none';
 }
 function ovPrevMonth(){
