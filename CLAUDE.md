@@ -172,6 +172,7 @@ RLS is disabled; anon key has full CRUD on all tables (accessed only via Worker)
 - `viewer_visible` เก็บใน `tab_flags` jsonb ของทั้ง routes และ groups
 - admin เข้า overview ได้จากปุ่ม "📊 ภาพรวม" ที่ header; มีปุ่ม "← หน้าหลัก" กลับ
 - **Navigation**: tab ปี (BE) → tab เดือน (`#ov-tabs-bar`); เดือนที่ > `cpk()` จะไม่แสดง; `S.ovYear` เก็บปีที่เลือกใน overview
+- **Chart** (`#ov-chart-canvas`): กราฟเส้นยอดสุทธิรายเดือน (1–12) ใช้ Chart.js 4.4 (CDN); ปุ่มเลือกได้เฉพาะกลุ่ม + สายไม่มีกลุ่ม; เลือกกลุ่มเดียว → แตกรายสายในกลุ่ม (สีตาม route.color); มีชื่อสายกำกับท้ายเส้น (`_endLabelPlugin`); กลุ่มใช้สีจาก `_GPC[]` palette
 
 ## Key Patterns
 
@@ -215,6 +216,8 @@ RLS is disabled; anon key has full CRUD on all tables (accessed only via Worker)
 | `setOvYear(y)` | เลือกปีใน overview → renderOvTabs + renderOverview |
 | `setOvMonth(mk)` | เลือกเดือนใน overview → renderOvTabs + renderOverview |
 | `fmtMk(k)` | format month key เป็น "เดือนนี้" หรือ "[N] ชื่อเดือน"; ใช้ทั้ง main page และ overview |
+| `renderOvChart()` | render/update Chart.js line chart; items = กลุ่ม + standalone; เลือกกลุ่มเดียว → drilldown รายสาย |
+| `toggleOvShop(id)` | toggle กลุ่ม/สายใน `_ovShopVis` Set → renderOvChart() |
 | `_ovCalc(ids)` | helper คำนวณยอดรวมจาก shop id หลายสาย |
 | `groupTot(gid)` | ยอดรวมของกลุ่ม |
 | `groupedRouteIds()` | Set ของ routeId ที่อยู่ในกลุ่ม |
