@@ -233,14 +233,31 @@ RLS is disabled; anon key has full CRUD on all tables.
 
 | Layer | สถานะ | รายละเอียด |
 |---|---|---|
-| PIN hashing | ✅ Done | SHA-256 — source มีแค่ hash ไม่มี PIN จริง |
-| Cloudflare Worker proxy | 🔲 TODO | ซ่อน Supabase key ออกจาก source; validate session token ก่อน forward |
+| PIN hashing | ✅ Done | SHA-256 — source มีแค่ WORKER_URL ไม่มี hash ไม่มี PIN |
+| Cloudflare Worker proxy | ✅ Done | `worker.js` — secrets อยู่ใน Cloudflare env, ไม่มีใน source เลย |
 | Supabase RLS | 🔲 TODO | ต้องทำหลัง Worker (ต้องมี auth token จริง) |
+
+### Worker Details
+- URL: `https://ladda-api.hades-six.workers.dev`
+- Endpoints: `POST /auth` (ตรวจ PIN hash → ออก JWT), `GET|POST|DELETE /api/:table` (proxy → Supabase)
+- Secrets (ตั้งผ่าน `wrangler secret put`): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `HASH_USER`, `HASH_ADMIN`, `JWT_SECRET`
+- Token อายุ 30 วัน, เก็บใน `localStorage.ladda_token`
+- ถ้า Worker คืน 401 → `logout()` อัตโนมัติ
+
+### Deploy Commands
+```bash
+# Deploy Worker (เมื่อแก้ worker.js)
+wrangler deploy
+
+# Deploy Pages (เมื่อแก้ index.html)
+git add index.html && git commit -m "msg" && git push
+wrangler pages deploy . --project-name=ladda --commit-dirty=true
+```
 
 ## Roadmap
 
-- [x] SHA-256 PIN hashing (ไม่มี plaintext PIN ใน source)
-- [ ] Cloudflare Worker เป็น API proxy (ซ่อน Supabase key)
+- [x] SHA-256 PIN hashing
+- [x] Cloudflare Worker API proxy (ไม่มี key ใดๆ ใน source)
 - [ ] Supabase RLS per authenticated user
 - [ ] PWA — manifest + service worker (iOS/Android Add to Home Screen)
 - [ ] Export รายงาน (PDF / Excel)
