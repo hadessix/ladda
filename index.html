@@ -174,7 +174,7 @@ main{display:flex;flex:1;overflow:hidden;}
 .ov-logo{font-size:16px;font-weight:700;color:var(--green);}
 .ov-mnav{display:flex;align-items:center;gap:8px;}
 .ov-mnav button{background:var(--bg3);border:1px solid var(--border2);color:var(--text);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;}
-.ov-mnav span{font-size:13px;font-weight:600;min-width:85px;text-align:center;}
+.ov-mnav span{font-size:13px;font-weight:600;min-width:130px;text-align:center;}
 .ov-acts{display:flex;align-items:center;gap:8px;}
 .ov-xbtn{font-size:12px;padding:4px 10px;background:var(--bg3);border:1px solid var(--border2);color:var(--text2);border-radius:6px;cursor:pointer;}
 .ov-body{padding:16px;max-width:960px;margin:0 auto;width:100%;box-sizing:border-box;}
@@ -271,17 +271,13 @@ main{display:flex;flex:1;overflow:hidden;}
 <div id="overview-screen">
   <div class="ov-hdr">
     <div class="ov-logo">📊 ภาพรวมทุกสาย</div>
-    <div class="ov-mnav">
-      <button onclick="ovPrevMonth()">‹</button>
-      <span id="ov-month-lbl"></span>
-      <button onclick="ovNextMonth()">›</button>
-    </div>
     <div class="ov-acts">
       <span id="ov-badge" class="role-badge role-viewer"></span>
       <button id="ov-back-btn" onclick="backToMain()" class="ov-xbtn" style="display:none;">← หน้าหลัก</button>
       <button onclick="logout()" class="ov-xbtn">ออกจากระบบ</button>
     </div>
   </div>
+  <div class="tabs-bar" id="ov-tabs-bar"></div>
   <div class="ov-body" id="ov-body"></div>
 </div>
 <!-- LOGIN SCREEN -->
@@ -409,6 +405,7 @@ const mkKey=(y,m)=>`${y}-${String(m).padStart(2,'0')}`;
 const monthLbl=k=>{const[y,m]=k.split('-').map(Number);return['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][m-1]+' '+(y+543);};
 const periodLbl=k=>{const[y,m]=k.split('-').map(Number);const nm=m===12?1:m+1,ny=m===12?y+1:y;return`11 ${monthLbl(k)} – 10 ${monthLbl(mkKey(ny,nm))}`;};
 function cpk(){const n=new Date(),d=n.getDate(),m=n.getMonth()+1,y=n.getFullYear();return d>=11?mkKey(y,m):(m===1?mkKey(y-1,12):mkKey(y,m-1));}
+const fmtMk=k=>{if(k===cpk())return'เดือนนี้';const[,m]=k.split('-').map(Number);return`[${m}] ${['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][m-1]}`;}
 const fmt=n=>'฿'+(Math.round(n)).toLocaleString('th-TH');
 const fN=n=>(Math.round(n)).toLocaleString('th-TH');
 const uid=()=>'e'+Date.now()+Math.floor(Math.random()*999);
@@ -640,8 +637,7 @@ function renderTabs(){
   html+=`<div style="display:flex;gap:4px;flex-wrap:wrap;">`;
   monthsInYear.forEach(mk=>{
     const[,m]=mk.split('-');
-    const mname=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][Number(m)-1];
-    html+=`<button class="tab-btn${mk===S.month?' active':''}" onclick="setMonth('${mk}')">${mname}</button>`;
+    html+=`<button class="tab-btn${mk===S.month?' active':''}" onclick="setMonth('${mk}')">${fmtMk(mk)}</button>`;
   });
   html+=`</div>`;
 
@@ -681,7 +677,7 @@ function renderShopContent(){
   if(sess)sess.subs.forEach(s=>BT.forEach(t=>cb[t]+=(s.bills[t]||0)));
   const hasBills=BT.some(t=>cb[t]!==0);
   let h=`<div class="mhdr">
-    <div><div class="mtitle">${shop.name} — ${monthLbl(S.month)}</div><div class="mperiod">${periodLbl(S.month)}</div></div>
+    <div><div class="mtitle">${shop.name} — ${fmtMk(S.month)}</div><div class="mperiod">${periodLbl(S.month)}</div></div>
     <div class="abtns">
       ${tf.count?`<button class="btn btn-g" onclick="openCount()">+ นับเงิน</button>`:''}
       ${tf.income?`<button class="btn btn-b" onclick="openIncome()">+ รายรับ</button>`:''}
@@ -752,7 +748,7 @@ function renderGroupContent(){
   const hasGBills=BT.some(t=>gcb[t]!==0);
 
   let h=`<div class="mhdr">
-    <div><div class="mtitle">📁 ${grp.name} — ${monthLbl(S.month)}</div><div class="mperiod">${periodLbl(S.month)} · ${members.length} สาย</div></div>
+    <div><div class="mtitle">📁 ${grp.name} — ${fmtMk(S.month)}</div><div class="mperiod">${periodLbl(S.month)} · ${members.length} สาย</div></div>
     <div class="abtns">
       ${tf.count?`<button class="btn btn-g" onclick="openCountGroup()">+ นับเงิน</button>`:''}
       ${tf.income?`<button class="btn btn-b" onclick="openIncomeGroup()">+ รายรับ</button>`:''}
@@ -1036,23 +1032,35 @@ function showOverview(){
   const badge=document.getElementById('ov-badge');
   if(badge){badge.textContent='👑 ผู้ดูแล';badge.className='role-badge role-admin';}
   const backBtn=document.getElementById('ov-back-btn');if(backBtn)backBtn.style.display='inline-block';
+  S.ovYear=S.month.split('-')[0];
   document.getElementById('overview-screen').style.display='flex';
+  renderOvTabs();
   renderOverview();
 }
 function backToMain(){
-  if(!isAdmin())return; // viewer ห้ามกลับ main app
+  if(!isAdmin())return;
   document.getElementById('overview-screen').style.display='none';
 }
-function ovPrevMonth(){
-  const[y,m]=S.month.split('-').map(Number);
-  S.month=m===1?`${y-1}-12`:`${y}-${String(m-1).padStart(2,'0')}`;
-  renderOverview();
+function renderOvTabs(){
+  const cp=cpk();
+  const mkSet=new Set([cp]);
+  Object.values(S.entries).forEach(byMonth=>{Object.keys(byMonth).forEach(mk=>{if(mk<=cp&&(byMonth[mk]||[]).length>0)mkSet.add(mk);});});
+  Object.values(S.sessions).forEach(byMonth=>{Object.keys(byMonth).forEach(mk=>{if(mk<=cp&&byMonth[mk])mkSet.add(mk);});});
+  const byYear={};
+  mkSet.forEach(mk=>{const y=mk.split('-')[0];if(!byYear[y])byYear[y]=[];byYear[y].push(mk);});
+  const years=Object.keys(byYear).sort();
+  if(!S.ovYear||!byYear[S.ovYear])S.ovYear=cp.split('-')[0];
+  const monthsInYear=(byYear[S.ovYear]||[]).slice().sort();
+  if(S.month.split('-')[0]!==S.ovYear||S.month>cp)S.month=monthsInYear[monthsInYear.length-1]||cp;
+  let html=`<div style="display:flex;gap:4px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid var(--border);">`;
+  years.forEach(y=>{html+=`<button class="tab-btn${y===S.ovYear?' active':''}" onclick="setOvYear('${y}')">${Number(y)+543}</button>`;});
+  html+=`</div><div style="display:flex;gap:4px;flex-wrap:wrap;">`;
+  monthsInYear.forEach(mk=>{html+=`<button class="tab-btn${mk===S.month?' active':''}" onclick="setOvMonth('${mk}')">${fmtMk(mk)}</button>`;});
+  html+=`</div>`;
+  document.getElementById('ov-tabs-bar').innerHTML=html;
 }
-function ovNextMonth(){
-  const[y,m]=S.month.split('-').map(Number);
-  S.month=m===12?`${y+1}-01`:`${y}-${String(m+1).padStart(2,'0')}`;
-  renderOverview();
-}
+function setOvYear(y){S.ovYear=y;renderOvTabs();renderOverview();}
+function setOvMonth(mk){S.month=mk;renderOvTabs();renderOverview();}
 function _ovCalc(ids){
   // คำนวณยอดของ shop หลายสาย รวมกัน
   let tc=0,ti=0,te=0,tei=0,teo=0;
@@ -1085,7 +1093,6 @@ function _ovCard(type,id,name,color,vis,stats){
   </div>`;
 }
 function renderOverview(){
-  document.getElementById('ov-month-lbl').textContent=monthLbl(S.month);
   const gids=groupedRouteIds();
   const standalones=S.shops.filter(s=>!gids.has(s.id));
   // items ที่จะแสดง: กลุ่มทั้งหมด + standalone shops
