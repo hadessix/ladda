@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="น้องลัดดา">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 :root{
@@ -279,6 +280,13 @@ main{display:flex;flex:1;overflow:hidden;}
   </div>
   <div class="tabs-bar" id="ov-tabs-bar"></div>
   <div class="ov-body" id="ov-body"></div>
+  <div style="max-width:960px;margin:0 auto;width:100%;box-sizing:border-box;padding:0 16px 28px;">
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;">
+      <div style="font-weight:600;font-size:14px;color:var(--text);margin-bottom:10px;">📈 ยอดสุทธิรายเดือน</div>
+      <div id="ov-chart-btns" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;"></div>
+      <div style="position:relative;height:260px;"><canvas id="ov-chart-canvas"></canvas></div>
+    </div>
+  </div>
 </div>
 <!-- LOGIN SCREEN -->
 <div id="login-screen">
@@ -1139,6 +1147,7 @@ function renderOverview(){
     </div>`;
   }
   document.getElementById('ov-body').innerHTML=h;
+  renderOvChart();
 }
 async function toggleOvVisible(type,id){
   if(!isAdmin())return;
@@ -1735,6 +1744,87 @@ function pickShopAndDo(sid,fn){
   window._returnToGroup=gid;
 }
 
+let _ovChart=null,_ovShopVis=null;
+const _GPC=['#3b82f6','#8b5cf6','#06b6d4','#f59e0b','#10b981','#f97316','#ec4899','#ef4444','#14b8a6','#6366f1'];
+const _endLabelPlugin={id:'endLabel',afterDatasetsDraw(chart){
+  chart.data.datasets.forEach((ds,i)=>{
+    if(ds.hidden)return;
+    const meta=chart.getDatasetMeta(i);
+    let lastPt=null;
+    for(let j=meta.data.length-1;j>=0;j--){if(ds.data[j]!==null&&ds.data[j]!==undefined){lastPt=meta.data[j];break;}}
+    if(!lastPt)return;
+    const ctx=chart.ctx;
+    ctx.save();ctx.fillStyle=ds.borderColor;ctx.font='bold 11px Sarabun,sans-serif';ctx.textAlign='left';
+    ctx.fillText(ds.label,lastPt.x+7,lastPt.y+4);ctx.restore();
+  });
+}};
+function renderOvChart(){
+  if(typeof Chart==='undefined')return;
+  const year=S.ovYear||cpk().split('-')[0];
+  const cp=cpk();
+  const MN=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  const gids=groupedRouteIds();
+  const visGroups=isAdmin()?S.groups:S.groups.filter(g=>g.tab_flags?.viewer_visible);
+  const standalones=S.shops.filter(s=>!gids.has(s.id)&&(isAdmin()||s.tab_flags?.viewer_visible));
+  // รายการที่เลือกได้: กลุ่ม + สายไม่มีกลุ่ม
+  const items=[
+    ...visGroups.map((g,i)=>{const icon=g.is_owner?'⭐':g.tab_flags?.auto_collect?'⚡':'📁';return{id:'g:'+g.id,name:icon+' '+g.name,color:_GPC[i%_GPC.length],gid:g.id};}),
+    ...standalones.map(s=>({id:'s:'+s.id,name:s.name,color:s.color,sid:s.id}))
+  ];
+  if(!_ovShopVis)_ovShopVis=new Set(items.map(it=>it.id));
+  // ปุ่ม toggle
+  document.getElementById('ov-chart-btns').innerHTML=items.map(it=>{
+    const on=_ovShopVis.has(it.id);
+    return`<button onclick="toggleOvShop('${it.id}')" style="border:2px solid ${it.color};background:${on?it.color:'transparent'};color:${on?'#111':it.color};padding:3px 12px;border-radius:20px;font-size:12px;cursor:pointer;white-space:nowrap;font-family:var(--font);transition:all .15s;">${it.name}</button>`;
+  }).join('');
+  // helper คำนวณ net ต่อเดือน
+  const netLine=ids=>Array.from({length:12},(_,i)=>{
+    const mk=`${year}-${String(i+1).padStart(2,'0')}`;
+    if(mk>cp)return null;
+    let tc=0,ti=0,te=0,tei=0,teo=0;
+    ids.forEach(sid=>{(S.entries[sid]||{})[mk]?.forEach(e=>{
+      if(e.type==='count')tc+=e.total||0;
+      else if(e.type==='income')ti+=e.amount||0;
+      else if(e.type==='expense')te+=e.amount||0;
+      else if(e.type==='exin')tei+=e.amount||0;
+      else if(e.type==='exout')teo+=e.amount||0;
+    });});
+    return tc+ti-te+tei-teo;
+  });
+  const mkDs=(label,color,data)=>({label,data,borderColor:color,backgroundColor:color+'22',tension:0.35,pointRadius:4,pointHoverRadius:6,spanGaps:false,borderWidth:2});
+  // ตรวจว่าเลือกกลุ่มเดียว → แยกรายสายในกลุ่ม
+  const sel=items.filter(it=>_ovShopVis.has(it.id));
+  let datasets;
+  if(sel.length===1&&sel[0].gid){
+    const memberIds=S.groupMembers[sel[0].gid]||[];
+    datasets=memberIds.map((rid,i)=>{
+      const shop=S.shops.find(s=>s.id===rid);
+      return shop?mkDs(shop.name,shop.color||_GPC[i%_GPC.length],netLine([rid])):null;
+    }).filter(Boolean);
+  }else{
+    datasets=sel.map(it=>mkDs(it.name,it.color,netLine(it.gid?(S.groupMembers[it.gid]||[]):[it.sid])));
+  }
+  const canvas=document.getElementById('ov-chart-canvas');
+  if(!canvas)return;
+  if(_ovChart){_ovChart.data.datasets=datasets;_ovChart.update();}
+  else{
+    Chart.defaults.color='#888';
+    _ovChart=new Chart(canvas.getContext('2d'),{
+      type:'line',data:{labels:MN,datasets},
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        interaction:{mode:'index',intersect:false},
+        layout:{padding:{right:90,top:6}},
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${fmt(c.parsed.y)}`}}},
+        scales:{
+          x:{grid:{color:'#2a2a2a'},ticks:{color:'#888',font:{family:'Sarabun'}}},
+          y:{grid:{color:'#2a2a2a'},ticks:{color:'#888',callback:v=>v>=1e6?(v/1e6).toFixed(1)+'M':v>=1e3?(v/1e3).toFixed(0)+'k':String(v)}}
+        }
+      },plugins:[_endLabelPlugin]
+    });
+  }
+}
+function toggleOvShop(id){if(_ovShopVis.has(id))_ovShopVis.delete(id);else _ovShopVis.add(id);renderOvChart();}
 function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2800);}
 
 authInit();
