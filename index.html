@@ -176,9 +176,12 @@ main{display:flex;flex:1;overflow:hidden;}
 .login-pin{display:flex;gap:10px;justify-content:center;margin:16px 0;}
 .pin-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--border2);background:transparent;transition:.15s;}
 .pin-dot.filled{background:var(--green);border-color:var(--green);}
-.numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px;}
-.np-btn{padding:16px;border-radius:10px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:18px;font-weight:500;cursor:pointer;font-family:var(--mono);transition:.1s;}
-.np-btn:hover{background:var(--border);border-color:var(--border2);}
+.numpad{display:none;}
+.np-btn{display:none;}
+.pin-inp{width:100%;padding:12px 16px;border-radius:8px;border:1px solid var(--border2);background:var(--bg3);color:var(--text);font-size:18px;font-family:var(--mono);letter-spacing:3px;text-align:center;margin:12px 0 8px;outline:none;box-sizing:border-box;}
+.pin-inp:focus{border-color:var(--green);box-shadow:0 0 0 2px var(--gdim);}
+.pin-submit{width:100%;padding:13px;border-radius:8px;border:none;background:var(--green);color:#000;font-size:15px;font-weight:700;cursor:pointer;letter-spacing:.5px;}
+.pin-submit:hover{opacity:.88;}
 .np-btn:active{transform:scale(.94);}
 .np-btn.del{font-size:15px;color:var(--text2);}
 .np-btn.zero{grid-column:2;}
@@ -240,26 +243,9 @@ main{display:flex;flex:1;overflow:hidden;}
     <div class="login-logo">💰 น้องลัดดา</div>
     <div class="login-sub">ระบบนับเงิน Multi-Route</div>
     <div class="login-role-label" id="login-role-label">กรอก PIN เพื่อเข้าสู่ระบบ</div>
-    <div class="login-pin" id="login-pin">
-      <div class="pin-dot" id="pd0"></div>
-      <div class="pin-dot" id="pd1"></div>
-      <div class="pin-dot" id="pd2"></div>
-      <div class="pin-dot" id="pd3"></div>
-    </div>
-    <div class="numpad">
-      <button class="np-btn" onclick="pinPress('1')">1</button>
-      <button class="np-btn" onclick="pinPress('2')">2</button>
-      <button class="np-btn" onclick="pinPress('3')">3</button>
-      <button class="np-btn" onclick="pinPress('4')">4</button>
-      <button class="np-btn" onclick="pinPress('5')">5</button>
-      <button class="np-btn" onclick="pinPress('6')">6</button>
-      <button class="np-btn" onclick="pinPress('7')">7</button>
-      <button class="np-btn" onclick="pinPress('8')">8</button>
-      <button class="np-btn" onclick="pinPress('9')">9</button>
-      <button class="np-btn zero" onclick="pinPress('0')">0</button>
-      <button class="np-btn del" onclick="pinDel()">⌫</button>
-    </div>
-    <div class="login-err" id="login-err"></div>
+    <input type="password" class="pin-inp" id="pin-inp" placeholder="••••••••••" autocomplete="off" onkeydown="if(event.key==='Enter')pinCheck()">
+    <button class="pin-submit" onclick="pinCheck()">เข้าสู่ระบบ</button>
+    <div class="login-err" id="login-err" style="margin-top:10px;"></div>
   </div>
 </div>
 
@@ -291,7 +277,9 @@ main{display:flex;flex:1;overflow:hidden;}
 
 <script>
 // ─── AUTH ───
-const PIN_USER='1111', PIN_ADMIN='0000';
+const HASH_USER='bb57944abbc9de55d47630b644a5743aad2709a8e82a0c144ef0b0624e19b4b1';
+const HASH_ADMIN='6874ea31dbe09619d77644323ba64c379d4c58f3b10e615c3958e6be1021fd01';
+async function sha256(str){const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');}
 let AUTH={role:null}; // role: 'user' | 'admin'
 
 function authInit(){
@@ -303,28 +291,17 @@ function authInit(){
   // else login screen stays visible
 }
 
-let _pin='';
-function pinPress(d){
-  if(_pin.length>=4)return;
-  _pin+=d;
-  updatePinDots();
-  if(_pin.length===4)setTimeout(pinCheck,120);
-}
-function pinDel(){_pin=_pin.slice(0,-1);updatePinDots();document.getElementById('login-err').textContent='';}
-function updatePinDots(){
-  for(let i=0;i<4;i++){
-    const el=document.getElementById('pd'+i);
-    if(el)el.classList.toggle('filled',i<_pin.length);
-  }
-}
-function pinCheck(){
-  if(_pin===PIN_ADMIN){
+async function pinCheck(){
+  const v=(document.getElementById('pin-inp')?.value||'').trim();
+  if(!v){document.getElementById('login-err').textContent='กรุณากรอก PIN';return;}
+  const h=await sha256(v);
+  if(h===HASH_ADMIN){
     AUTH.role='admin';localStorage.setItem('ladda_role','admin');showApp();
-  } else if(_pin===PIN_USER){
+  } else if(h===HASH_USER){
     AUTH.role='user';localStorage.setItem('ladda_role','user');showApp();
   } else {
     document.getElementById('login-err').textContent='PIN ไม่ถูกต้อง ลองใหม่อีกครั้ง';
-    _pin='';updatePinDots();
+    const inp=document.getElementById('pin-inp');if(inp){inp.value='';inp.focus();}
   }
 }
 function showApp(){
