@@ -660,7 +660,7 @@ function renderShopContent(){
     sess.subs.forEach((s,i)=>{
       const a=bv(s.bills||eb());
       const chips=BT.filter(t=>s.bills[t]>0).map(t=>`<span class="pill ${BC[t]}">฿${BL[t]}×${fN(s.bills[t])}</span>`).join(' ');
-      h+=`<div class="sub-row"><div class="sub-rh"><span class="sub-rl">ครั้งที่ ${i+1} &nbsp;·&nbsp; ${s.df}${s.dt&&s.dt!==s.df?' – '+s.dt:''}</span><span class="sub-ra">${fmt(a)}</span></div><div class="chips">${chips||'<span style="font-size:12px;color:var(--text3)">ไม่มีแบงค์</span>'}</div></div>`;
+      h+=`<div class="sub-row"><div class="sub-rh"><span class="sub-rl">ครั้งที่ ${i+1} &nbsp;·&nbsp; ${s.df}${s.dt&&s.dt!==s.df?' – '+s.dt:''}</span><span class="sub-ra">${fmt(a)}</span><button onclick="editSubCount(${i})" style="margin-left:8px;font-size:11px;padding:2px 8px;background:var(--bg3);border:1px solid var(--border2);color:var(--text2);border-radius:4px;cursor:pointer;">✏️ แก้ไข</button></div><div class="chips">${chips||'<span style="font-size:12px;color:var(--text3)">ไม่มีแบงค์</span>'}</div></div>`;
     });
     h+=`</div>`;
   }
@@ -945,6 +945,36 @@ async function summarize(){
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
 }
 async function cancelSess(){if(!confirm('ยกเลิกรอบปัจจุบัน? ข้อมูลจะหาย'))return;try{await sbDelete('sessions',`route_id=eq.${S.shop}&month_key=eq.${S.month}`);cs(S.shop,S.month);render();toast('ยกเลิกรอบแล้ว');}catch(err){toast('ลบไม่สำเร็จ: '+err.message);console.error(err);}}
+function editSubCount(idx){
+  const sess=gs(S.shop,S.month);
+  if(!sess||!sess.subs[idx]){toast('ไม่พบข้อมูล');return;}
+  const s=sess.subs[idx];
+  const prevTotal=sess.subs.slice(0,idx).reduce((acc,x)=>acc+bv(x.bills||eb()),0);
+  const prevBar=idx>0?`<div style="padding:8px 12px;background:var(--bg3);border-radius:6px;margin-bottom:12px;font-size:13px;color:var(--text2);">ยอดสะสมก่อนหน้า: <strong class="pos" style="font-family:var(--mono);">${fmt(prevTotal)}</strong></div>`:'';
+  const body=`${prevBar}
+    <div class="frow">
+      <div class="fg"><label class="flbl">วันที่เริ่ม</label><input type="date" class="finp" id="sf_df" value="${s.df}"></div>
+      <div class="fg"><label class="flbl">วันที่สิ้นสุด</label><input type="date" class="finp" id="sf_dt" value="${s.dt||s.df}"></div>
+    </div>
+    <div class="tbar"><span class="tl">ยอดครั้งนี้</span><span class="tv" id="sf_tot">฿0</span></div>
+    ${billInp('sf')}`;
+  OM(`แก้ไขครั้งที่ ${idx+1}`,body,`<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-g" onclick="saveEditSub(${idx})">บันทึก</button>`);
+  BT.forEach(t=>{const el=document.getElementById('sf_'+t);if(el)el.value=s.bills[t]||0;});
+  updB('sf');
+}
+async function saveEditSub(idx){
+  const df=document.getElementById('sf_df').value;
+  const dt=document.getElementById('sf_dt').value||df;
+  if(!df){toast('กรุณาเลือกวันที่');return;}
+  const bills=gb('sf');
+  const sess=gs(S.shop,S.month);
+  if(!sess){toast('ไม่มีรอบที่เปิดอยู่');return;}
+  sess.subs[idx]={df,dt,bills};
+  try{
+    await sbUpsert('sessions',{id:S.shop+'_'+S.month,route_id:S.shop,month_key:S.month,subs:sess.subs});
+    CM();render();toast(`แก้ไขครั้งที่ ${idx+1} แล้ว ✓`);
+  }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
+}
 
 // ─── INCOME (bill-based, no manual amount) ───
 function openIncome(){
