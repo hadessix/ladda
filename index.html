@@ -168,6 +168,33 @@ main{display:flex;flex:1;overflow:hidden;}
 .empty .ei{font-size:36px;margin-bottom:8px;}
 .toast{position:fixed;bottom:24px;right:24px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 16px;font-size:13px;z-index:9999;animation:si .2s ease;color:var(--text);max-width:280px;}
 @keyframes si{from{transform:translateY(8px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+/* OVERVIEW SCREEN */
+#overview-screen{position:fixed;inset:0;z-index:1500;background:var(--bg);display:none;flex-direction:column;overflow-y:auto;}
+.ov-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:var(--bg2);border-bottom:1px solid var(--border);gap:12px;flex-wrap:wrap;position:sticky;top:0;z-index:10;}
+.ov-logo{font-size:16px;font-weight:700;color:var(--green);}
+.ov-mnav{display:flex;align-items:center;gap:8px;}
+.ov-mnav button{background:var(--bg3);border:1px solid var(--border2);color:var(--text);border-radius:6px;width:28px;height:28px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;}
+.ov-mnav span{font-size:13px;font-weight:600;min-width:85px;text-align:center;}
+.ov-acts{display:flex;align-items:center;gap:8px;}
+.ov-xbtn{font-size:12px;padding:4px 10px;background:var(--bg3);border:1px solid var(--border2);color:var(--text2);border-radius:6px;cursor:pointer;}
+.ov-body{padding:16px;max-width:960px;margin:0 auto;width:100%;box-sizing:border-box;}
+.ov-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:16px;}
+.ov-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+.ov-card-hd{padding:10px 14px;background:var(--bg3);}
+.ov-shop-nm{font-size:14px;font-weight:700;}
+.ov-stats{padding:12px 14px;display:flex;flex-direction:column;gap:7px;}
+.ov-stat{display:flex;justify-content:space-between;align-items:center;}
+.ov-sl{font-size:12px;color:var(--text2);}
+.ov-sv{font-size:13px;font-family:var(--mono);font-weight:600;}
+.ov-divider{border-top:1px solid var(--border);padding-top:7px;margin-top:3px;}
+.ov-total{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:14px 16px;}
+.ov-total-lbl{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;}
+.ov-total-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+.ov-total-row>div{display:flex;flex-direction:column;gap:2px;}
+.ov-total-row span{font-size:11px;color:var(--text3);}
+.ov-total-row strong{font-size:15px;font-family:var(--mono);font-weight:700;}
+.role-viewer{background:#0d3320;border-color:#1a5535;color:#4ade80;}
+@media(max-width:600px){.ov-total-row{grid-template-columns:repeat(2,1fr);}.ov-hdr{padding:10px 12px;}}
 /* LOGIN */
 #login-screen{position:fixed;inset:0;background:var(--bg);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;}
 .login-box{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;width:100%;max-width:360px;padding:32px 28px;}
@@ -237,6 +264,23 @@ main{display:flex;flex:1;overflow:hidden;}
 </style>
 </head>
 <body>
+<!-- OVERVIEW SCREEN -->
+<div id="overview-screen">
+  <div class="ov-hdr">
+    <div class="ov-logo">📊 ภาพรวมทุกสาย</div>
+    <div class="ov-mnav">
+      <button onclick="ovPrevMonth()">‹</button>
+      <span id="ov-month-lbl"></span>
+      <button onclick="ovNextMonth()">›</button>
+    </div>
+    <div class="ov-acts">
+      <span id="ov-badge" class="role-badge role-viewer"></span>
+      <button id="ov-back-btn" onclick="backToMain()" class="ov-xbtn" style="display:none;">← หน้าหลัก</button>
+      <button onclick="logout()" class="ov-xbtn">ออกจากระบบ</button>
+    </div>
+  </div>
+  <div class="ov-body" id="ov-body"></div>
+</div>
 <!-- LOGIN SCREEN -->
 <div id="login-screen">
   <div class="login-box">
@@ -257,6 +301,7 @@ main{display:flex;flex:1;overflow:hidden;}
     </div>
     <div style="display:flex;align-items:center;gap:10px;">
       <div class="total-badge"><span>ยอดรวมทั้งหมด</span><div id="gtotal">฿0</div></div>
+      <button id="ov-nav-btn" onclick="showOverview()" style="display:none;font-size:12px;padding:4px 10px;background:var(--bg3);border:1px solid var(--border2);color:var(--text2);border-radius:6px;cursor:pointer;">📊 ภาพรวม</button>
       <button id="role-btn" class="role-badge" onclick="logout()" title="คลิกเพื่อออกจากระบบ"></button>
     </div>
   </header>
@@ -318,9 +363,17 @@ async function pinCheck(){
 }
 function showApp(){
   document.getElementById('login-screen').style.display='none';
+  if(AUTH.role==='viewer'){
+    const badge=document.getElementById('ov-badge');
+    if(badge){badge.textContent='👁️ ผู้เข้าชม';badge.className='role-badge role-viewer';}
+    document.getElementById('overview-screen').style.display='flex';
+    loadAll().then(()=>renderOverview());
+    return;
+  }
   const btn=document.getElementById('role-btn');
   if(AUTH.role==='admin'){
     btn.textContent='👑 ผู้ดูแล';btn.className='role-badge role-admin';
+    const ovbtn=document.getElementById('ov-nav-btn');if(ovbtn)ovbtn.style.display='inline-block';
   } else {
     btn.textContent='👤 ผู้ใช้งาน';btn.className='role-badge role-user';
   }
@@ -333,6 +386,8 @@ function logout(){
   localStorage.removeItem('ladda_token');
   AUTH.role=null;
   document.getElementById('login-err').textContent='';
+  document.getElementById('overview-screen').style.display='none';
+  const ovbtn=document.getElementById('ov-nav-btn');if(ovbtn)ovbtn.style.display='none';
   document.getElementById('login-screen').style.display='flex';
   const inp=document.getElementById('pin-inp');if(inp){inp.value='';inp.focus();}
 }
@@ -970,6 +1025,77 @@ async function saveEditSub(idx){
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
 }
 
+// ─── OVERVIEW PAGE ───
+function showOverview(){
+  const badge=document.getElementById('ov-badge');
+  if(badge){badge.textContent='👑 ผู้ดูแล';badge.className='role-badge role-admin';}
+  const backBtn=document.getElementById('ov-back-btn');if(backBtn)backBtn.style.display='inline-block';
+  document.getElementById('overview-screen').style.display='flex';
+  renderOverview();
+}
+function backToMain(){
+  document.getElementById('overview-screen').style.display='none';
+}
+function ovPrevMonth(){
+  const[y,m]=S.month.split('-').map(Number);
+  S.month=m===1?`${y-1}-12`:`${y}-${String(m-1).padStart(2,'0')}`;
+  renderOverview();
+}
+function ovNextMonth(){
+  const[y,m]=S.month.split('-').map(Number);
+  S.month=m===12?`${y+1}-01`:`${y}-${String(m+1).padStart(2,'0')}`;
+  renderOverview();
+}
+function renderOverview(){
+  const vis=S.shops.filter(s=>s.tab_flags?.viewer_visible);
+  document.getElementById('ov-month-lbl').textContent=monthLbl(S.month);
+  if(vis.length===0){
+    document.getElementById('ov-body').innerHTML=`<div style="text-align:center;padding:60px 20px;color:var(--text3);"><div style="font-size:40px;margin-bottom:12px;">👁️</div><p style="font-size:14px;">ยังไม่มีสายที่เปิดให้ดู${isAdmin()?'<br><small style="font-size:12px;margin-top:8px;display:block;">ไปที่ ✏️ แก้ไขสาย → เปิด "แสดงในหน้าภาพรวม"</small>':''}</p></div>`;
+    return;
+  }
+  let gtc=0,gti=0,gte=0,gtei=0,gteo=0;
+  let h='<div class="ov-grid">';
+  vis.forEach(shop=>{
+    const ents=ge(shop.id,S.month);const sess=gs(shop.id,S.month);
+    let tc=0,ti=0,te=0,tei=0,teo=0;
+    ents.forEach(e=>{
+      if(e.type==='count')tc+=e.total||0;
+      else if(e.type==='income')ti+=e.amount||0;
+      else if(e.type==='expense')te+=e.amount||0;
+      else if(e.type==='exin')tei+=e.amount||0;
+      else if(e.type==='exout')teo+=e.amount||0;
+    });
+    if(sess)sess.subs.forEach(s=>tc+=bv(s.bills||eb()));
+    const net=tc+ti-te+tei-teo;
+    gtc+=tc;gti+=ti;gte+=te;gtei+=tei;gteo+=teo;
+    h+=`<div class="ov-card">
+      <div class="ov-card-hd" style="border-left:4px solid ${shop.color};">
+        <div class="ov-shop-nm" style="color:${shop.color};">${shop.name}</div>
+      </div>
+      <div class="ov-stats">
+        <div class="ov-stat"><span class="ov-sl">ยอดนับได้</span><span class="ov-sv pos">${fmt(tc)}</span></div>
+        <div class="ov-stat"><span class="ov-sl">รายรับ</span><span class="ov-sv" style="color:var(--blue)">${fmt(ti)}</span></div>
+        <div class="ov-stat"><span class="ov-sl">รายจ่าย</span><span class="ov-sv" style="color:var(--amber)">${fmt(te)}</span></div>
+        <div class="ov-stat ov-divider"><span class="ov-sl" style="font-weight:600;">ยอดสุทธิ</span><span class="ov-sv ${net>=0?'pos':'neg'}">${fmt(net)}</span></div>
+      </div>
+    </div>`;
+  });
+  h+='</div>';
+  if(vis.length>1){
+    const gnet=gtc+gti-gte+gtei-gteo;
+    h+=`<div class="ov-total">
+      <div class="ov-total-lbl">ยอดรวมทั้งหมด · ${vis.length} สาย</div>
+      <div class="ov-total-row">
+        <div><span>ยอดนับได้</span><strong class="pos">${fmt(gtc)}</strong></div>
+        <div><span>รายรับ</span><strong style="color:var(--blue)">${fmt(gti)}</strong></div>
+        <div><span>รายจ่าย</span><strong style="color:var(--amber)">${fmt(gte)}</strong></div>
+        <div><span>ยอดสุทธิ</span><strong class="${gnet>=0?'pos':'neg'}">${fmt(gnet)}</strong></div>
+      </div>
+    </div>`;
+  }
+  document.getElementById('ov-body').innerHTML=h;
+}
+
 // ─── INCOME (bill-based, no manual amount) ───
 function openIncome(){
   const body=`
@@ -1338,7 +1464,8 @@ function editShop(id){
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">${colors.map(c=>`<div onclick="selC('${c}')" id="c_${c.slice(1)}" style="width:28px;height:28px;border-radius:50%;background:${c};cursor:pointer;border:2px solid transparent;transition:.1s;"></div>`).join('')}</div>
       <input type="hidden" id="es_c" value="${shop.color}">
     </div>
-    <div class="fg"><label class="flbl">แท็บที่แสดง</label>${tfChips(tf,'es')}</div>`,
+    <div class="fg"><label class="flbl">แท็บที่แสดง</label>${tfChips(tf,'es')}</div>
+    <div class="fg"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 10px;border:1px solid var(--border);border-radius:6px;"><input type="checkbox" id="es_viewer" ${tf.viewer_visible?'checked':''} style="width:14px;height:14px;"><span style="font-size:13px;">👁️ แสดงในหน้าภาพรวม (ผู้เข้าชม)</span></label></div>`,
   `<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-b" onclick="saveEditShop('${id}')">บันทึก</button>`);
   document.querySelectorAll('[id^="c_"]').forEach(el=>el.style.borderColor='transparent');
   const cur=document.getElementById('c_'+shop.color.slice(1));
@@ -1350,6 +1477,7 @@ async function saveEditShop(id){
   const n=document.getElementById('es_n').value.trim(),c=document.getElementById('es_c').value;
   if(!n){toast('กรุณาใส่ชื่อ');return;}
   const tf=getTf('es');
+  tf.viewer_visible=document.getElementById('es_viewer')?.checked||false;
   try{
     await sbUpsert('routes',{id,name:n,color:c,tab_flags:tf});
     const sh=S.shops.find(s=>s.id===id);if(sh){sh.name=n;sh.color=c;sh.tab_flags=tf;}

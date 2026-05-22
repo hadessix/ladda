@@ -81,6 +81,7 @@ export default {
       let role = null;
       if (hash === env.HASH_ADMIN) role = 'admin';
       else if (hash === env.HASH_USER) role = 'user';
+      else if (hash === env.HASH_VIEWER) role = 'viewer';
       if (!role) return jsonRes({ error: 'invalid' }, 401);
 
       const token = await makeToken(role, env.JWT_SECRET);
