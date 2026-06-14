@@ -118,19 +118,19 @@ main{display:flex;flex:1;overflow:hidden;}
 .notetxt{font-size:12px;color:var(--text2);margin-top:8px;padding:7px 10px;background:var(--bg);border-radius:6px;border-left:2px solid var(--border2);}
 .slbl{font-size:11px;color:var(--text3);letter-spacing:1px;margin:14px 0 8px;}
 /* MODAL */
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:500;display:flex;align-items:center;justify-content:center;padding:16px;}
-.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:14px;width:100%;max-width:640px;max-height:92vh;overflow-y:auto;}
-.mhd{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--bg2);z-index:10;}
-.mhd h2{font-size:16px;font-weight:600;}
-.mclose{background:transparent;border:none;color:var(--text2);cursor:pointer;font-size:20px;padding:2px 8px;}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:500;display:flex;align-items:stretch;justify-content:stretch;padding:0;}
+.modal{background:var(--bg2);width:100%;max-width:100%;height:100%;max-height:100%;display:flex;flex-direction:column;border-radius:0;overflow:hidden;}
+.mhd{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border);background:var(--bg2);flex-shrink:0;}
+.mhd h2{font-size:20px;font-weight:600;}
+.mclose{background:transparent;border:none;color:var(--text2);cursor:pointer;font-size:28px;padding:4px 10px;line-height:1;}
 .mclose:hover{color:var(--text);}
-.mbody{padding:20px;}
-.mfoot{display:flex;gap:8px;justify-content:flex-end;padding:12px 20px;border-top:1px solid var(--border);}
-.fg{margin-bottom:14px;}
-.flbl{display:block;font-size:13px;color:var(--text2);margin-bottom:5px;}
-.finp{width:100%;padding:9px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-family:var(--font);font-size:14px;}
+.mbody{padding:24px;overflow-y:auto;flex:1;}
+.mfoot{display:flex;gap:10px;justify-content:flex-end;padding:16px 24px;border-top:1px solid var(--border);flex-shrink:0;}
+.fg{margin-bottom:18px;}
+.flbl{display:block;font-size:15px;color:var(--text2);margin-bottom:6px;}
+.finp{width:100%;padding:12px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-family:var(--font);font-size:16px;}
 .finp:focus{outline:none;border-color:var(--bbr);}
-.fsel{width:100%;padding:9px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-family:var(--font);font-size:14px;}
+.fsel{width:100%;padding:12px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-family:var(--font);font-size:16px;}
 .frow{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .bgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
 .bcell{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 10px;}
@@ -316,7 +316,7 @@ main{display:flex;flex:1;overflow:hidden;}
 
 <div class="overlay" id="overlay" style="display:none;">
   <div class="modal">
-    <div class="mhd"><h2 id="mtitle">-</h2><button class="mclose" onclick="CM()">✕</button></div>
+    <div class="mhd"><h2 id="mtitle">-</h2><button class="mclose" onclick="CMask()">✕</button></div>
     <div class="mbody" id="mbody"></div>
     <div class="mfoot" id="mfoot"></div>
   </div>
@@ -876,7 +876,8 @@ async function delE(ev,id){ev.stopPropagation();if(!confirm('ลบรายก�
 // ─── MODAL helpers ───
 function OM(title,body,foot){document.getElementById('mtitle').textContent=title;document.getElementById('mbody').innerHTML=body;document.getElementById('mfoot').innerHTML=foot;document.getElementById('overlay').style.display='flex';}
 function CM(){document.getElementById('overlay').style.display='none';}
-document.getElementById('overlay').addEventListener('click',e=>{if(e.target.id==='overlay')CM();});
+function CMask(){if(confirm('ต้องการยกเลิกใช่ไหม?\nข้อมูลที่กรอกไว้จะหายไป'))CM();}
+
 
 // bill input grid helpers
 // bill input พร้อม cap (สำหรับรายจ่าย)
@@ -966,7 +967,7 @@ function showSubForm(title,prevTotal,onSave){
     </div>
     <div class="tbar"><span class="tl">ยอดครั้งนี้</span><span class="tv" id="sf_tot">฿0</span></div>
     ${billInp('sf')}`;
-  OM(title,body,`<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-g" onclick="saveSubHandler()">บันทึก</button>`);
+  OM(title,body,`<button class="btn btn-x" onclick="CMask()">ยกเลิก</button><button class="btn btn-g" onclick="saveSubHandler()">บันทึก</button>`);
 }
 async function summarize(){
   const sess=gs(S.shop,S.month);
@@ -1014,7 +1015,7 @@ function editSubCount(idx){
     </div>
     <div class="tbar"><span class="tl">ยอดครั้งนี้</span><span class="tv" id="sf_tot">฿0</span></div>
     ${billInp('sf')}`;
-  OM(`แก้ไขครั้งที่ ${idx+1}`,body,`<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-g" onclick="saveEditSub(${idx})">บันทึก</button>`);
+  OM(`แก้ไขครั้งที่ ${idx+1}`,body,`<button class="btn btn-x" onclick="CMask()">ยกเลิก</button><button class="btn btn-g" onclick="saveEditSub(${idx})">บันทึก</button>`);
   BT.forEach(t=>{const el=document.getElementById('sf_'+t);if(el)el.value=s.bills[t]||0;});
   updB('sf');
 }
@@ -1174,7 +1175,7 @@ function openIncome(){
     <div class="fg"><label class="flbl">หมายเหตุ</label><input type="text" class="finp" id="ic_n"></div>
     <div class="tbar"><span class="tl">ยอดรวมที่รับ</span><span class="tv" id="ic_tot">฿0</span></div>
     ${billInp('ic')}`;
-  OM('เพิ่มรายรับ',body,`<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-b" onclick="saveIncome()">บันทึก</button>`);
+  OM('เพิ่มรายรับ',body,`<button class="btn btn-x" onclick="CMask()">ยกเลิก</button><button class="btn btn-b" onclick="saveIncome()">บันทึก</button>`);
 }
 async function saveIncome(){
   const d=document.getElementById('ic_d').value;
@@ -1234,7 +1235,7 @@ function openExpense(){
     </div>
     ${billInpWithLimit('ep',cb)}
     <div class="tbar"><span class="tl">ยอดที่จ่ายออก</span><span class="tv" id="ep_tot">฿0</span></div>`;
-  OM('เพิ่มรายจ่าย',body,`<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-a" onclick="saveExpense()">บันทึก</button>`);
+  OM('เพิ่มรายจ่าย',body,`<button class="btn btn-x" onclick="CMask()">ยกเลิก</button><button class="btn btn-a" onclick="saveExpense()">บันทึก</button>`);
 }
 async function saveExpense(){
   const d=document.getElementById('ep_d').value;
@@ -1337,7 +1338,7 @@ function openExchange(fromShop,lockedId){
     <div style="display:grid;grid-template-columns:1fr 36px 1fr;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
       ${hdrRow}${denomRows}${totRow}
     </div>`;
-  OM('แลกเงินระหว่างสาย',body,`<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-p" onclick="saveExchange(${fromShop})">บันทึกการแลก</button>`);
+  OM('แลกเงินระหว่างสาย',body,`<button class="btn btn-x" onclick="CMask()">ยกเลิก</button><button class="btn btn-p" onclick="saveExchange(${fromShop})">บันทึกการแลก</button>`);
   if(!fromShop)document.getElementById('xc_L').value=leftDefault;
   document.getElementById('xc_R').value=rightDefault||'';
   _cbMap['xL']=cbL;
@@ -1455,7 +1456,7 @@ function openPayOwner(fromSid){
     <p style="font-size:13px;color:var(--text2);margin-bottom:10px;">ระบุแบงค์ที่จ่ายออก → <strong style="color:var(--amber);">${ownerGrp.name}</strong></p>
     ${billInpWithLimit('po',cb)}
     <div class="tbar"><span class="tl">ยอดที่จ่าย</span><span class="tv" id="po_tot">฿0</span></div>`;
-  OM(`💸 จ่ายเฮียรวย`,body,`<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-a" onclick="savePayOwner('${fromSid}','${ownerGrp.id}','${ownerFirstId}')">บันทึก</button>`);
+  OM(`💸 จ่ายเฮียรวย`,body,`<button class="btn btn-x" onclick="CMask()">ยกเลิก</button><button class="btn btn-a" onclick="savePayOwner('${fromSid}','${ownerGrp.id}','${ownerFirstId}')">บันทึก</button>`);
 }
 
 // ─── จ่ายเฮียรวย (group view — pickShop ก่อน) ───
@@ -1471,7 +1472,7 @@ function openPayOwnerGroup(gid){
       <span style="width:10px;height:10px;border-radius:50%;background:${sh.color};display:inline-block;"></span>
       ${sh.name} <span style="margin-left:auto;font-family:var(--mono);font-size:13px;color:var(--text2);">${fmt(shopTot(sh.id))}</span>
     </button>`).join(''),
-    `<button class="btn btn-x" onclick="CM()">ยกเลิก</button>`);
+    `<button class="btn btn-x" onclick="CMask()">ยกเลิก</button>`);
 }
 
 async function savePayOwner(fromSid,ownerGid,ownerFirstId){
@@ -1504,7 +1505,7 @@ function addShop(){
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;">${colors.map(c=>`<div onclick="selC('${c}')" id="c_${c.slice(1)}" style="width:28px;height:28px;border-radius:50%;background:${c};cursor:pointer;border:2px solid transparent;transition:.1s;"></div>`).join('')}</div>
       <input type="hidden" id="ns_c" value="${colors[0]}">
     </div>`,
-  `<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-g" onclick="saveShop()">เพิ่ม</button>`);
+  `<button class="btn btn-x" onclick="CMask()">ยกเลิก</button><button class="btn btn-g" onclick="saveShop()">เพิ่ม</button>`);
   selC(colors[0]);
 }
 function selC(c){document.getElementById('ns_c').value=c;document.querySelectorAll('[id^="c_"]').forEach(el=>el.style.borderColor='transparent');const el=document.getElementById('c_'+c.slice(1));if(el)el.style.borderColor='white';}
@@ -1533,7 +1534,7 @@ function editShop(id){
       <input type="hidden" id="es_c" value="${shop.color}">
     </div>
     <div class="fg"><label class="flbl">แท็บที่แสดง</label>${tfChips(tf,'es')}</div>`,
-  `<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-b" onclick="saveEditShop('${id}')">บันทึก</button>`);
+  `<button class="btn btn-x" onclick="CMask()">ยกเลิก</button><button class="btn btn-b" onclick="saveEditShop('${id}')">บันทึก</button>`);
   document.querySelectorAll('[id^="c_"]').forEach(el=>el.style.borderColor='transparent');
   const cur=document.getElementById('c_'+shop.color.slice(1));
   if(cur)cur.style.borderColor='white';
@@ -1609,7 +1610,7 @@ function addGroup(){
     </div>
     <div class="fg"><label class="flbl">แท็บที่แสดง</label>${tfChips(defFlags,'ng')}
     </div>`,
-  `<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-g" onclick="saveGroup()">เพิ่มกลุ่ม</button>`);
+  `<button class="btn btn-x" onclick="CMask()">ยกเลิก</button><button class="btn btn-g" onclick="saveGroup()">เพิ่มกลุ่ม</button>`);
 }
 
 async function saveGroup(){
@@ -1666,7 +1667,7 @@ function editGroup(id){
     </div>
     <div class="fg"><label class="flbl">แท็บที่แสดง</label>${tfChips(tf,'eg')}
     </div>`,
-  `<button class="btn btn-x" onclick="CM()">ยกเลิก</button><button class="btn btn-b" onclick="saveEditGroup('${id}')">บันทึก</button>`);
+  `<button class="btn btn-x" onclick="CMask()">ยกเลิก</button><button class="btn btn-b" onclick="saveEditGroup('${id}')">บันทึก</button>`);
 }
 
 async function saveEditGroup(id){
@@ -1730,7 +1731,7 @@ function pickShopThen(members,label,fn,type){
       <span style="width:10px;height:10px;border-radius:50%;background:${sh.color};display:inline-block;"></span>
       ${sh.name} <span style="margin-left:auto;font-family:var(--mono);font-size:13px;color:var(--text2);">${fmt(shopTot(sh.id))}</span>
     </button>`).join(''),
-    `<button class="btn btn-x" onclick="CM()">ยกเลิก</button>`);
+    `<button class="btn btn-x" onclick="CMask()">ยกเลิก</button>`);
 }
 function pickShopAndDo(sid,fn){
   const gid=S.view.id;
