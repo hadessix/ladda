@@ -1360,11 +1360,17 @@ function openExchange(fromShop,lockedId){
   _cbMap['xR']=cbR;
 }
 
-// คำนวณ CB รวมของ group (route แรก)
+// คำนวณ CB รวมของ group (รวมทุก route ในกลุ่ม)
 function calcCBGroup(gid,mk){
-  const firstId=(S.groupMembers[gid]||[])[0];
-  if(!firstId)return eb();
-  return calcCB(firstId,mk);
+  const ids=S.groupMembers[gid]||[];
+  const total=eb();
+  ids.forEach(id=>{const cb=calcCB(id,mk);BT.forEach(t=>total[t]+=(cb[t]||0));});
+  return total;
+}
+// หา route แรกในกลุ่มที่มีเงิน (ใช้ใน exchange exout ฝั่งซ้ายที่เป็น group)
+function firstRouteWithMoney(gid,mk){
+  const ids=S.groupMembers[gid]||[];
+  return ids.find(id=>bv(calcCB(id,mk))>0)||ids[0];
 }
 
 function refreshExchangeCB(fromShop){
@@ -1410,7 +1416,7 @@ async function saveExchange(fromShop){
   const Rblls=gb('xR');
   const La=bv(Lblls), Ra=bv(Rblls);
   if(La===0&&Ra===0){toast('กรุณาใส่แบงค์อย่างน้อยฝั่งเดียว');return;}
-  const LrouteId=isLGroup?(S.groupMembers[Lid]||[])[0]:Lid;
+  const LrouteId=isLGroup?firstRouteWithMoney(Lid,S.month):Lid;
   const cbL=isLGroup?calcCBGroup(Lid,S.month):calcCB(Lid,S.month);
   const overL=BT.find(t=>Lblls[t]>(cbL[t]||0));
   if(overL){toast(`ฝั่งซ้าย: แบงค์ ฿${BL[overL]} เกินจำนวนที่มี (มี ${fN(cbL[overL]||0)} ใบ)`);return;}
