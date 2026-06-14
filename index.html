@@ -1439,12 +1439,13 @@ async function saveExchange(fromShop){
       const e={id:uid(),type:'exout',df:d,dt:d,amount:La,title:`แลกออก → ${Rname}`,note:'',bills:Lblls,oid:RfirstId||Rid};
       entriesToSave.push(entryToRow(e,LrouteId,mk2));localEntries.push({sid:LrouteId,e});
     }
-    if(Ra>0&&RfirstId){
-      const cbR=calcCB(RfirstId,S.month);
-      const overR=BT.find(t=>Rblls[t]>(cbR[t]||0));
+    if(Ra>0){
+      const cbRgrp=calcCBGroup(Rid,S.month);
+      const overR=BT.find(t=>Rblls[t]>(cbRgrp[t]||0));
       if(overR){toast(`ฝั่งขวา: แบงค์ ฿${BL[overR]} เกินจำนวนที่มี`);return;}
+      const RexId=firstRouteWithMoney(Rid,S.month);
       const e={id:uid(),type:'exout',df:d,dt:d,amount:Ra,title:`แลกออก → ${Lname}`,note:'',bills:Rblls,oid:LrouteId};
-      entriesToSave.push(entryToRow(e,RfirstId,mk2));localEntries.push({sid:RfirstId,e});
+      entriesToSave.push(entryToRow(e,RexId,mk2));localEntries.push({sid:RexId,e});
     }
     if(La>0&&RfirstId){
       const e={id:uid(),type:'exin',df:d,dt:d,amount:La,title:`รับแลก ← ${Lname}`,note:'',bills:Lblls,oid:LrouteId};
