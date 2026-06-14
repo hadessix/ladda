@@ -943,20 +943,7 @@ async function saveCountDirect(){
   try{
     await sbUpsert('entries',entryToRow(entry,S.shop,S.month));
     ge(S.shop,S.month).push(entry);
-    const _gid=Object.keys(S.groupMembers).find(gid=>(S.groupMembers[gid]||[]).includes(S.shop));
-    const _grp=_gid?S.groups.find(g=>g.id===_gid):null;
-    const _collector=_gid?(S.groupMembers[_gid]||[])[0]:null;
-    if(_grp?.tab_flags?.auto_collect&&_collector&&_collector!==S.shop){
-      const d=today(),mk2=S.month,sid=S.shop;
-      const fromName=S.shops.find(s=>s.id===sid)?.name||'?';
-      const eOut={id:uid(),type:'exout',df:d,dt:d,amount:total,title:`โอนเข้ากลุ่ม ${_grp.name}`,note:'',bills,oid:_collector};
-      const eIn={id:uid(),type:'exin',df:d,dt:d,amount:total,title:`รับจาก ${fromName}`,note:'',bills,oid:sid};
-      await sbUpsert('entries',[entryToRow(eOut,sid,mk2),entryToRow(eIn,_collector,mk2)]);
-      ge(sid,mk2).push(eOut);ge(_collector,mk2).push(eIn);
-      CM();render();toast(`บันทึกนับเงินรอบ ${prevRounds+1} · โอน ${fmt(total)} เข้ากลุ่ม ${_grp.name} ✓`);
-    } else {
-      CM();render();toast(`บันทึกนับเงินรอบ ${prevRounds+1} รวม ${fmt(total)} ✓`);
-    }
+    CM();render();toast(`บันทึกนับเงินรอบ ${prevRounds+1} รวม ${fmt(total)} ✓`);
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
 }
 function addSubCount(){}
@@ -1305,14 +1292,21 @@ function openExchange(fromShop,lockedId){
     ...rightGroups.map(g=>`<option value="g:${g.id}">📁 ${g.name}</option>`)
   ].join('');
 
-  // left options (กรณี fromShop=false เลือกได้ — เฉพาะ standalone routes ที่มีเงิน)
+  // left options (กรณี fromShop=false เลือกได้ — standalone routes + groups ที่มีเงิน)
   const cashShops=S.shops.filter(s=>!groupedIds.has(s.id)&&bv(calcCB(s.id,S.month))>0);
-  const leftAllOpts=cashShops.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  const cashGroupsLeft=S.groups.filter(g=>bv(calcCBGroup(g.id,S.month))>0);
+  const leftAllOpts=[
+    ...cashShops.map(s=>`<option value="r:${s.id}">${s.name}</option>`),
+    ...cashGroupsLeft.map(g=>`<option value="g:${g.id}">📁 ${g.name}</option>`)
+  ].join('');
 
-  const leftDefault=fromShop?lockedId:cashShops[0]?.id;
-  const rightDefault=fromShop?(rightRoutes[0]?`r:${rightRoutes[0].id}`:(rightGroups[0]?`g:${rightGroups[0].id}`:'')):cashShops[1]?`r:${cashShops[1].id}`:'';
+  const leftDefaultVal=fromShop?`r:${lockedId}`:(cashShops[0]?`r:${cashShops[0].id}`:(cashGroupsLeft[0]?`g:${cashGroupsLeft[0].id}`:''));
+  const leftDefault=fromShop?lockedId:(leftDefaultVal.startsWith('g:')?leftDefaultVal.slice(2):leftDefaultVal.replace(/^r:/,''));
+  const rightDefault=fromShop?(rightRoutes[0]?`r:${rightRoutes[0].id}`:(rightGroups[0]?`g:${rightGroups[0].id}`:'')):
+    (rightRoutes[0]?`r:${rightRoutes[0].id}`:(rightGroups[0]?`g:${rightGroups[0].id}`:''));
 
-  const cbL=calcCB(leftDefault,S.month);
+  const isLGroup=leftDefaultVal.startsWith('g:');
+  const cbL=isLGroup?calcCBGroup(leftDefault,S.month):calcCB(leftDefault,S.month);
   const cbR=rightDefault?.startsWith('g:')
     ?calcCBGroup(rightDefault.slice(2),S.month)
     :calcCB(rightDefault?.replace(/^r:/,'')||'',S.month);
@@ -1321,7 +1315,7 @@ function openExchange(fromShop,lockedId){
     <div style="padding:10px 12px;background:var(--adim);border-bottom:1px solid var(--border);">
       <div style="font-size:13px;font-weight:600;color:var(--amber);margin-bottom:6px;">ฝั่งซ้าย — ให้ออก</div>
       ${fromShop
-        ?`<div style="font-size:14px;font-weight:600;color:var(--text);padding:6px 0;">${leftName}</div><input type="hidden" id="xc_L" value="${leftDefault}">`
+        ?`<div style="font-size:14px;font-weight:600;color:var(--text);padding:6px 0;">${leftName}</div><input type="hidden" id="xc_L" value="r:${leftDefault}">`
         :`<select class="fsel" id="xc_L" style="font-size:14px;width:100%;" onchange="refreshExchangeCB(false)">${leftAllOpts}</select>`}
     </div>
     <div style="background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--purple);">⇄</div>
@@ -1360,7 +1354,7 @@ function openExchange(fromShop,lockedId){
       ${hdrRow}${denomRows}${totRow}
     </div>`;
   OM('แลกเงินระหว่างสาย',body,`<button class="btn btn-x" onclick="CMask()">ยกเลิก</button><button class="btn btn-p" onclick="saveExchange(${fromShop})">บันทึกการแลก</button>`);
-  if(!fromShop)document.getElementById('xc_L').value=leftDefault;
+  if(!fromShop)document.getElementById('xc_L').value=leftDefaultVal;
   document.getElementById('xc_R').value=rightDefault||'';
   _cbMap['xL']=cbL;
   _cbMap['xR']=cbR;
@@ -1374,9 +1368,11 @@ function calcCBGroup(gid,mk){
 }
 
 function refreshExchangeCB(fromShop){
-  const Lid=document.getElementById('xc_L').value;
+  const Lval=document.getElementById('xc_L').value;
   const Rval=document.getElementById('xc_R').value;
-  const cbL=calcCB(Lid,S.month);
+  const isLGroup=Lval?.startsWith('g:');
+  const Lid=(isLGroup||Lval?.startsWith('r:'))?Lval.slice(2):Lval;
+  const cbL=isLGroup?calcCBGroup(Lid,S.month):calcCB(Lid,S.month);
   const isRGroup=Rval?.startsWith('g:');
   const Rid=(isRGroup||Rval?.startsWith('r:'))?Rval.slice(2):Rval;
   const cbR=isRGroup?calcCBGroup(Rid,S.month):calcCB(Rid,S.month);
@@ -1400,18 +1396,22 @@ function refreshExchangeCB(fromShop){
 
 async function saveExchange(fromShop){
   const d=today();
-  const Lid=document.getElementById('xc_L').value;
+  const Lval=document.getElementById('xc_L').value;
   const Rval=document.getElementById('xc_R').value;
+  const isLGroup=Lval?.startsWith('g:');
   const isRGroup=Rval?.startsWith('g:');
-  const Rid=isRGroup?Rval.slice(2):Rval;
-  if(!isRGroup&&Lid===Rid){toast('กรุณาเลือกสายที่ต่างกัน');return;}
+  const Lid=(isLGroup||Lval?.startsWith('r:'))?Lval.slice(2):Lval;
+  const Rid=(isRGroup||Rval?.startsWith('r:'))?Rval.slice(2):Rval;
+  if(!isLGroup&&!isRGroup&&Lid===Rid){toast('กรุณาเลือกสายที่ต่างกัน');return;}
   if(isRGroup&&(S.groupMembers[Rid]||[]).includes(Lid)){toast('ไม่สามารถแลกเงินกับกลุ่มของตัวเองได้');return;}
+  if(isLGroup&&(S.groupMembers[Lid]||[]).includes(Rid)){toast('ไม่สามารถแลกเงินกับกลุ่มของตัวเองได้');return;}
 
   const Lblls=gb('xL');
   const Rblls=gb('xR');
   const La=bv(Lblls), Ra=bv(Rblls);
   if(La===0&&Ra===0){toast('กรุณาใส่แบงค์อย่างน้อยฝั่งเดียว');return;}
-  const cbL=calcCB(Lid,S.month);
+  const LrouteId=isLGroup?(S.groupMembers[Lid]||[])[0]:Lid;
+  const cbL=isLGroup?calcCBGroup(Lid,S.month):calcCB(Lid,S.month);
   const overL=BT.find(t=>Lblls[t]>(cbL[t]||0));
   if(overL){toast(`ฝั่งซ้าย: แบงค์ ฿${BL[overL]} เกินจำนวนที่มี (มี ${fN(cbL[overL]||0)} ใบ)`);return;}
   if(!isRGroup){
@@ -1419,41 +1419,42 @@ async function saveExchange(fromShop){
     const overR=BT.find(t=>Rblls[t]>(cbR[t]||0));
     if(overR){toast(`ฝั่งขวา: แบงค์ ฿${BL[overR]} เกินจำนวนที่มี (มี ${fN(cbR[overR]||0)} ใบ)`);return;}
   }
-  const Lshop=S.shops.find(s=>s.id===Lid);
+  const Lgrp=isLGroup?S.groups.find(g=>g.id===Lid):null;
+  const Lname=isLGroup?(Lgrp?.name||'?'):(S.shops.find(s=>s.id===Lid)?.name||'?');
   const mk2=S.month;
   const entriesToSave=[];
   const localEntries=[];
 
   if(isRGroup){
-    // ฝั่งขวาเป็น group → exin บันทึกที่ route แรกของ group
     const Rgrp=S.groups.find(g=>g.id===Rid);
     const RfirstId=(S.groupMembers[Rid]||[])[0];
     const Rname=Rgrp?.name||'?';
     if(La>0){
       const e={id:uid(),type:'exout',df:d,dt:d,amount:La,title:`แลกออก → ${Rname}`,note:'',bills:Lblls,oid:RfirstId||Rid};
-      entriesToSave.push(entryToRow(e,Lid,mk2));localEntries.push({sid:Lid,e});
+      entriesToSave.push(entryToRow(e,LrouteId,mk2));localEntries.push({sid:LrouteId,e});
     }
     if(Ra>0&&RfirstId){
       const cbR=calcCB(RfirstId,S.month);
       const overR=BT.find(t=>Rblls[t]>(cbR[t]||0));
       if(overR){toast(`ฝั่งขวา: แบงค์ ฿${BL[overR]} เกินจำนวนที่มี`);return;}
-      const e={id:uid(),type:'exout',df:d,dt:d,amount:Ra,title:`แลกออก → ${Lshop?.name}`,note:'',bills:Rblls,oid:Lid};
+      const e={id:uid(),type:'exout',df:d,dt:d,amount:Ra,title:`แลกออก → ${Lname}`,note:'',bills:Rblls,oid:LrouteId};
       entriesToSave.push(entryToRow(e,RfirstId,mk2));localEntries.push({sid:RfirstId,e});
     }
     if(La>0&&RfirstId){
-      const e={id:uid(),type:'exin',df:d,dt:d,amount:La,title:`รับแลก ← ${Lshop?.name}`,note:'',bills:Lblls,oid:Lid};
+      const e={id:uid(),type:'exin',df:d,dt:d,amount:La,title:`รับแลก ← ${Lname}`,note:'',bills:Lblls,oid:LrouteId};
       entriesToSave.push(entryToRow(e,RfirstId,mk2));localEntries.push({sid:RfirstId,e});
     }
     if(Ra>0){
       const e={id:uid(),type:'exin',df:d,dt:d,amount:Ra,title:`รับแลก ← ${Rname}`,note:'',bills:Rblls,oid:RfirstId||Rid};
-      entriesToSave.push(entryToRow(e,Lid,mk2));localEntries.push({sid:Lid,e});
+      entriesToSave.push(entryToRow(e,LrouteId,mk2));localEntries.push({sid:LrouteId,e});
     }
   } else {
     const Rshop=S.shops.find(s=>s.id===Rid);
-    if(La>0){const e={id:uid(),type:'exout',df:d,dt:d,amount:La,title:`แลกออก → ${Rshop?.name}`,note:'',bills:Lblls,oid:Rid};entriesToSave.push(entryToRow(e,Lid,mk2));localEntries.push({sid:Lid,e});}
-    if(Ra>0){const e={id:uid(),type:'exin',df:d,dt:d,amount:Ra,title:`รับแลก ← ${Rshop?.name}`,note:'',bills:Rblls,oid:Rid};entriesToSave.push(entryToRow(e,Lid,mk2));localEntries.push({sid:Lid,e});}
-    if(Ra>0){const e={id:uid(),type:'exout',df:d,dt:d,amount:Ra,title:`แลกออก → ${Lshop?.name}`,note:'',bills:Rblls,oid:Lid};entriesToSave.push(entryToRow(e,Rid,mk2));localEntries.push({sid:Rid,e});}
-    if(La>0){const e={id:uid(),type:'exin',df:d,dt:d,amount:La,title:`รับแลก ← ${Lshop?.name}`,note:'',bills:Lblls,oid:Lid};entriesToSave.push(entryToRow(e,Rid,mk2));localEntries.push({sid:Rid,e});}
+    const Rname=Rshop?.name||'?';
+    if(La>0){const e={id:uid(),type:'exout',df:d,dt:d,amount:La,title:`แลกออก → ${Rname}`,note:'',bills:Lblls,oid:Rid};entriesToSave.push(entryToRow(e,LrouteId,mk2));localEntries.push({sid:LrouteId,e});}
+    if(Ra>0){const e={id:uid(),type:'exin',df:d,dt:d,amount:Ra,title:`รับแลก ← ${Rname}`,note:'',bills:Rblls,oid:Rid};entriesToSave.push(entryToRow(e,LrouteId,mk2));localEntries.push({sid:LrouteId,e});}
+    if(Ra>0){const e={id:uid(),type:'exout',df:d,dt:d,amount:Ra,title:`แลกออก → ${Lname}`,note:'',bills:Rblls,oid:LrouteId};entriesToSave.push(entryToRow(e,Rid,mk2));localEntries.push({sid:Rid,e});}
+    if(La>0){const e={id:uid(),type:'exin',df:d,dt:d,amount:La,title:`รับแลก ← ${Lname}`,note:'',bills:Lblls,oid:LrouteId};entriesToSave.push(entryToRow(e,Rid,mk2));localEntries.push({sid:Rid,e});}
   }
   try{
     await sbUpsert('entries',entriesToSave);
