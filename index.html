@@ -1824,15 +1824,28 @@ async function saveExpenseGroup(gid){
   const amount=bv(bills);
   if(!d){toast('กรุณาเลือกวันที่');return;}
   if(amount===0){toast('กรุณาเลือกแบงค์ที่จ่ายออกอย่างน้อย 1 ใบ');return;}
-  const cbGrp=calcCBGroup(gid,S.month);
-  const over=BT.find(tt=>bills[tt]>(cbGrp[tt]||0));
-  if(over){toast(`แบงค์ ฿${BL[over]} เกินจำนวนที่มีในกลุ่ม (มี ${fN(cbGrp[over]||0)} ใบ)`);return;}
-  const sid=firstRouteWithMoney(gid,S.month);
-  if(!sid){toast('ไม่พบสายที่มีเงิน');return;}
-  const entry={id:uid(),type:'expense',df:d,dt:d,amount,title:t,note:null,bills};
+  // distribute bills to routes that actually have those denominations (avoid negative bills)
+  const memberIds=S.groupMembers[gid]||[];
+  const rem=Object.assign(eb(),bills);
+  const dist={};
+  for(const sid of memberIds){
+    const cb=calcCB(sid,S.month);
+    BT.forEach(tk=>{
+      if(rem[tk]>0&&(cb[tk]||0)>0){
+        const take=Math.min(rem[tk],cb[tk]);
+        if(!dist[sid])dist[sid]=eb();
+        dist[sid][tk]=(dist[sid][tk]||0)+take;
+        rem[tk]-=take;
+      }
+    });
+  }
+  const deficit=BT.find(tk=>rem[tk]>0);
+  if(deficit){toast(`แบงค์ ฿${BL[deficit]} ไม่พอในกลุ่ม`);return;}
   try{
-    await sbUpsert('entries',entryToRow(entry,sid,S.month));
-    ge(sid,S.month).push(entry);
+    const entries=Object.entries(dist).map(([sid,rb])=>({id:uid(),sid,rb}));
+    const rows=entries.map(({id,sid,rb})=>entryToRow({id,type:'expense',df:d,dt:d,amount:bv(rb),title:t,note:null,bills:rb},sid,S.month));
+    await sbUpsert('entries',rows);
+    entries.forEach(({id,sid,rb})=>ge(sid,S.month).push({id,type:'expense',df:d,dt:d,amount:bv(rb),title:t,note:null,bills:rb}));
     CM();render();toast(`บันทึกรายจ่าย ${fmt(amount)} แล้ว ✓`);
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
 }
