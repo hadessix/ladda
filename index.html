@@ -720,7 +720,7 @@ function renderShopContent(){
     h+=`</div>`;
   }
   if(entries.length===0&&!sess)h+=`<div class="empty"><div class="ei">📋</div><p>ยังไม่มีรายการ</p></div>`;
-  else if(entries.length>0){h+=`<div class="slbl">รายการที่บันทึกแล้ว</div>`;h+=entries.map(renderEntry).join('');}
+  else if(entries.length>0){h+=`<div class="slbl">รายการที่บันทึกแล้ว</div>`;h+=renderEntriesList(entries);}
   document.getElementById('content').innerHTML=h;
 }
 
@@ -821,6 +821,61 @@ function renderGroupContent(){
   document.getElementById('content').innerHTML=h;
 }
 function toggleGrpCard(id){const b=document.getElementById('grc-'+id);if(b)b.classList.toggle('open');}
+
+function renderEntriesList(entries){
+  const used=new Set();
+  const rows=[];
+  entries.forEach((e,i)=>{
+    if(used.has(i))return;
+    if(e.type==='exout'||e.type==='exin'){
+      const matchType=e.type==='exout'?'exin':'exout';
+      const j=entries.findIndex((e2,i2)=>!used.has(i2)&&i2!==i&&e2.type===matchType&&e2.oid===e.oid&&e2.df===e.df);
+      if(j>=0){
+        used.add(i);used.add(j);
+        const exout=e.type==='exout'?e:entries[j];
+        const exin=e.type==='exin'?e:entries[j];
+        rows.push(renderExchangePair(exout,exin));
+        return;
+      }
+    }
+    rows.push(renderEntry(e));
+  });
+  return rows.join('');
+}
+
+function renderExchangePair(exout,exin){
+  const os=S.shops.find(s=>s.id===exout.oid)||S.groups.find(g=>g.id===exout.oid);
+  const oname=os?.name||'?';
+  const pairId='xp_'+exout.id;
+  let body=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">`;
+  body+=`<div><div style="font-size:12px;color:var(--text3);margin-bottom:6px;">ให้ออก</div>${billTbl(exout.bills||eb(),exout.amount||0)}</div>`;
+  body+=`<div><div style="font-size:12px;color:var(--text3);margin-bottom:6px;">รับเข้า</div>${billTbl(exin.bills||eb(),exin.amount||0)}</div>`;
+  body+=`</div>`;
+  const delBtn=isAdmin()?`<button class="delbtn" onclick="delExPair(event,'${exout.id}','${exin.id}')">ลบ</button>`:'';
+  return`<div class="ecard">
+    <div class="ehd" onclick="toggleE('${pairId}')">
+      <span class="badge bexin">แลกเงิน</span>
+      <span class="edt">${exout.df}</span>
+      <span class="ett">↔ ${oname}</span>
+      <span class="eam" style="color:var(--purple);font-size:13px;">ให้ ${fmt(exout.amount||0)} / รับ ${fmt(exin.amount||0)}</span>
+      ${delBtn}
+    </div>
+    <div class="ebody" id="eb-${pairId}">${body}</div>
+  </div>`;
+}
+
+async function delExPair(ev,id1,id2){
+  ev.stopPropagation();
+  if(!confirm('ลบรายการแลกเงินนี้? (ทั้ง 2 ฝั่ง)'))return;
+  const ids=[id1,id2].filter(Boolean);
+  try{
+    for(const id of ids){
+      await sbDelete('entries',`id=eq.${id}`);
+      for(const rid of Object.keys(S.entries)){const l=ge(rid,S.month);const i=l.findIndex(e=>e.id===id);if(i>-1)l.splice(i,1);}
+    }
+    render();toast('ลบรายการแลกเงินแล้ว ✓');
+  }catch(err){toast('ลบไม่สำเร็จ: '+err.message);console.error(err);}
+}
 
 function renderEntry(e){
   const labels={count:'นับเงิน',income:'รายรับ',expense:'รายจ่าย',exin:'รับแลกเงิน',exout:'แลกเงินออก'};
