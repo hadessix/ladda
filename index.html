@@ -1864,13 +1864,17 @@ function renderOvChart(){
     const mk=`${year}-${String(i+1).padStart(2,'0')}`;
     if(mk>cp)return null;
     let tc=0,ti=0,te=0,tei=0,teo=0;
-    ids.forEach(sid=>{(S.entries[sid]||{})[mk]?.forEach(e=>{
-      if(e.type==='count')tc+=e.total||0;
-      else if(e.type==='income')ti+=e.amount||0;
-      else if(e.type==='expense')te+=e.amount||0;
-      else if(e.type==='exin')tei+=e.amount||0;
-      else if(e.type==='exout')teo+=e.amount||0;
-    });});
+    ids.forEach(sid=>{
+      (S.entries[sid]||{})[mk]?.forEach(e=>{
+        if(e.type==='count')tc+=e.total||0;
+        else if(e.type==='income')ti+=e.amount||0;
+        else if(e.type==='expense')te+=e.amount||0;
+        else if(e.type==='exin')tei+=e.amount||0;
+        else if(e.type==='exout')teo+=e.amount||0;
+      });
+      const sess=(S.sessions[sid]||{})[mk];
+      if(sess)sess.subs.forEach(s=>tc+=bv(s.bills||eb()));
+    });
     return tc+ti-te+tei-teo;
   });
   const mkDs=(label,color,data)=>({label,data,borderColor:color,backgroundColor:color+'22',tension:0.35,pointRadius:4,pointHoverRadius:6,spanGaps:false,borderWidth:2});
