@@ -774,49 +774,23 @@ function renderGroupContent(){
     `</div></div>`;
   }
 
-  // รายละเอียดแต่ละสาย
-  h+=`<div class="slbl">รายละเอียดแต่ละสาย</div>`;
+  // รวม entries จากทุกสาย
+  const allExpenses=[],allExIn=[];
   members.forEach(sh=>{
-    const ents=ge(sh.id,S.month);
-    const sess=gs(sh.id,S.month);
-    let tc=0,ti=0,te=0,tei=0,teo=0;
-    ents.forEach(e=>{
-      if(e.type==='count')tc+=e.total||0;
-      else if(e.type==='income')ti+=e.amount||0;
-      else if(e.type==='expense')te+=e.amount||0;
-      else if(e.type==='exin')tei+=e.amount||0;
-      else if(e.type==='exout')teo+=e.amount||0;
+    ge(sh.id,S.month).forEach(e=>{
+      if(e.type==='expense')allExpenses.push(e);
+      else if(e.type==='exin')allExIn.push(e);
     });
-    if(sess)sess.subs.forEach(s=>tc+=bv(s.bills||eb()));
-    const snet=tc+ti-te+tei-teo;
-    const scb=eb();
-    ents.forEach(e=>{
-      if(e.type==='count')(e.subs||[]).forEach(s=>BT.forEach(t=>scb[t]+=(s.bills[t]||0)));
-      else if(e.type==='income'||e.type==='exin'){if(e.bills)BT.forEach(t=>scb[t]+=(e.bills[t]||0));}
-      else if(e.type==='expense'||e.type==='exout'){if(e.bills)BT.forEach(t=>scb[t]-=(e.bills[t]||0));}
-    });
-    if(sess)sess.subs.forEach(s=>BT.forEach(t=>scb[t]+=(s.bills[t]||0)));
-    const hasSBills=BT.some(t=>scb[t]!==0);
-    h+=`<div class="grp-route-card">
-      <div class="grp-route-card-hd" onclick="toggleGrpCard('${sh.id}')">
-        <span style="width:10px;height:10px;border-radius:50%;background:${sh.color};display:inline-block;flex-shrink:0;"></span>
-        <span style="flex:1;font-size:14px;font-weight:600;">${sh.name}</span>
-        <span style="font-family:var(--mono);font-size:15px;font-weight:600;color:${snet>=0?'var(--green)':'var(--red)'};">${fmt(snet)}</span>
-        <button onclick="event.stopPropagation();setView('shop','${sh.id}')" style="margin-left:8px;background:var(--bdim);border:1px solid var(--bbr);color:var(--blue);border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;">เปิด →</button>
-      </div>
-      <div class="grp-route-card-body" id="grc-${sh.id}">
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px;">
-          <div class="sc"><div class="lb">นับได้</div><div class="vl pos" style="font-size:14px;">${fmt(tc)}</div></div>
-          <div class="sc"><div class="lb">รายรับ</div><div class="vl" style="color:var(--blue);font-size:14px;">${fmt(ti)}</div></div>
-          <div class="sc"><div class="lb">รายจ่าย</div><div class="vl" style="color:var(--amber);font-size:14px;">${fmt(te)}</div></div>
-          <div class="sc"><div class="lb">สุทธิ</div><div class="vl ${snet>=0?'pos':'neg'}" style="font-size:14px;">${fmt(snet)}</div></div>
-        </div>
-        ${hasSBills?`<div class="cumul"><div class="clb">แบงค์คงเหลือ</div><div class="chips">`+BT.filter(t=>scb[t]!==0).map(t=>{const neg=scb[t]<0;return`<span class="pill ${BC[t]}" style="${neg?'outline:1px solid var(--red);opacity:.8;':''}">฿${BL[t]} × ${neg?'<span style="color:var(--red)">':''}${fN(scb[t])}${neg?'</span>':''}</span>`;}).join('')+`</div></div>`:''}
-        ${sess?`<div style="font-size:12px;color:var(--green);padding:6px 0;">📋 มีรอบนับเงินที่ยังเปิดอยู่ — สะสม ${fmt(sess.subs.reduce((s,e)=>s+bv(e.bills||eb()),0))}</div>`:''}
-        ${ents.length>0?`<div class="slbl" style="margin-top:8px;">รายการ</div>`+renderEntriesList(ents):'<div style="font-size:12px;color:var(--text3);padding:8px 0;">ยังไม่มีรายการ</div>'}
-      </div>
-    </div>`;
   });
+  allExpenses.sort((a,b)=>(b.df||'')>(a.df||'')?1:-1);
+  allExIn.sort((a,b)=>(b.df||'')>(a.df||'')?1:-1);
+
+  if(grp.is_owner){
+    h+=`<div class="slbl">รายรับจากจ่ายเฮียรวย</div>`;
+    h+=allExIn.length>0?renderEntriesList(allExIn):`<div class="empty" style="padding:12px 0;"><p>ยังไม่มีรายรับ</p></div>`;
+  }
+  h+=`<div class="slbl">รายจ่าย</div>`;
+  h+=allExpenses.length>0?renderEntriesList(allExpenses):`<div class="empty" style="padding:12px 0;"><p>ยังไม่มีรายจ่าย</p></div>`;
   if(members.length===0)h+=`<div class="empty"><div class="ei">📭</div><p>ยังไม่มีสายในกลุ่มนี้</p></div>`;
   document.getElementById('content').innerHTML=h;
 }
