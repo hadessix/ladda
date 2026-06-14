@@ -1802,10 +1802,39 @@ function openIncomeGroup(){
   pickShopThen(members,'รายรับ','openIncome','income');
 }
 function openExpenseGroup(){
-  const members=(S.groupMembers[S.view.id]||[]).map(id=>S.shops.find(s=>s.id===id)).filter(Boolean);
-  if(members.length===0){toast('ไม่มีสายในกลุ่ม');return;}
-  if(members.length===1){setView('shop',members[0].id);openExpense();return;}
-  pickShopThen(members,'รายจ่าย','openExpense','expense');
+  const gid=S.view.id;
+  const cb=calcCBGroup(gid,S.month);
+  if(bv(cb)===0){toast('ไม่มีเงินในกลุ่มนี้');return;}
+  const grp=S.groups.find(g=>g.id===gid);
+  const body=`
+    ${cbBar(cb)}
+    <div style="height:12px;"></div>
+    <div class="frow">
+      <div class="fg"><label class="flbl">วันที่</label><input type="date" class="finp" id="ep_d" value="${today()}"></div>
+      <div class="fg"><label class="flbl">รายละเอียด</label><input type="text" class="finp" id="ep_t" placeholder="เช่น เงินเดือน, ค่าน้ำมัน"></div>
+    </div>
+    ${billInpWithLimit('ep',cb)}
+    <div class="tbar"><span class="tl">ยอดที่จ่ายออก</span><span class="tv" id="ep_tot">฿0</span></div>`;
+  OM(`เพิ่มรายจ่าย — ${grp?.name||'กลุ่ม'}`,body,`<button class="btn btn-x" onclick="CMask()">ยกเลิก</button><button class="btn btn-a" onclick="saveExpenseGroup('${gid}')">บันทึก</button>`);
+}
+async function saveExpenseGroup(gid){
+  const d=document.getElementById('ep_d').value;
+  const t=document.getElementById('ep_t').value||'รายจ่าย';
+  const bills=gb('ep');
+  const amount=bv(bills);
+  if(!d){toast('กรุณาเลือกวันที่');return;}
+  if(amount===0){toast('กรุณาเลือกแบงค์ที่จ่ายออกอย่างน้อย 1 ใบ');return;}
+  const cbGrp=calcCBGroup(gid,S.month);
+  const over=BT.find(tt=>bills[tt]>(cbGrp[tt]||0));
+  if(over){toast(`แบงค์ ฿${BL[over]} เกินจำนวนที่มีในกลุ่ม (มี ${fN(cbGrp[over]||0)} ใบ)`);return;}
+  const sid=firstRouteWithMoney(gid,S.month);
+  if(!sid){toast('ไม่พบสายที่มีเงิน');return;}
+  const entry={id:uid(),type:'expense',df:d,dt:d,amount,title:t,note:null,bills};
+  try{
+    await sbUpsert('entries',entryToRow(entry,sid,S.month));
+    ge(sid,S.month).push(entry);
+    CM();render();toast(`บันทึกรายจ่าย ${fmt(amount)} แล้ว ✓`);
+  }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
 }
 function pickShopThen(members,label,fn,type){
   const colorMap={count:'btn-g',income:'btn-b',expense:'btn-a'};
