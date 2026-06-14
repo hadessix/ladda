@@ -133,11 +133,11 @@ main{display:flex;flex:1;overflow:hidden;}
 .fsel{width:100%;padding:12px 14px;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-family:var(--font);font-size:16px;}
 .frow{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .bgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
-.bcell{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:8px 10px;}
+.bcell{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;}
 .bcell label{display:block;margin-bottom:4px;}
-.bcell input{width:100%;background:transparent;border:none;color:var(--text);font-family:var(--mono);font-size:16px;font-weight:500;}
+.bcell input{width:100%;background:transparent;border:none;color:var(--text);font-family:var(--mono);font-size:18px;font-weight:500;}
 .bcell input:focus{outline:none;}
-.bsub{font-size:11px;color:var(--text3);margin-top:3px;font-family:var(--mono);}
+.bsub{font-size:14px;color:var(--text2);margin-top:3px;font-family:var(--mono);}
 .tbar{background:var(--bg);border:1px solid var(--gbr);border-radius:8px;padding:10px 14px;margin:10px 0;display:flex;align-items:center;justify-content:space-between;}
 .tbar .tl{font-size:13px;color:var(--text2);}
 .tbar .tv{font-family:var(--mono);font-size:20px;font-weight:600;color:var(--green);}
@@ -159,7 +159,7 @@ main{display:flex;flex:1;overflow:hidden;}
 .bgrid-ex .bcell:first-child{border-top:1px solid var(--border);}
 .bgrid-ex .bcell label{display:flex;align-items:center;gap:6px;margin-bottom:6px;}
 .bgrid-ex .bcell input{font-size:20px;width:100%;}
-.bgrid-ex .bsub{font-size:13px;color:var(--text3);margin-top:2px;}
+.bgrid-ex .bsub{font-size:14px;color:var(--text2);margin-top:2px;}
 .exch-col-body{padding:0;}
 /* make both columns same height rows by using CSS grid on the outer cols */
 .exch-cols{display:grid;grid-template-columns:1fr 36px 1fr;gap:0;align-items:start;}
@@ -887,7 +887,7 @@ function billInpWithLimit(p,cb){
   const g='bgrid';
   return`<div class="${g}">`+BT.map(t=>{
     const max=cb[t]||0;
-    return`<div class="bcell"><label><span class="pill ${BC[t]}">฿${BL[t]}</span><span style="font-size:10px;color:var(--text3);margin-left:4px;">มี ${fN(max)}</span></label><input type="number" min="0" max="${max}" value="0" id="${p}_${t}" oninput="updBLimit('${p}')" inputmode="numeric"><div class="bsub" id="${p}s_${t}">= ฿0</div></div>`;
+    return`<div class="bcell"><label><span class="pill ${BC[t]}">฿${BL[t]}</span><span style="font-size:14px;color:var(--text2);margin-left:6px;">มี ${fN(max)}</span></label><input type="number" min="0" max="${max}" value="0" id="${p}_${t}" oninput="updBLimit('${p}')" inputmode="numeric"><div class="bsub" id="${p}s_${t}">= ฿0</div></div>`;
   }).join('')+`</div>`;
 }
 function updBLimit(p){
@@ -1316,13 +1316,13 @@ function openExchange(fromShop,lockedId){
       <div style="padding:10px 12px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);">
         <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span class="pill ${BC[t]}">฿${BL[t]}</span><span id="xlbl_L_${t}" style="font-size:11px;color:var(--text3);">มี ${fN(maxL)} ใบ</span></label>
         <input type="number" min="0" max="${maxL}" value="0" id="xL_${t}" oninput="updBLimit('xL')" inputmode="numeric" style="font-size:20px;width:100%;background:transparent;border:none;color:var(--text);font-family:var(--mono);font-weight:500;">
-        <div style="font-size:13px;color:var(--text3);margin-top:2px;font-family:var(--mono);" id="xLs_${t}">= ฿0</div>
+        <div style="font-size:14px;color:var(--text2);margin-top:2px;font-family:var(--mono);" id="xLs_${t}">= ฿0</div>
       </div>
       <div style="background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--border2);font-size:12px;">—</div>
       <div style="padding:10px 12px;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">
         <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span class="pill ${BC[t]}">฿${BL[t]}</span><span id="xlbl_R_${t}" style="font-size:11px;color:var(--text3);">มี ${fN(maxR)} ใบ</span></label>
         <input type="number" min="0" max="${maxR}" value="0" id="xR_${t}" oninput="updBLimit('xR')" inputmode="numeric" style="font-size:20px;width:100%;background:transparent;border:none;color:var(--text);font-family:var(--mono);font-weight:500;">
-        <div style="font-size:13px;color:var(--text3);margin-top:2px;font-family:var(--mono);" id="xRs_${t}">= ฿0</div>
+        <div style="font-size:14px;color:var(--text2);margin-top:2px;font-family:var(--mono);" id="xRs_${t}">= ฿0</div>
       </div>
     </div>`;
   }).join('');
