@@ -953,7 +953,7 @@ function updBLimit(p){
     let v=parseInt(inp.value)||0;
     const max=cb[t]??0;
     if(v>max){v=max;inp.value=max;inp.style.color='var(--red)';over=true;}
-    else inp.style.color='';
+    else inp.style.color='var(--text)';
     const denom=t==='coin'?1:parseInt(t);
     const val=denom*v;
     tot+=val;
