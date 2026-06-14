@@ -37,8 +37,8 @@ Everything lives in `index.html` in this order:
    - Auth (`authInit`, `sha256`, `pinCheck`, `showApp`, `logout`, `isAdmin`)
    - Render functions (`render`, `renderSidebar`, `renderContent`, `renderShopContent`, `renderGroupContent`)
    - Overview page (`showOverview`, `backToMain`, `renderOverview`, `renderOvTabs`, `toggleOvVisible`, `setOvYear`, `setOvMonth`)
-   - Feature logic (count sessions, income, expense, exchange, payowner, auto-collect)
-   - Modal helpers (`OM`, `CM`, `toast`)
+   - Feature logic (count, income, expense, exchange, payowner)
+   - Modal helpers (`OM`, `CM`, `CMask`, `toast`)
 
 ## Global State
 
@@ -122,8 +122,8 @@ RLS is disabled; anon key has full CRUD on all tables (accessed only via Worker)
 | `count` | รอบนับเงิน (has `subs[]`) | +total |
 | `income` | รายรับพิเศษ | +amount |
 | `expense` | รายจ่าย | -amount |
-| `exin` | รับแลกเงิน / รับจากจ่ายเฮียรวย / รับ auto-collect | +amount |
-| `exout` | แลกเงินออก / จ่ายเฮียรวย / โอน auto-collect | -amount |
+| `exin` | รับแลกเงิน / รับจากจ่ายเฮียรวย | +amount |
+| `exout` | แลกเงินออก / จ่ายเฮียรวย | -amount |
 
 > **Summary cards**: `tIncome` = `income` only, `tExpense` = `expense` only — exin/exout ไม่นับในช่องรายรับ/รายจ่าย แต่รวมใน net: `net = tCount + tIncome − tExpense + tExIn − tExOut`
 
@@ -177,17 +177,26 @@ RLS is disabled; anon key has full CRUD on all tables (accessed only via Worker)
 ## Key Patterns
 
 - **bills object**: `{ 1000: n, 500: n, 100: n, 50: n, 20: n, coin: n }` — `coin` = ฿1 each; use `bv(bills)` to compute total
-- **month_key**: `"YYYY-MM"` — fiscal period starts on 11th of month; `cpk()` returns current period key
+- **month_key**: `"YYYY-MM"` — fiscal period starts on 11th of month; `cpk()` returns current period key; `shopTot(sid, mk)` accepts optional `mk` param — always pass `mk` explicitly when computing for a specific month, not current
 - **tab_flags**: `{ count, income, expense, exchange, payowner, auto_collect, viewer_visible }` — controls tabs + visibility; `curTabFlags()` returns flags for current view
 - **`_cbMap` global**: stores bill-input callbacks by prefix to avoid JSON.stringify/double-quote conflicts in inline `oninput` attributes
-- **`calcCB(sid, mk)`**: computes cumulative bills in cash box at a given month by replaying all entries
+- **`calcCB(sid, mk)`**: computes cumulative bills in cash box for a single route at a given month by replaying all entries
+- **`calcCBGroup(gid, mk)`**: sums `calcCB()` across **all** routes in the group (not just the first). Use this whenever checking group balance.
+- **`firstRouteWithMoney(gid, mk)`**: returns first route in group that has a positive balance; used to pick the source route when writing exout entries for a group
+- **Modal UX**: modals are fullscreen (`width:100%; height:100%`); clicking outside does NOT close; close button calls `CMask()` which calls `confirm()` before closing to prevent accidental data loss
 - **Exchange modal** (`openExchange(fromShop, lockedId)`):
-  - Right dropdown: `r:${id}` prefix for routes, `g:${id}` for groups
-  - Routes/groups with zero balance filtered out
-  - Self-exchange validation: cannot exchange with self or own group
+  - Left dropdown: groups (`g:${id}`) + standalone routes (`r:${id}`) — **not** individual routes that are in a group
+  - Right dropdown: same rule, excludes self and own group
+  - Both sides specify bills to give out (bilateral swap); each side validated against `calcCBGroup` (for groups) or `calcCB` (for routes)
+  - When group is on left: exout entry saved to `firstRouteWithMoney(Lid)`, not always first route
+  - When group is on right: exout entry saved to `firstRouteWithMoney(Rid)`, validated against `calcCBGroup`
+  - Paired exout+exin entries (same `oid`, same `df`) are displayed as **one combined row** via `renderEntriesList` + `renderExchangePair`; delete button (`delExPair`) deletes both at once
 - **Pay-owner tab**: `tab_flags.payowner`; target group must have `is_owner=true`; saves exout+exin
-- **Auto-collect** (`tab_flags.auto_collect` on group): after sub-shop summarizes, auto exout→exin to first route (collector); first route is exempt
-- **Count session**: open → add subs → **แก้ไข sub ได้ก่อนสรุป** → สรุปรอบ → finalized entry; หลังสรุปแก้ไขไม่ได้
+- **Count flow** (simplified — no session step):
+  - `openCount()` opens a modal with bill inputs; pressing "บันทึก" calls `saveCountDirect()` immediately
+  - `saveCountDirect()` creates a `count` entry directly (no intermediate session); entry has `subs:[{df,dt,bills}]`
+  - If a stale open session exists from old data, it shows "สรุปรอบค้าง" + "ยกเลิก" buttons only
+  - **No auto-collect** on count save (removed to prevent orphaned exout entries on delete)
 - **Sidebar icon**: `⭐` = is_owner group, `⚡` = auto_collect group, `📁` = normal group
 
 ## Function Reference
@@ -219,32 +228,33 @@ RLS is disabled; anon key has full CRUD on all tables (accessed only via Worker)
 | `renderOvChart()` | render/update Chart.js line chart; items = กลุ่ม + standalone; เลือกกลุ่มเดียว → drilldown รายสาย |
 | `toggleOvShop(id)` | toggle กลุ่ม/สายใน `_ovShopVis` Set → renderOvChart() |
 | `_ovCalc(ids)` | helper คำนวณยอดรวมจาก shop id หลายสาย |
-| `groupTot(gid)` | ยอดรวมของกลุ่ม |
+| `groupTot(gid,mk)` | ยอดรวมของกลุ่ม (รับ mk optional) |
+| `shopTot(sid,mk)` | ยอดสุทธิของสาย **ของเดือน mk** (mk required เมื่อไม่ใช่เดือนปัจจุบัน) |
+| `grandTot()` | ยอดรวมทุกสาย |
 | `groupedRouteIds()` | Set ของ routeId ที่อยู่ในกลุ่ม |
 | `cpk()` | คืน month key ปัจจุบัน |
 | `bv(bills)` | คำนวณยอดจาก bills object |
-| `shopTot(sid)` | ยอดสุทธิของสาย |
-| `grandTot()` | ยอดรวมทุกสาย |
-| `calcCB(sid,mk)` | แบงค์คงเหลือในกล่อง ณ เดือนนั้น |
-| `calcCBGroup(gid,mk)` | แบงค์คงเหลือของ route แรกใน group |
+| `calcCB(sid,mk)` | แบงค์คงเหลือในกล่องของ route เดียว ณ เดือนนั้น |
+| `calcCBGroup(gid,mk)` | แบงค์คงเหลือรวมทุก route ในกลุ่ม |
+| `firstRouteWithMoney(gid,mk)` | route แรกในกลุ่มที่มียอด > 0 (fallback: route แรก) |
 | `ge/gs/ss/cs` | entries array / get/set/clear session |
 | `sbGet/sbUpsert/sbDelete` | Worker API helpers (ต้องมี token) |
 | `entryToRow/rowToEntry` | map JS ↔ Supabase fields |
-| `openCount()` | เริ่มรอบนับเงิน หรือ addSubCount() |
-| `addSubCount()` | เพิ่ม sub ครั้งใหม่ |
-| `editSubCount(idx)` | แก้ไข sub ครั้งที่ idx (เฉพาะ session ที่ยังเปิด) |
-| `saveEditSub(idx)` | บันทึกการแก้ไข sub |
-| `summarize()` | สรุปรอบ → entry + auto-collect |
-| `cancelSess()` | ยกเลิก session |
-| `openExchange/saveExchange` | modal แลกเงิน |
-| `refreshExchangeCB(fromShop)` | อัปเดต cap เมื่อเปลี่ยนปลายทาง |
+| `openCount()` | เปิด modal นับเงิน (ไม่มี session step) |
+| `saveCountDirect()` | บันทึก count entry ทันที ไม่ผ่าน session |
+| `openExchange/saveExchange` | modal แลกเงิน (bilateral, group-aware) |
+| `refreshExchangeCB(fromShop)` | อัปเดต cap + label เมื่อเปลี่ยน dropdown |
+| `renderEntriesList(entries)` | render รายการ; จับคู่ exout+exin (oid+df เดียวกัน) → renderExchangePair |
+| `renderExchangePair(exout,exin)` | render คู่แลกเงินเป็น row เดียว (badge แลกเงิน, ยอดสองฝั่ง) |
+| `delExPair(ev,id1,id2)` | ลบ exout+exin คู่พร้อมกัน |
+| `renderEntry(e)` | render entry เดี่ยว (count/income/expense/exin/exout ที่ไม่มีคู่) |
 | `openPayOwner/openPayOwnerGroup/savePayOwner` | จ่ายเฮียรวย |
 | `billInp/billInpWithLimit/updB/updBLimit/gb` | bill input helpers |
 | `addShop/saveShop/editShop/saveEditShop/deleteShop` | จัดการสาย (admin) |
 | `addGroup/saveGroup/editGroup/saveEditGroup/deleteGroup` | จัดการกลุ่ม (admin) |
 | `tfChips/getTf/toggleTf` | tab_flags chip UI |
 | `toggleGrpCard(id)` | ขยาย/ยุบ card ใน group view |
-| `OM/CM/toast` | modal open/close, notification |
+| `OM/CM/CMask/toast` | modal open/close/confirm-close, notification |
 
 ## Security
 
@@ -265,6 +275,12 @@ RLS is disabled; anon key has full CRUD on all tables (accessed only via Worker)
 
 - [x] SHA-256 PIN hashing + Cloudflare Worker proxy
 - [x] Viewer role + Overview page
+- [x] Modal fullscreen + confirm-before-close (CMask)
+- [x] shopTot / groupTot แยกรายเดือน (ไม่สะสมข้ามเดือน)
+- [x] Exchange dropdown: กลุ่ม + standalone เท่านั้น (ไม่มี route ในกลุ่ม)
+- [x] calcCBGroup รวมทุก route ในกลุ่ม + firstRouteWithMoney
+- [x] Count บันทึกตรง (saveCountDirect) ไม่มี session step
+- [x] Exchange pair แสดงเป็น row เดียว (renderExchangePair)
 - [ ] Supabase RLS per authenticated user
 - [ ] PWA — manifest + service worker
 - [ ] Export รายงาน (PDF / Excel)
