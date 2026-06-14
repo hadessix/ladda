@@ -504,15 +504,17 @@ function gs(sid,mk){return(S.sessions[sid]||{})[mk]||null;}
 function ss(sid,mk,v){if(!S.sessions[sid])S.sessions[sid]={};S.sessions[sid][mk]=v;}
 function cs(sid,mk){if(S.sessions[sid])delete S.sessions[sid][mk];}
 
-function shopTot(sid){
+function shopTot(sid,mk){
+  const m=mk||S.month;
   let t=0;
-  Object.values(S.entries[sid]||{}).forEach(list=>list.forEach(e=>{
+  (S.entries[sid]?.[m]||[]).forEach(e=>{
     if(e.type==='count')t+=e.total||0;
     else if(e.type==='income'||e.type==='exin')t+=e.amount||0;
     else if(e.type==='expense'||e.type==='exout')t-=e.amount||0;
-  }));
+  });
   // open sessions
-  Object.values(S.sessions[sid]||{}).forEach(sess=>{if(sess)sess.subs.forEach(sub=>t+=bv(sub.bills||eb()));});
+  const sess=S.sessions[sid]?.[m];
+  if(sess)sess.subs.forEach(sub=>t+=bv(sub.bills||eb()));
   return t;
 }
 function grandTot(){return S.shops.reduce((s,sh)=>s+shopTot(sh.id),0);}
@@ -523,7 +525,7 @@ function render(){if(window._returnToGroup){S.view={type:'group',id:window._retu
 // helper: รายชื่อ routeId ที่อยู่ในกลุ่มใดกลุ่มหนึ่ง
 function groupedRouteIds(){const s=new Set();Object.values(S.groupMembers).forEach(ids=>ids.forEach(id=>s.add(id)));return s;}
 // helper: ยอดรวมกลุ่ม
-function groupTot(gid){return(S.groupMembers[gid]||[]).reduce((s,id)=>s+shopTot(id),0);}
+function groupTot(gid,mk){return(S.groupMembers[gid]||[]).reduce((s,id)=>s+shopTot(id,mk),0);}
 // helper: tab_flags ของ view ปัจจุบัน
 function curTabFlags(){
   if(S.view.type==='group'){const g=S.groups.find(x=>x.id===S.view.id);return g?.tab_flags||{count:true,income:true,expense:true,exchange:true,payowner:false};}
