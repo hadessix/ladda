@@ -706,11 +706,10 @@ function renderShopContent(){
     const sessTotal=sess.subs.reduce((s,e)=>s+bv(e.bills||eb()),0);
     const n=sess.subs.length;
     h+=`<div class="sess"><div class="sess-hd"><div>
-      <div class="sess-title">📋 รอบนับเงิน — กำลังดำเนินการ</div>
+      <div class="sess-title">📋 มีรอบนับเงินค้างอยู่</div>
       <div class="sess-sub">${n} ครั้ง · สะสม ${fmt(sessTotal)}</div>
     </div><div class="sess-btns">
-      <button class="btn btn-g btn-sm" onclick="addSubCount()">+ เพิ่มครั้ง</button>
-      <button class="btn btn-b btn-sm" onclick="summarize()">✓ สรุปรอบนี้</button>
+      <button class="btn btn-b btn-sm" onclick="summarize()">✓ สรุปรอบค้าง</button>
       <button class="btn btn-x btn-sm" onclick="cancelSess()">ยกเลิก</button>
     </div></div>`;
     sess.subs.forEach((s,i)=>{
@@ -921,21 +920,46 @@ function updB(p){
 function gb(p){const b={};BT.forEach(t=>b[t]=parseInt(document.getElementById(`${p}_${t}`)?.value)||0);return b;}
 
 // ─── COUNT SESSION ───
-// Each "round" is a session. Within a round user can add sub-entries (ครั้งที่ 1, 2, 3...).
-// After summarize, the round becomes a saved "count" entry. A new round starts fresh.
 function openCount(){
-  const sess=gs(S.shop,S.month);
-  if(sess){addSubCount();return;}
-  // Start a new round — show sub-entry form for ครั้งที่ 1
-  showSubForm(`เริ่มรอบนับเงิน — ครั้งที่ 1`,null,saveSubHandler);
+  const prevRounds=ge(S.shop,S.month).filter(e=>e.type==='count').length;
+  const body=`
+    <div class="frow">
+      <div class="fg"><label class="flbl">วันที่เริ่ม</label><input type="date" class="finp" id="sf_df" value="${today()}"></div>
+      <div class="fg"><label class="flbl">วันที่สิ้นสุด</label><input type="date" class="finp" id="sf_dt" value="${today()}"></div>
+    </div>
+    <div class="tbar"><span class="tl">ยอดที่นับได้</span><span class="tv" id="sf_tot">฿0</span></div>
+    ${billInp('sf')}`;
+  OM(`นับเงิน (รอบ ${prevRounds+1})`,body,`<button class="btn btn-x" onclick="CMask()">ยกเลิก</button><button class="btn btn-g" onclick="saveCountDirect()">บันทึก</button>`);
 }
-function addSubCount(){
-  const sess=gs(S.shop,S.month);
-  if(!sess){toast('ไม่มีรอบที่เปิดอยู่');return;}
-  const n=sess.subs.length+1;
-  const prev=sess.subs.reduce((s,e)=>s+bv(e.bills||eb()),0);
-  showSubForm(`เพิ่มครั้งที่ ${n}`,prev,saveSubHandler);
+async function saveCountDirect(){
+  const df=document.getElementById('sf_df').value;
+  const dt=document.getElementById('sf_dt').value||df;
+  if(!df){toast('กรุณาเลือกวันที่');return;}
+  const bills=gb('sf');
+  const total=bv(bills);
+  if(total===0){toast('กรุณาใส่จำนวนแบงค์ที่นับได้');return;}
+  const prevRounds=ge(S.shop,S.month).filter(e=>e.type==='count').length;
+  const entry={id:uid(),type:'count',df,dt,total,subs:[{df,dt,bills}],title:`รอบ ${prevRounds+1}`};
+  try{
+    await sbUpsert('entries',entryToRow(entry,S.shop,S.month));
+    ge(S.shop,S.month).push(entry);
+    const _gid=Object.keys(S.groupMembers).find(gid=>(S.groupMembers[gid]||[]).includes(S.shop));
+    const _grp=_gid?S.groups.find(g=>g.id===_gid):null;
+    const _collector=_gid?(S.groupMembers[_gid]||[])[0]:null;
+    if(_grp?.tab_flags?.auto_collect&&_collector&&_collector!==S.shop){
+      const d=today(),mk2=S.month,sid=S.shop;
+      const fromName=S.shops.find(s=>s.id===sid)?.name||'?';
+      const eOut={id:uid(),type:'exout',df:d,dt:d,amount:total,title:`โอนเข้ากลุ่ม ${_grp.name}`,note:'',bills,oid:_collector};
+      const eIn={id:uid(),type:'exin',df:d,dt:d,amount:total,title:`รับจาก ${fromName}`,note:'',bills,oid:sid};
+      await sbUpsert('entries',[entryToRow(eOut,sid,mk2),entryToRow(eIn,_collector,mk2)]);
+      ge(sid,mk2).push(eOut);ge(_collector,mk2).push(eIn);
+      CM();render();toast(`บันทึกนับเงินรอบ ${prevRounds+1} · โอน ${fmt(total)} เข้ากลุ่ม ${_grp.name} ✓`);
+    } else {
+      CM();render();toast(`บันทึกนับเงินรอบ ${prevRounds+1} รวม ${fmt(total)} ✓`);
+    }
+  }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
 }
+function addSubCount(){}
 async function saveSubHandler(){
   const df=document.getElementById('sf_df').value;
   const dt=document.getElementById('sf_dt').value||df;
@@ -1265,27 +1289,24 @@ function openExchange(fromShop,lockedId){
   // สร้าง options ฝั่งขวา: standalone routes + groups (ยกเว้น route ที่อยู่ใน group ใดก็ตาม และยกเว้น group ของตัวเอง)
   const groupedIds=groupedRouteIds();
   if(fromShop&&bv(calcCB(lockedId,S.month))===0){toast('ไม่มีเงินในกล่อง ไม่สามารถแลกได้');return;}
-  const rightRoutes=fromShop
-    ?S.shops.filter(s=>!groupedIds.has(s.id)&&s.id!==lockedId&&bv(calcCB(s.id,S.month))>0)
-    :S.shops.filter(s=>bv(calcCB(s.id,S.month))>0);
+  const rightRoutes=S.shops.filter(s=>!groupedIds.has(s.id)&&s.id!==lockedId&&bv(calcCB(s.id,S.month))>0);
   const rightGroups=fromShop
     ?S.groups.filter(g=>g.id!==myGroupId&&bv(calcCBGroup(g.id,S.month))>0)
     :S.groups.filter(g=>bv(calcCBGroup(g.id,S.month))>0);
-  if(fromShop&&rightRoutes.length===0&&rightGroups.length===0){toast('ไม่มีสายหรือกลุ่มที่มีเงินสำหรับแลก');return;}
-  if(!fromShop&&S.shops.filter(s=>bv(calcCB(s.id,S.month))>0).length<2){toast('ต้องมีสายที่มีเงินอย่างน้อย 2 สาย');return;}
+  if(rightRoutes.length===0&&rightGroups.length===0){toast('ไม่มีกลุ่มหรือสายที่มีเงินสำหรับแลก');return;}
 
   // left options (ถ้า fromShop ล็อค)
   const leftShop=fromShop?S.shops.find(s=>s.id===lockedId):null;
   const leftName=leftShop?.name||'';
 
-  // right options: routes ก่อน แล้ว groups
+  // right options: standalone routes ก่อน แล้ว groups
   const rightOpts=[
     ...rightRoutes.map(s=>`<option value="r:${s.id}">${s.name}</option>`),
     ...rightGroups.map(g=>`<option value="g:${g.id}">📁 ${g.name}</option>`)
   ].join('');
 
-  // left options (กรณี fromShop=false เลือกได้ — เฉพาะสายที่มีเงิน)
-  const cashShops=S.shops.filter(s=>bv(calcCB(s.id,S.month))>0);
+  // left options (กรณี fromShop=false เลือกได้ — เฉพาะ standalone routes ที่มีเงิน)
+  const cashShops=S.shops.filter(s=>!groupedIds.has(s.id)&&bv(calcCB(s.id,S.month))>0);
   const leftAllOpts=cashShops.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
 
   const leftDefault=fromShop?lockedId:cashShops[0]?.id;
