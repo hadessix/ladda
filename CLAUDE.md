@@ -271,6 +271,99 @@ RLS is disabled; anon key has full CRUD on all tables (accessed only via Worker)
 - Secrets: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `HASH_USER`, `HASH_ADMIN`, `HASH_VIEWER`, `JWT_SECRET`
 - 401 จาก Worker → `logout()` อัตโนมัติ
 
+## Payroll System (`PR` state)
+
+เพิ่มใน branch `feat/payroll` — admin-only หน้าเงินเดือนแยกจาก main app
+
+### การเข้าถึง
+- ปุ่ม **💼 เงินเดือน** ใน header (แสดงเฉพาะ admin)
+- `showPayroll()` → ซ่อน `#app` + แสดง `#payroll-screen`
+- `backFromPayroll()` → กลับ main app
+
+### Global State
+```js
+PR = {
+  tab: 'periods' | 'employees',
+  month: "YYYY-MM",   // BE year, calendar month เช่น "2568-06"
+  employees: [],
+  loans: [],          // employee_loans
+  periods: [],        // payroll_periods
+  entries: [],        // payroll_entries
+  deductions: [],     // payroll_deductions
+  _loaded: false
+}
+```
+
+### Payroll Tables (Supabase)
+```sql
+employees         -- โปรไฟล์พนักงาน (ติดตามตัวคน ไม่ใช่สาย)
+employee_loans    -- บัตร(ใบอนุญาต)/ยืม ที่ผ่อนอยู่
+payroll_periods   -- งวด 10 วัน (3 งวด/เดือน)
+payroll_entries   -- สลิปต่อคนต่องวด
+payroll_deductions -- รายการหักแต่ละรายการในสลิป
+```
+
+> **สำคัญ**: ต้อง GRANT + disable RLS ให้ทุก table ใหม่ เพราะ Supabase SQL editor ไม่ auto-grant anon role
+> ```sql
+> grant all on table employees to anon, authenticated, service_role;
+> -- (ทำซ้ำสำหรับทุก table)
+> alter table employees disable row level security;
+> -- (ทำซ้ำสำหรับทุก table)
+> ```
+
+### Period Keys
+- รูปแบบ: `"YYYY-MM-A"` (BE year, calendar month)
+- A = 1–10 จ่าย 11, B = 11–20 จ่าย 21, C = 21–31 จ่าย 1 ของเดือนถัดไป
+
+### สูตรคำนวณ net_pay
+```
+ค่าแรง (daily_rate) × วันทำงาน + โบนัส − รวมหัก (deductions) − เบิก (advance)
+```
+
+### Employee Status
+- `active` → ทำงานอยู่
+- `resigned` → ออกแล้ว (มีประวัติ)
+- `blacklisted` → ห้ามรับกลับ (มีหนี้ค้าง)
+
+### Loan Types
+- `permit` → บัตรใบอนุญาตทำงาน (ผ่อนงวด)
+- `loan` → ยืมเงิน (ผ่อนงวด, อนาคตมีดอกเบี้ย)
+- `other` → อื่นๆ
+
+### Flow การจ่ายเงิน
+1. `generatePeriod(beYM, slot)` → สร้างงวด + entries ทุกคน + auto-ดึง deductions จาก active loans
+2. admin แก้ days_worked / bonus / advance ได้ในแต่ละ entry
+3. `markPeriodPaid(periodId)` → status='paid' + อัปเดต `paid_amount` ใน employee_loans
+4. loan ที่ paid_amount >= total_amount → status='completed' อัตโนมัติ
+
+### ฟังก์ชัน Payroll หลัก
+| ฟังก์ชัน | หน้าที่ |
+|---|---|
+| `showPayroll()` | เปิดหน้าเงินเดือน + โหลดข้อมูล |
+| `loadPayroll()` | โหลด 5 tables พร้อมกัน |
+| `setPrTab(tab)` | เปลี่ยน tab periods/employees |
+| `generatePeriod(beYM,slot)` | สร้างงวด + entries + deductions |
+| `openPeriod(periodId)` | modal แสดงสลิปทุกคนในงวด |
+| `prUpdateEntry(id,field,val)` | แก้ days/bonus/advance แล้ว save |
+| `openPrEntryDetail(id,periodId)` | modal แก้ละเอียดต่อคน |
+| `openAddDed(entryId,periodId)` | เพิ่มรายการหัก (จาก loan หรือ manual) |
+| `markPeriodPaid(periodId)` | จ่ายแล้ว + update loans |
+| `renderPrEmployees()` | tab พนักงาน (แยก active/inactive) |
+| `openAddEmployee()` | modal เพิ่มพนักงาน |
+| `saveEmployee(editId)` | บันทึกพนักงาน |
+| `openEmpDetail(empId)` | โปรไฟล์พนักงาน + ประวัติ loan |
+| `setEmpStatus(empId,status)` | active/resigned/blacklisted |
+| `openAddLoan(empId)` | เพิ่ม loan/บัตร |
+| `saveLoan(empId)` | บันทึก loan |
+
+### งานที่ยังต้องทำ (Payroll)
+- [ ] นำเข้าข้อมูลพนักงานจาก Excel (G:\...\งด.พนง เฮียรวย\2569\)
+- [ ] รูปใบอนุญาตทำงาน (Supabase Storage)
+- [ ] ดอกเบี้ยเงินยืม (5–10%)
+- [ ] โปรไฟล์พนักงาน (feature #3)
+- [ ] เชื่อมระบบเช็คเวลาเข้างาน (feature #2)
+- [ ] merge feat/payroll → main แล้ว deploy production
+
 ## Roadmap
 
 - [x] SHA-256 PIN hashing + Cloudflare Worker proxy
@@ -281,6 +374,10 @@ RLS is disabled; anon key has full CRUD on all tables (accessed only via Worker)
 - [x] calcCBGroup รวมทุก route ในกลุ่ม + firstRouteWithMoney
 - [x] Count บันทึกตรง (saveCountDirect) ไม่มี session step
 - [x] Exchange pair แสดงเป็น row เดียว (renderExchangePair)
+- [x] Payroll system — employees, loans, periods, auto-calculation (feat/payroll)
+- [ ] นำเข้าพนักงานจาก Excel + รูปใบอนุญาต
+- [ ] ระบบเช็คเวลาเข้างาน (feature #2)
+- [ ] โปรไฟล์พนักงาน (feature #3)
 - [ ] Supabase RLS per authenticated user
 - [ ] PWA — manifest + service worker
 - [ ] Export รายงาน (PDF / Excel)
