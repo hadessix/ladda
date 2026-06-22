@@ -2433,7 +2433,10 @@ function renderPrEmployees(){
   const active=PR.employees.filter(e=>e.status==='active');
   const inactive=PR.employees.filter(e=>e.status!=='active');
   const byRoute={};
-  active.forEach(emp=>{const k=emp.route_id||'__none__';if(!byRoute[k])byRoute[k]=[];byRoute[k].push(emp);});
+  active.forEach(emp=>{
+    const k=emp.route_id?emp.route_id:emp.department?`__dept__${emp.department}`:'__none__';
+    if(!byRoute[k])byRoute[k]=[];byRoute[k].push(emp);
+  });
   const routeOpts=S.shops.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
   const unassigned=active.filter(e=>!e.route_id).length;
   let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:8px;flex-wrap:wrap;">
@@ -2465,15 +2468,20 @@ function renderPrEmployees(){
   // sort routes by shop sort_order; __none__ last
   const sortedRouteKeys=Object.keys(byRoute).sort((a,b)=>{
     if(a==='__none__')return 1;if(b==='__none__')return -1;
+    if(a.startsWith('__dept__')&&!b.startsWith('__dept__'))return 1;
+    if(!a.startsWith('__dept__')&&b.startsWith('__dept__'))return -1;
+    if(a.startsWith('__dept__')&&b.startsWith('__dept__'))return a.localeCompare(b,'th');
     const ra=S.shops.find(s=>s.id===a);const rb=S.shops.find(s=>s.id===b);
     return (ra?.sort_order||0)-(rb?.sort_order||0);
   });
   html+=`<div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;">`;
   sortedRouteKeys.forEach((rid,ri)=>{
     const emps=byRoute[rid];
-    const rt=S.shops.find(s=>s.id===rid);
+    const isDept=rid.startsWith('__dept__');
+    const deptName=isDept?rid.replace('__dept__',''):'';
+    const rt=!isDept&&rid!=='__none__'?S.shops.find(s=>s.id===rid):null;
     const rtColor=rt?.color||'#555';
-    const rtName=rt?rt.name:'ไม่มีสาย';
+    const rtName=isDept?deptName:rt?rt.name:'ไม่มีสาย';
     const chips=emps.map(emp=>{
       const loans=PR.loans.filter(l=>l.employee_id===emp.id&&l.status==='active');
       return `<div onclick="openEmpDetail('${emp.id}')" style="display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;cursor:pointer;min-width:80px;transition:background .15s;" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='var(--bg2)'">
@@ -2481,9 +2489,12 @@ function renderPrEmployees(){
         <div style="font-size:11px;color:var(--text3);font-family:var(--mono);">${fmt(emp.daily_rate||0)}</div>
       </div>`;
     }).join('');
+    const leftBg=isDept?'#6366f118':rid==='__none__'?'var(--bg3)':`${rtColor}18`;
+    const leftBorder=isDept?'#6366f1':rid==='__none__'?'var(--border2)':rtColor;
+    const leftIcon=isDept?`<div style="font-size:14px;">🏢</div>`:`<div style="width:8px;height:8px;border-radius:50%;background:${rtColor};"></div>`;
     html+=`<div style="display:flex;align-items:stretch;${ri>0?'border-top:1px solid var(--border)':''};">
-      <div style="flex:0 0 90px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:3px;padding:10px 8px;background:${rtColor}18;border-right:3px solid ${rtColor};">
-        <div style="width:8px;height:8px;border-radius:50%;background:${rtColor};"></div>
+      <div style="flex:0 0 90px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:3px;padding:10px 8px;background:${leftBg};border-right:3px solid ${leftBorder};">
+        ${leftIcon}
         <div style="font-size:12px;font-weight:600;text-align:center;color:var(--text);line-height:1.3;">${rtName}</div>
         <div style="font-size:11px;color:var(--text3);">${emps.length} คน</div>
       </div>
@@ -2510,15 +2521,21 @@ function renderPrEmployees(){
   return html;
 }
 
+function _deptOpts(sel=''){const opts=['ออฟฟิส','บัญชี','คลังสินค้า','ขนส่ง','อื่นๆ'];return opts.map(d=>`<option value="${d}" ${d===sel?'selected':''}>${d}</option>`).join('');}
 function openAddEmployee(){
   const routeOpts=S.shops.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
   OM('เพิ่มพนักงาน',
     `<div style="display:grid;gap:10px;">
       <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ชื่อ *</div>
         <input id="ae-name" placeholder="ชื่อพนักงาน" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
-      <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">สาย</div>
-        <select id="ae-route" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
-          <option value="">-- ไม่มีสาย --</option>${routeOpts}</select></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">สาย</div>
+          <select id="ae-route" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
+            <option value="">-- ไม่มีสาย --</option>${routeOpts}</select></div>
+        <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">แผนก <span style="color:var(--text3);font-size:11px;">(ถ้าไม่มีสาย)</span></div>
+          <select id="ae-dept" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
+            <option value="">-- ไม่ระบุ --</option>${_deptOpts()}</select></div>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
         <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ค่าแรง/วัน</div>
           <input id="ae-rate" type="number" placeholder="0" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--mono);"></div>
@@ -2558,6 +2575,7 @@ async function saveEmployee(editId){
     phone_fee:parseFloat(document.getElementById('ae-phone')?.value)||0,
     room_fee:parseFloat(document.getElementById('ae-room')?.value)||0,
     notes:document.getElementById('ae-notes')?.value||null,
+    department:document.getElementById('ae-dept')?.value||null,
     status:'active'
   };
   try{
@@ -2591,6 +2609,7 @@ function openEmpDetail(empId){
   OM(`👤 ${emp.name}`,
     `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
       <div class="sc"><div class="lb">สาย</div><div class="vl" style="font-size:14px;">${rt?rt.name:'—'}</div></div>
+      <div class="sc"><div class="lb">แผนก</div><div class="vl" style="font-size:14px;">${emp.department||'—'}</div></div>
       <div class="sc"><div class="lb">ค่าแรง/วัน</div><div class="vl">${fmt(emp.daily_rate||0)}</div></div>
       <div class="sc"><div class="lb">สัญชาติ</div><div class="vl" style="font-size:14px;">${emp.nationality||'—'}</div></div>
       <div class="sc"><div class="lb">สถานะ</div><div class="vl" style="font-size:14px;color:${isBL?'var(--red)':isActive?'var(--green)':'var(--text3)'};">${isBL?'🚫 ห้ามรับ':isActive?'✅ ทำงานอยู่':'❌ ออกแล้ว'}</div></div>
@@ -2621,9 +2640,14 @@ function openEditEmployee(empId){
       `<div style="display:grid;gap:10px;">
         <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ชื่อ *</div>
           <input id="ae-name" value="${emp.name}" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
-        <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">สาย</div>
-          <select id="ae-route" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
-            <option value="">-- ไม่มีสาย --</option>${routeOpts}</select></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">สาย</div>
+            <select id="ae-route" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
+              <option value="">-- ไม่มีสาย --</option>${routeOpts}</select></div>
+          <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">แผนก <span style="color:var(--text3);font-size:11px;">(ถ้าไม่มีสาย)</span></div>
+            <select id="ae-dept" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
+              <option value="">-- ไม่ระบุ --</option>${_deptOpts(emp.department||'')}</select></div>
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
           <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ค่าแรง/วัน</div>
             <input id="ae-rate" type="number" value="${emp.daily_rate||0}" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--mono);"></div>
