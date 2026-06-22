@@ -320,7 +320,6 @@ main{display:flex;flex:1;overflow:hidden;}
     <div class="pr-logo">💼 ระบบเงินเดือน</div>
     <div style="display:flex;align-items:center;gap:8px;">
       <span class="role-badge role-admin">👑 ผู้ดูแล</span>
-      <button onclick="togglePrTray()" title="ตั้งค่า" style="background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:6px;width:34px;height:34px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;" id="pr-gear-btn">⚙️</button>
       <button class="pr-xbtn" onclick="backFromPayroll()">← หน้าหลัก</button>
     </div>
   </div>
@@ -329,6 +328,12 @@ main{display:flex;flex:1;overflow:hidden;}
     <button class="pr-tab" id="pr-tab-employees" onclick="setPrTab('employees')">👥 พนักงาน</button>
   </div>
   <div class="pr-body" id="pr-body"><div class="empty"><div class="ei">⏳</div><p>กำลังโหลด…</p></div></div>
+
+  <!-- floating action buttons: bottom-right of payroll content -->
+  <div id="pr-fab-group" style="display:none;position:fixed;top:80px;right:24px;z-index:900;flex-direction:column;gap:10px;align-items:flex-end;">
+    <button id="pr-share-fab" onclick="_prShareCurrent()" title="ส่งต่อ" style="width:48px;height:48px;border-radius:50%;background:var(--bg2);border:1px solid var(--border);font-size:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;">📤</button>
+    <button id="pr-gear-btn" onclick="togglePrTray()" title="ตั้งค่า" style="width:48px;height:48px;border-radius:50%;background:var(--bg2);border:1px solid var(--border);font-size:20px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;">⚙️</button>
+  </div>
 
   <!-- bottom tray backdrop -->
   <div id="pr-tray-bg" onclick="closePrTray()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:901;"></div>
@@ -2050,7 +2055,19 @@ function _renderTrayItems(){
       icon: _prSettings.hideRates?'👁️‍🗨️':'👁️',
       label: _prSettings.hideRates?'แสดงค่าแรงรายวัน':'ซ่อนค่าแรงรายวัน',
       sub: 'ซ่อน/แสดง ฿XXX/วัน และคอลัมน์ฐานในงวด',
-      action: `_prSettings.hideRates=!_prSettings.hideRates;_savePrSettings();renderPayroll();_renderTrayItems();`
+      action: `_prSettings.hideRates=!_prSettings.hideRates;_savePrSettings();renderPayroll();_renderTrayItems();if(PR.tab==='periods'&&_openPeriodId)openPeriod(_openPeriodId);`
+    },
+    {
+      icon: _prSettings.hideManager?'👁️‍🗨️':'👁️',
+      label: _prSettings.hideManager?'แสดงระดับผู้จัดการ':'ซ่อนระดับผู้จัดการ',
+      sub: 'ซ่อน/แสดงพนักงานตำแหน่งผู้จัดการ',
+      action: `_prSettings.hideManager=!_prSettings.hideManager;_savePrSettings();renderPayroll();_renderTrayItems();if(PR.tab==='periods'&&_openPeriodId)openPeriod(_openPeriodId);`
+    },
+    {
+      icon: _prSettings.hideTopManager?'👁️‍🗨️':'👁️',
+      label: _prSettings.hideTopManager?'แสดงระดับผู้จัดการใหญ่':'ซ่อนระดับผู้จัดการใหญ่',
+      sub: 'ซ่อน/แสดงพนักงานตำแหน่งผู้จัดการใหญ่',
+      action: `_prSettings.hideTopManager=!_prSettings.hideTopManager;_savePrSettings();renderPayroll();_renderTrayItems();if(PR.tab==='periods'&&_openPeriodId)openPeriod(_openPeriodId);`
     },
   ];
   const el=document.getElementById('pr-tray-items');if(!el)return;
@@ -2061,7 +2078,7 @@ function _renderTrayItems(){
         <div style="font-size:15px;font-weight:500;">${it.label}</div>
         <div style="font-size:12px;color:var(--text3);margin-top:2px;">${it.sub}</div>
       </div>
-      ${_prSettings.hideRates&&it.label.includes('แสดง')?`<span style="margin-left:auto;font-size:11px;padding:2px 8px;background:var(--adim);border:1px solid var(--abr);color:var(--amber);border-radius:10px;">เปิดอยู่</span>`:''}
+      ${it.label.includes('แสดง')?`<span style="margin-left:auto;font-size:11px;padding:2px 8px;background:var(--adim);border:1px solid var(--abr);color:var(--amber);border-radius:10px;">เปิดอยู่</span>`:''}
     </button>`).join('');
 }
 function togglePrTray(){
@@ -2097,6 +2114,7 @@ function showPayroll(){
   document.getElementById('app').style.display='none';
   document.getElementById('overview-screen').style.display='none';
   document.getElementById('payroll-screen').style.display='flex';
+  const fab=document.getElementById('pr-fab-group');fab.style.display='flex';fab.style.flexDirection='column';
   if(!PR.month)PR.month=prMonthNow();
   if(!PR._loaded){loadPayroll().then(()=>renderPayroll());}
   else renderPayroll();
@@ -2104,7 +2122,16 @@ function showPayroll(){
 function backFromPayroll(){
   closePrTray();
   document.getElementById('payroll-screen').style.display='none';
+  document.getElementById('pr-fab-group').style.display='none';
   document.getElementById('app').style.display='flex';
+}
+function _prShareCurrent(){
+  if(PR.tab==='employees'){shareEmployeeList();return;}
+  // share: pick first period of current month
+  const [y,m]=PR.month.split('-');
+  const period=PR.periods.find(p=>p.period_key.startsWith(`${y}-${m}-`));
+  if(!period){toast('ยังไม่มีงวดในเดือนนี้');return;}
+  sharePeriod(period.id);
 }
 async function loadPayroll(){
   try{
@@ -2219,14 +2246,22 @@ async function generatePeriod(beYM,slot){
   }catch(e){toast('สร้างงวดไม่สำเร็จ: '+e.message);console.error(e);}
 }
 
+let _openPeriodId=null;
 function openPeriod(periodId){
+  _openPeriodId=periodId;
   const period=PR.periods.find(p=>p.id===periodId);if(!period)return;
   const slot=period.period_key.split('-')[2];
   const slotLbl={A:'1–10',B:'11–20',C:'21–31'}[slot];
   const[y,mo]=period.period_key.split('-');
   const mLbl=prMonthLbl(`${y}-${mo}`);
   const isPaid=period.status==='paid';
-  const ents=PR.entries.filter(e=>e.period_id===periodId);
+  const _hiddenPos=new Set([...(_prSettings.hideManager?['ผู้จัดการ']:[]),...(_prSettings.hideTopManager?['ผู้จัดการใหญ่']:[])]);
+  const ents=PR.entries.filter(e=>{
+    const emp=PR.employees.find(x=>x.id===e.employee_id);
+    if(!emp)return true;
+    if(_hiddenPos.has(emp.position))return false;
+    return e.period_id===periodId;
+  });
   // group by route, preserve route sort_order
   const byRoute={};
   ents.forEach(e=>{
@@ -2597,7 +2632,8 @@ async function markPeriodPaid(periodId){
 // ── Employees tab ──
 let _prAssignMode=false;
 function renderPrEmployees(){
-  const active=PR.employees.filter(e=>e.status==='active');
+  const _hiddenPos=new Set([...(_prSettings.hideManager?['ผู้จัดการ']:[]),...(_prSettings.hideTopManager?['ผู้จัดการใหญ่']:[])]);
+  const active=PR.employees.filter(e=>e.status==='active'&&!_hiddenPos.has(e.position));
   const inactive=PR.employees.filter(e=>e.status!=='active');
   const byRoute={};
   active.forEach(emp=>{
@@ -2610,7 +2646,6 @@ function renderPrEmployees(){
     <div style="font-size:16px;font-weight:600;">พนักงาน (${active.length} คน)${unassigned>0?` <span style="font-size:12px;color:var(--amber);background:var(--adim);border:1px solid var(--abr);padding:1px 7px;border-radius:10px;">${unassigned} ยังไม่มีสาย</span>`:''}</div>
     <div style="display:flex;gap:8px;">
       <button class="btn ${_prAssignMode?'btn-a':'btn-b'}" onclick="_prAssignMode=!_prAssignMode;renderPayroll();">${_prAssignMode?'✅ เสร็จแล้ว':'⚡ กำหนดสาย'}</button>
-      <button class="btn btn-b" onclick="shareEmployeeList()">📤</button>
       <button class="btn btn-b" onclick="openAddEmployee()">+ เพิ่มพนักงาน</button>
     </div>
   </div>`;
@@ -2738,6 +2773,7 @@ function renderPrEmployees(){
 }
 
 function _deptOpts(sel=''){const opts=['ออฟฟิส','บัญชี','คลังสินค้า','ขนส่ง','อื่นๆ'];return opts.map(d=>`<option value="${d}" ${d===sel?'selected':''}>${d}</option>`).join('');}
+function _posOpts(sel=''){const opts=['คนขับรถ','เด็กติดรถ','ออฟฟิสทั่วไป','ผู้จัดการ','ผู้จัดการใหญ่'];return opts.map(p=>`<option value="${p}" ${p===sel?'selected':''}>${p}</option>`).join('');}
 function openAddEmployee(){
   const routeOpts=S.shops.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
   OM('เพิ่มพนักงาน',
@@ -2752,6 +2788,9 @@ function openAddEmployee(){
           <select id="ae-dept" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
             <option value="">-- ไม่ระบุ --</option>${_deptOpts()}</select></div>
       </div>
+      <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ตำแหน่งงาน</div>
+        <select id="ae-pos" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
+          <option value="">-- ไม่ระบุ --</option>${_posOpts()}</select></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
         <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ค่าแรง/วัน</div>
           <input id="ae-rate" type="number" placeholder="0" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--mono);"></div>
@@ -2816,6 +2855,7 @@ async function saveEmployee(editId){
     room_fee:parseFloat(document.getElementById('ae-room')?.value)||0,
     notes:document.getElementById('ae-notes')?.value||null,
     department:document.getElementById('ae-dept')?.value||null,
+    position:document.getElementById('ae-pos')?.value||null,
     status:'active'
   };
   try{
@@ -2849,6 +2889,7 @@ function openEmpDetail(empId){
   OM(`👤 ${emp.name}`,
     `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
       <div class="sc"><div class="lb">สาย</div><div class="vl" style="font-size:14px;">${rt?rt.name:'—'}</div></div>
+      <div class="sc"><div class="lb">ตำแหน่ง</div><div class="vl" style="font-size:14px;">${emp.position||'—'}</div></div>
       <div class="sc"><div class="lb">แผนก</div><div class="vl" style="font-size:14px;">${emp.department||'—'}</div></div>
       <div class="sc"><div class="lb">ค่าแรง/วัน</div><div class="vl">${fmt(emp.daily_rate||0)}</div></div>
       <div class="sc"><div class="lb">สัญชาติ</div><div class="vl" style="font-size:14px;">${emp.nationality||'—'}</div></div>
@@ -2888,6 +2929,9 @@ function openEditEmployee(empId){
             <select id="ae-dept" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
               <option value="">-- ไม่ระบุ --</option>${_deptOpts(emp.department||'')}</select></div>
         </div>
+        <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ตำแหน่งงาน</div>
+          <select id="ae-pos" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
+            <option value="">-- ไม่ระบุ --</option>${_posOpts(emp.position||'')}</select></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
           <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ค่าแรง/วัน</div>
             <input id="ae-rate" type="number" value="${emp.daily_rate||0}" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--mono);"></div>
