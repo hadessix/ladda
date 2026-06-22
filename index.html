@@ -320,6 +320,7 @@ main{display:flex;flex:1;overflow:hidden;}
     <div class="pr-logo">💼 ระบบเงินเดือน</div>
     <div style="display:flex;align-items:center;gap:8px;">
       <span class="role-badge role-admin">👑 ผู้ดูแล</span>
+      <button onclick="openPrSettings()" title="ตั้งค่า" style="background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:6px;width:34px;height:34px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;">⚙️</button>
       <button class="pr-xbtn" onclick="backFromPayroll()">← หน้าหลัก</button>
     </div>
   </div>
@@ -2031,6 +2032,26 @@ function toast(msg){const t=document.createElement('div');t.className='toast';t.
 
 // ─── PAYROLL ───
 let PR={tab:'periods',month:null,employees:[],loans:[],periods:[],entries:[],deductions:[],_loaded:false};
+let _prSettings=(()=>{try{return JSON.parse(localStorage.getItem('pr_settings')||'{}')}catch{return{}}})();
+function _savePrSettings(){localStorage.setItem('pr_settings',JSON.stringify(_prSettings));}
+function openPrSettings(){
+  const chk=(k)=>`<label style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--bg3);border-radius:8px;cursor:pointer;">
+    <input type="checkbox" id="prs-${k}" ${_prSettings[k]?'checked':''} onchange="_prSettings['${k}']=this.checked;_savePrSettings();renderPayroll();" style="width:16px;height:16px;cursor:pointer;">
+    <span style="font-size:14px;"></span>
+  </label>`;
+  OM('⚙️ ตั้งค่าการแสดงผล',
+    `<div style="display:flex;flex-direction:column;gap:8px;">
+      <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--bg3);border-radius:8px;cursor:pointer;">
+        <input type="checkbox" id="prs-hideRates" ${_prSettings.hideRates?'checked':''} onchange="_prSettings.hideRates=this.checked;_savePrSettings();renderPayroll();" style="width:16px;height:16px;cursor:pointer;">
+        <div>
+          <div style="font-size:14px;font-weight:500;">ซ่อนค่าแรงรายวัน</div>
+          <div style="font-size:12px;color:var(--text3);">ซ่อน ฿XXX/วัน ในหน้าพนักงาน และซ่อนคอลัมน์ค่าแรง+ฐานในหน้างวด</div>
+        </div>
+      </label>
+    </div>`,
+    `<button class="btn btn-x" onclick="CMask()">ปิด</button>`
+  );
+}
 
 function prMonthNow(){const d=new Date();return`${d.getFullYear()+543}-${String(d.getMonth()+1).padStart(2,'0')}`;}
 function prMonthLbl(m){const[y,mo]=m.split('-').map(Number);return['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][mo-1]+' '+y;}
@@ -2200,17 +2221,18 @@ function openPeriod(periodId){
       const base=(emp.daily_rate||0)*(e.days_worked||0);
       const totalDed=deds.reduce((s,d)=>s+d.amount,0);
       const net=base+(e.bonus||0)-totalDed-(e.advance||0);
+      const hr=_prSettings.hideRates;
       rows+=`<tr style="border-bottom:1px solid var(--border);">
         <td style="padding:7px 8px;min-width:90px;">
           <div style="font-size:14px;font-weight:500;">${emp.name}</div>
-          <div style="font-size:11px;color:var(--text3);font-family:var(--mono);">${fmt(emp.daily_rate||0)}/วัน</div>
+          ${hr?'':` <div style="font-size:11px;color:var(--text3);font-family:var(--mono);">${fmt(emp.daily_rate||0)}/วัน</div>`}
           ${e.bonus>0?`<div style="font-size:11px;color:var(--green);">+โบนัส ${fmt(e.bonus)}</div>`:''}
           ${e.advance>0?`<div style="font-size:11px;color:var(--amber);">เบิก ${fmt(e.advance)}</div>`:''}
         </td>
         <td style="padding:7px 8px;text-align:center;white-space:nowrap;">
           ${isPaid?`<span style="font-family:var(--mono);font-size:15px;">${e.days_worked}</span>`:`<input type="number" min="0" max="31" value="${e.days_worked||0}" style="width:48px;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:3px 4px;font-size:14px;font-family:var(--mono);text-align:center;" onchange="prUpdateEntry('${e.id}','days_worked',this.value)">`}
         </td>
-        <td style="padding:7px 8px;text-align:right;font-family:var(--mono);font-size:14px;color:var(--green);white-space:nowrap;">${fmt(base)}</td>
+        ${hr?'':`<td style="padding:7px 8px;text-align:right;font-family:var(--mono);font-size:14px;color:var(--green);white-space:nowrap;">${fmt(base)}</td>`}
         <td style="padding:7px 8px;text-align:right;font-family:var(--mono);font-size:13px;color:var(--text2);white-space:nowrap;">${roomDed>0?fmt(roomDed):'-'}</td>
         <td style="padding:7px 8px;text-align:right;font-family:var(--mono);font-size:13px;color:var(--text2);white-space:nowrap;">${permitDed>0?fmt(permitDed):'-'}</td>
         <td style="padding:7px 8px;text-align:right;font-size:12px;color:var(--text2);">${otherDed>0?`<div style="font-family:var(--mono);">${fmt(otherDed)}</div>${otherTags}`:'-'}</td>
@@ -2231,7 +2253,7 @@ function openPeriod(periodId){
         <thead><tr style="background:var(--bg2);border-bottom:1px solid var(--border);">
           <th style="padding:6px 8px;text-align:left;font-size:12px;color:var(--text3);font-weight:500;min-width:90px;">ชื่อ</th>
           <th style="padding:6px 8px;text-align:center;font-size:12px;color:var(--text3);font-weight:500;">วัน</th>
-          <th style="padding:6px 8px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">ค่าแรง</th>
+          ${_prSettings.hideRates?'':` <th style="padding:6px 8px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">ค่าแรง</th>`}
           <th style="padding:6px 8px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">ห้องพัก</th>
           <th style="padding:6px 8px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">ค่าบัตร</th>
           <th style="padding:6px 8px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">อื่นๆ</th>
@@ -2253,11 +2275,69 @@ function openPeriod(periodId){
       ${isPaid?`<span style="font-size:12px;color:var(--green);background:var(--gdim);border:1px solid var(--gbr);padding:3px 10px;border-radius:4px;">✅ จ่ายแล้ว</span>`:`<span style="font-size:12px;color:var(--amber);background:var(--adim);border:1px solid var(--abr);padding:3px 10px;border-radius:4px;">⏳ รอจ่าย</span>`}
     </div>
     <div style="overflow-x:auto;">${blocks}</div>`,
-    `<div style="display:flex;gap:8px;">
+    `<div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn btn-x" onclick="CMask()">ปิด</button>
+      <button class="btn btn-b" onclick="sharePeriod('${periodId}')">📤 ส่งต่อ</button>
       ${!isPaid?`<button class="btn btn-g" onclick="confirmMarkPaid('${periodId}')">✅ จ่ายแล้ว</button>`:''}
     </div>`
   );
+}
+
+async function sharePeriod(periodId){
+  const period=PR.periods.find(p=>p.id===periodId);if(!period)return;
+  const slot=period.period_key.split('-')[2];
+  const slotLbl={A:'1–10',B:'11–20',C:'21–31'}[slot];
+  const[y,mo]=period.period_key.split('-');
+  const mLbl=prMonthLbl(`${y}-${mo}`);
+  const ents=PR.entries.filter(e=>e.period_id===periodId);
+  const hr=_prSettings.hideRates;
+  // group by route (same as openPeriod)
+  const byRoute={};
+  ents.forEach(e=>{
+    const emp=PR.employees.find(x=>x.id===e.employee_id);if(!emp)return;
+    const k=emp.route_id||'__none__';
+    if(!byRoute[k])byRoute[k]=[];byRoute[k].push({e,emp});
+  });
+  const sortedKeys=Object.keys(byRoute).sort((a,b)=>{
+    if(a==='__none__')return 1;if(b==='__none__')return -1;
+    const ra=S.shops.find(s=>s.id===a);const rb=S.shops.find(s=>s.id===b);
+    return (ra?.sort_order||0)-(rb?.sort_order||0);
+  });
+  const pad=(s,n)=>String(s).padEnd(n,' ');
+  const fmtN=(n)=>String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+  let lines=[`💼 งวด ${slotLbl} ${mLbl}`,'─'.repeat(30)];
+  let grandNet=0;
+  sortedKeys.forEach(rid=>{
+    const items=byRoute[rid];
+    const rt=S.shops.find(s=>s.id===rid);
+    lines.push(``);
+    lines.push(`📍 ${rt?rt.name:'ไม่มีสาย'}`);
+    items.forEach(({e,emp})=>{
+      const deds=PR.deductions.filter(d=>d.entry_id===e.id);
+      const totalDed=deds.reduce((s,d)=>s+d.amount,0);
+      const base=(emp.daily_rate||0)*(e.days_worked||0);
+      const net=base+(e.bonus||0)-totalDed-(e.advance||0);
+      grandNet+=net;
+      let parts=[`  ${pad(emp.name,10)}`, `${e.days_worked}วัน`];
+      if(!hr) parts.push(`฿${fmtN(base)}`);
+      if(totalDed>0) parts.push(`หัก ${fmtN(totalDed)}`);
+      if(e.bonus>0) parts.push(`+โบนัส ${fmtN(e.bonus)}`);
+      parts.push(`→ ฿${fmtN(net)}`);
+      lines.push(parts.join('  '));
+    });
+  });
+  lines.push('');lines.push('─'.repeat(30));
+  lines.push(`รวม ${ents.length} คน  สุทธิ ฿${fmtN(grandNet)}`);
+  const text=lines.join('\n');
+  if(navigator.share){
+    try{await navigator.share({title:`งวด ${slotLbl} ${mLbl}`,text});return;}catch(e){if(e.name==='AbortError')return;}
+  }
+  try{await navigator.clipboard.writeText(text);toast('คัดลอกข้อมูลแล้ว — วางใน Line/Chat ได้เลย ✓');}
+  catch{
+    const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+    document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+    toast('คัดลอกข้อมูลแล้ว ✓');
+  }
 }
 
 async function prUpdateEntry(entryId,field,value){
@@ -2470,7 +2550,7 @@ function renderPrEmployees(){
       const loans=PR.loans.filter(l=>l.employee_id===emp.id&&l.status==='active');
       return`<div onclick="openEmpDetail('${emp.id}')" style="display:inline-flex;flex-direction:column;gap:1px;padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;cursor:pointer;min-width:80px;transition:background .15s;" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='var(--bg2)'">
         <div style="font-size:13px;font-weight:500;white-space:nowrap;">${emp.name}${loans.length>0?`<span style="font-size:10px;color:var(--amber);margin-left:3px;">●</span>`:''}</div>
-        <div style="font-size:11px;color:var(--text3);font-family:var(--mono);">${fmt(emp.daily_rate||0)}</div>
+        ${_prSettings.hideRates?'':` <div style="font-size:11px;color:var(--text3);font-family:var(--mono);">${fmt(emp.daily_rate||0)}</div>`}
       </div>`;
     }).join('');
   }
