@@ -2428,22 +2428,47 @@ async function markPeriodPaid(periodId){
 }
 
 // ── Employees tab ──
+let _prAssignMode=false;
 function renderPrEmployees(){
   const active=PR.employees.filter(e=>e.status==='active');
   const inactive=PR.employees.filter(e=>e.status!=='active');
   const byRoute={};
   active.forEach(emp=>{const k=emp.route_id||'__none__';if(!byRoute[k])byRoute[k]=[];byRoute[k].push(emp);});
-  let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-    <div style="font-size:16px;font-weight:600;">พนักงาน (${active.length} คน)</div>
-    <button class="btn btn-b" onclick="openAddEmployee()">+ เพิ่มพนักงาน</button>
+  const routeOpts=S.shops.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  const unassigned=active.filter(e=>!e.route_id).length;
+  let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:8px;flex-wrap:wrap;">
+    <div style="font-size:16px;font-weight:600;">พนักงาน (${active.length} คน)${unassigned>0?` <span style="font-size:12px;color:var(--amber);background:var(--adim);border:1px solid var(--abr);padding:1px 7px;border-radius:10px;">${unassigned} ยังไม่มีสาย</span>`:''}</div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn ${_prAssignMode?'btn-a':'btn-b'}" onclick="_prAssignMode=!_prAssignMode;renderPayroll();">${_prAssignMode?'✅ เสร็จแล้ว':'⚡ กำหนดสาย'}</button>
+      <button class="btn btn-b" onclick="openAddEmployee()">+ เพิ่มพนักงาน</button>
+    </div>
   </div>`;
+  if(_prAssignMode){
+    // flat list sorted by name, with inline route dropdown
+    const sorted=[...active].sort((a,b)=>a.name.localeCompare(b.name,'th'));
+    html+=`<div style="margin-bottom:8px;font-size:12px;color:var(--text3);">เลือกสายให้แต่ละคน — เปลี่ยนแล้วบันทึกอัตโนมัติ</div>`;
+    html+=`<div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;">`;
+    sorted.forEach((emp,i)=>{
+      const rt=S.shops.find(s=>s.id===emp.route_id);
+      html+=`<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;${i%2===0?'background:var(--bg2)':'background:var(--bg3)'};${i>0?'border-top:1px solid var(--border)':''};">
+        <div style="flex:0 0 100px;font-size:14px;font-weight:500;">${emp.name}</div>
+        <div style="flex:0 0 90px;font-size:11px;color:var(--text3);font-family:var(--mono);">${fmt(emp.daily_rate||0)}/วัน</div>
+        <select onchange="quickAssignRoute('${emp.id}',this.value)"
+          style="flex:1;background:var(--bg);border:1px solid ${emp.route_id?'var(--border)':'var(--abr)'};color:var(--text);border-radius:6px;padding:5px 8px;font-size:13px;font-family:var(--font);">
+          <option value="">-- ไม่มีสาย --</option>${S.shops.map(s=>`<option value="${s.id}" ${s.id===emp.route_id?'selected':''}>${s.name}</option>`).join('')}
+        </select>
+      </div>`;
+    });
+    html+=`</div>`;
+  } else {
+  // grouped view
   Object.entries(byRoute).forEach(([rid,emps])=>{
     const rt=S.shops.find(s=>s.id===rid)||S.groups.find(g=>g.id===rid);
     html+=`<div style="margin-bottom:16px;"><div style="font-size:12px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--border);">— ${rt?rt.name:'ไม่มีสาย'} —</div>`;
     emps.forEach(emp=>{
       const loans=PR.loans.filter(l=>l.employee_id===emp.id&&l.status==='active');
       html+=`<div class="pr-emp-row">
-        <div style="width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0;"></div>
+        <div style="width:8px;height:8px;border-radius:50%;background:${rt?rt.color||'var(--green)':'var(--border2)'};flex-shrink:0;"></div>
         <div style="flex:1;">
           <div class="pr-emp-name">${emp.name}${loans.length>0?` <span style="font-size:11px;color:var(--amber);background:var(--adim);border:1px solid var(--abr);padding:1px 6px;border-radius:4px;">${loans.length} ค้าง</span>`:''}</div>
           <div style="font-size:12px;color:var(--text3);">${rt?rt.name:'ไม่มีสาย'} · ${emp.nationality||'ไทย'}</div>
@@ -2454,6 +2479,7 @@ function renderPrEmployees(){
     });
     html+=`</div>`;
   });
+  } // end grouped
   if(inactive.length>0){
     html+=`<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px;">
       <div style="font-size:12px;color:var(--text3);margin-bottom:8px;">ออกจากงานแล้ว (${inactive.length} คน)</div>`;
@@ -2507,6 +2533,11 @@ function openAddEmployee(){
   );
 }
 
+async function quickAssignRoute(empId,routeId){
+  const emp=PR.employees.find(e=>e.id===empId);if(!emp)return;
+  emp.route_id=routeId||null;
+  try{await sbUpsert('employees',[emp]);}catch(e){toast('บันทึกไม่สำเร็จ: '+e.message);}
+}
 async function saveEmployee(editId){
   const name=(document.getElementById('ae-name')?.value||'').trim();
   if(!name){toast('กรุณากรอกชื่อ');return;}
