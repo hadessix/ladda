@@ -2121,6 +2121,14 @@ async function generatePeriod(beYM,slot){
   if(slot==='C'){const nm=m===12?1:m+1;const ny=m===12?ceY+1:ceY;payDate=`${ny}-${String(nm).padStart(2,'0')}-01`;}
   else payDate=prBeToDate(beYM,s.payD);
   const pk=`${beYM}-${slot}`;
+  const existing=PR.periods.find(p=>p.period_key===pk);
+  if(existing){
+    const hasEntries=PR.entries.some(e=>e.period_id===existing.id);
+    if(hasEntries){toast(`งวด ${pk} มีอยู่แล้ว`);return;}
+    // stale period with no entries — delete and recreate
+    try{await sbDelete('payroll_periods','id=eq.'+existing.id);}catch(_){}
+    PR.periods=PR.periods.filter(p=>p.period_key!==pk);
+  }
   const pid=uid();
   const periodRow={id:pid,period_key:pk,date_from:dateFrom,date_to:dateTo,pay_date:payDate,status:'draft'};
   try{
