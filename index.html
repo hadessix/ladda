@@ -2280,7 +2280,7 @@ function openPeriod(periodId){
     const items=byRoute[rid];
     const rt=S.shops.find(s=>s.id===rid);
     const rtColor=rt?.color||'#888';
-    const rtName=rt?rt.name:'ไม่มีสาย';
+    const rtName=rt?rt.name:'ออฟฟิส';
     const rtTotal=items.reduce((s,{e,emp})=>{
       const deds=PR.deductions.filter(d=>d.entry_id===e.id);
       return s+(emp.daily_rate||0)*(e.days_worked||0)+(e.bonus||0)-deds.reduce((a,d)=>a+d.amount,0)-(e.advance||0);
