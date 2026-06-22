@@ -2464,43 +2464,91 @@ function renderPrEmployees(){
     });
     html+=`</div>`;
   } else {
-  // grid view — route label left, employee chips right
-  // sort routes by shop sort_order; __none__ last
-  const sortedRouteKeys=Object.keys(byRoute).sort((a,b)=>{
-    if(a==='__none__')return 1;if(b==='__none__')return -1;
-    if(a.startsWith('__dept__')&&!b.startsWith('__dept__'))return 1;
-    if(!a.startsWith('__dept__')&&b.startsWith('__dept__'))return -1;
-    if(a.startsWith('__dept__')&&b.startsWith('__dept__'))return a.localeCompare(b,'th');
-    const ra=S.shops.find(s=>s.id===a);const rb=S.shops.find(s=>s.id===b);
-    return (ra?.sort_order||0)-(rb?.sort_order||0);
-  });
-  html+=`<div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;">`;
-  sortedRouteKeys.forEach((rid,ri)=>{
-    const emps=byRoute[rid];
-    const isDept=rid.startsWith('__dept__');
-    const deptName=isDept?rid.replace('__dept__',''):'';
-    const rt=!isDept&&rid!=='__none__'?S.shops.find(s=>s.id===rid):null;
-    const rtColor=rt?.color||'#555';
-    const rtName=isDept?deptName:rt?rt.name:'ไม่มีสาย';
-    const chips=emps.map(emp=>{
+  // grid view grouped by S.groups then standalone routes then dept
+  function _empChips(emps){
+    return emps.map(emp=>{
       const loans=PR.loans.filter(l=>l.employee_id===emp.id&&l.status==='active');
-      return `<div onclick="openEmpDetail('${emp.id}')" style="display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;cursor:pointer;min-width:80px;transition:background .15s;" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='var(--bg2)'">
-        <div style="font-size:13px;font-weight:500;white-space:nowrap;">${emp.name}${loans.length>0?` <span style="font-size:10px;color:var(--amber);">●</span>`:''}</div>
+      return`<div onclick="openEmpDetail('${emp.id}')" style="display:inline-flex;flex-direction:column;gap:1px;padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;cursor:pointer;min-width:80px;transition:background .15s;" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='var(--bg2)'">
+        <div style="font-size:13px;font-weight:500;white-space:nowrap;">${emp.name}${loans.length>0?`<span style="font-size:10px;color:var(--amber);margin-left:3px;">●</span>`:''}</div>
         <div style="font-size:11px;color:var(--text3);font-family:var(--mono);">${fmt(emp.daily_rate||0)}</div>
       </div>`;
     }).join('');
-    const leftBg=isDept?'#6366f118':rid==='__none__'?'var(--bg3)':`${rtColor}18`;
-    const leftBorder=isDept?'#6366f1':rid==='__none__'?'var(--border2)':rtColor;
-    const leftIcon=isDept?`<div style="font-size:14px;">🏢</div>`:`<div style="width:8px;height:8px;border-radius:50%;background:${rtColor};"></div>`;
-    html+=`<div style="display:flex;align-items:stretch;${ri>0?'border-top:1px solid var(--border)':''};">
-      <div style="flex:0 0 90px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:3px;padding:10px 8px;background:${leftBg};border-right:3px solid ${leftBorder};">
-        ${leftIcon}
-        <div style="font-size:12px;font-weight:600;text-align:center;color:var(--text);line-height:1.3;">${rtName}</div>
-        <div style="font-size:11px;color:var(--text3);">${emps.length} คน</div>
+  }
+  function _routeRow(rt, emps, allRoutes, isFirst){
+    if(!emps||emps.length===0)return'';
+    const idx=allRoutes.findIndex(r=>r.id===rt.id);
+    const canUp=idx>0;const canDown=idx<allRoutes.length-1;
+    return`<div style="display:flex;align-items:stretch;${isFirst?'':'border-top:1px solid var(--border)'};">
+      <div style="flex:0 0 86px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:2px;padding:8px 6px;background:${rt.color||'#555'}18;border-right:3px solid ${rt.color||'#555'};">
+        <div style="width:7px;height:7px;border-radius:50%;background:${rt.color||'#555'};"></div>
+        <div style="font-size:11px;font-weight:600;text-align:center;color:var(--text);line-height:1.3;">${rt.name}</div>
+        <div style="font-size:10px;color:var(--text3);">${emps.length} คน</div>
       </div>
-      <div style="flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 12px;">${chips}</div>
+      <div style="flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:8px 10px;">${_empChips(emps)}</div>
+      <div style="display:flex;flex-direction:column;justify-content:center;gap:2px;padding:4px 6px;border-left:1px solid var(--border);">
+        <button onclick="prMoveRoute('${rt.id}',-1)" ${canUp?'':'disabled'} style="background:${canUp?'var(--bg3)':'transparent'};border:1px solid ${canUp?'var(--border)':'transparent'};color:${canUp?'var(--text2)':'var(--border)'};border-radius:4px;width:24px;height:22px;cursor:${canUp?'pointer':'default'};font-size:12px;line-height:1;">↑</button>
+        <button onclick="prMoveRoute('${rt.id}',1)" ${canDown?'':'disabled'} style="background:${canDown?'var(--bg3)':'transparent'};border:1px solid ${canDown?'var(--border)':'transparent'};color:${canDown?'var(--text2)':'var(--border)'};border-radius:4px;width:24px;height:22px;cursor:${canDown?'pointer':'default'};font-size:12px;line-height:1;">↓</button>
+      </div>
+    </div>`;
+  }
+  // build ordered group sections
+  const sortedGroups=[...S.groups].sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+  const groupedIds=new Set(Object.values(S.groupMembers).flat());
+  // routes sorted by sort_order
+  const allRoutesSorted=[...S.shops].sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+  // standalone routes (not in any group, not dept/none)
+  const standaloneRoutes=allRoutesSorted.filter(r=>!groupedIds.has(r.id)&&byRoute[r.id]);
+  // dept groups
+  const deptKeys=Object.keys(byRoute).filter(k=>k.startsWith('__dept__'));
+  const noneEmps=byRoute['__none__']||[];
+
+  html+=`<div style="display:flex;flex-direction:column;gap:10px;">`;
+
+  // grouped routes
+  sortedGroups.forEach(grp=>{
+    const members=(S.groupMembers[grp.id]||[]).map(id=>S.shops.find(s=>s.id===id)).filter(Boolean).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+    const grpEmps=members.flatMap(r=>byRoute[r.id]||[]);
+    if(grpEmps.length===0)return;
+    const icon=grp.is_owner?'⭐':grp.tab_flags?.auto_collect?'⚡':'📁';
+    let grpHtml=`<div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg3);border-bottom:1px solid var(--border);">
+        <span style="font-size:13px;">${icon}</span>
+        <span style="font-size:13px;font-weight:700;">${grp.name}</span>
+        <span style="font-size:11px;color:var(--text3);">${grpEmps.length} คน</span>
+      </div>`;
+    members.forEach((rt,i)=>{grpHtml+=_routeRow(rt,byRoute[rt.id]||[],members,i===0);});
+    grpHtml+=`</div>`;
+    html+=grpHtml;
+  });
+
+  // standalone routes
+  if(standaloneRoutes.length>0){
+    html+=`<div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;">`;
+    standaloneRoutes.forEach((rt,i)=>{html+=_routeRow(rt,byRoute[rt.id]||[],standaloneRoutes,i===0);});
+    html+=`</div>`;
+  }
+
+  // dept sections
+  deptKeys.sort().forEach(dk=>{
+    const deptName=dk.replace('__dept__','');
+    const emps=byRoute[dk]||[];
+    html+=`<div style="border:1px solid #6366f155;border-radius:10px;overflow:hidden;">
+      <div style="display:flex;align-items:center;gap:8px;padding:7px 12px;background:#6366f112;border-bottom:1px solid #6366f130;">
+        <span>🏢</span><span style="font-size:13px;font-weight:700;">${deptName}</span>
+        <span style="font-size:11px;color:var(--text3);">${emps.length} คน</span>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px;">${_empChips(emps)}</div>
     </div>`;
   });
+
+  // no route/dept
+  if(noneEmps.length>0){
+    html+=`<div style="border:1px dashed var(--border2);border-radius:10px;padding:10px 12px;">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:6px;">ยังไม่มีสาย/แผนก (${noneEmps.length} คน)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">${_empChips(noneEmps)}</div>
+    </div>`;
+  }
+
   html+=`</div>`;
   } // end grid
   if(inactive.length>0){
@@ -2559,6 +2607,30 @@ function openAddEmployee(){
   );
 }
 
+async function prMoveRoute(routeId,dir){
+  // find the group this route belongs to (or standalone)
+  let siblings;
+  const grpId=Object.keys(S.groupMembers).find(gid=>S.groupMembers[gid].includes(routeId));
+  if(grpId){
+    siblings=(S.groupMembers[grpId]||[]).map(id=>S.shops.find(s=>s.id===id)).filter(Boolean).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+  } else {
+    const groupedIds=new Set(Object.values(S.groupMembers).flat());
+    siblings=S.shops.filter(s=>!groupedIds.has(s.id)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+  }
+  const idx=siblings.findIndex(s=>s.id===routeId);
+  const swapIdx=idx+dir;
+  if(swapIdx<0||swapIdx>=siblings.length)return;
+  const a=siblings[idx],b=siblings[swapIdx];
+  const tmpOrder=a.sort_order??idx;
+  a.sort_order=b.sort_order??swapIdx;
+  b.sort_order=tmpOrder;
+  // ensure distinct values if both were 0
+  if(a.sort_order===b.sort_order){a.sort_order=swapIdx;b.sort_order=idx;}
+  try{
+    await sbUpsert('routes',[{id:a.id,name:a.name,color:a.color,tab_flags:a.tab_flags,sort_order:a.sort_order},{id:b.id,name:b.name,color:b.color,tab_flags:b.tab_flags,sort_order:b.sort_order}]);
+    renderPayroll();
+  }catch(e){toast('เรียงไม่สำเร็จ: '+e.message);}
+}
 async function quickAssignRoute(empId,routeId){
   const emp=PR.employees.find(e=>e.id===empId);if(!emp)return;
   emp.route_id=routeId||null;
