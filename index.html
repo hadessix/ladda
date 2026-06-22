@@ -2880,7 +2880,7 @@ function openEmpDetail(empId){
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
           <span class="loan-tag loan-${l.status==='active'?(l.type==='permit'?'permit':'loan'):'done'}">${l.description||l.type}</span>
           <span style="margin-left:auto;font-family:var(--mono);font-size:13px;color:${l.status==='active'?'var(--amber)':'var(--text3)'};">${fmt(rem)} คงเหลือ</span>
-          ${l.status==='active'&&isActive?`<button onclick="openEditLoan('${l.id}','${empId}')" style="font-size:11px;background:transparent;border:none;color:var(--text3);cursor:pointer;">แก้ไข</button>`:''}
+          <button onclick="openEditLoan('${l.id}','${empId}')" style="font-size:11px;background:transparent;border:none;color:var(--text3);cursor:pointer;">แก้ไข</button>
         </div>
         <div style="font-size:12px;color:var(--text3);">รวม ${fmt(l.total_amount)} · ชำระแล้ว ${fmt(l.paid_amount)} · งวดละ ${fmt(l.per_period_amount)}</div>
         <div style="height:4px;background:var(--bg3);border-radius:2px;margin-top:6px;"><div style="height:100%;width:${pct}%;background:${l.status==='active'?'var(--amber)':'var(--green)'};border-radius:2px;transition:.3s;"></div></div>
