@@ -2089,7 +2089,7 @@ function renderPrPeriods(){
       html+=`<div class="pr-period-card" style="cursor:default;">
         <div class="pr-period-title">${lbl}</div>
         <div class="pr-period-sub" style="margin-bottom:12px;">${prMonthLbl(m)}</div>
-        <button class="btn btn-a" style="width:100%;font-size:13px;" onclick="generatePeriod('${m}','${k}')">+ สร้างงวด</button>
+        <button class="btn btn-a" style="width:100%;font-size:13px;" onclick="this.disabled=true;this.textContent='กำลังสร้าง…';generatePeriod('${m}','${k}').finally(()=>{this.disabled=false;this.textContent='+ สร้างงวด';})">+ สร้างงวด</button>
       </div>`;
     } else {
       const ents=PR.entries.filter(e=>e.period_id===period.id);
