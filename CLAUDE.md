@@ -389,7 +389,7 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - [ ] กำหนดสายให้พนักงานทุกคน (ใช้ ⚡ กำหนดสาย ในหน้าพนักงาน)
 - [ ] กำหนดตำแหน่งงานให้พนักงาน (admin ทำเอง)
 - [ ] อัปเดตยอดค้างบัตรใบอนุญาต + วันหมดอายุ (admin ทำเอง)
-- [ ] รูปใบอนุญาตทำงาน (Supabase Storage)
+- [ ] รูปพนักงาน + รูปใบอนุญาตทำงาน — ใช้ **Cloudinary** (25GB free); เก็บแค่ URL ใน `employees.photo_url`
 - [ ] ดอกเบี้ยเงินยืม (5–10%)
 - [ ] เชื่อมระบบเช็คเวลาเข้างาน (feature #2)
 - [ ] โปรไฟล์พนักงาน (feature #3)
@@ -412,7 +412,10 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - [x] Payroll settings tray (gear FAB) — hideRates, hideManager, hideTopManager
 - [x] Share button (📤 FAB) — context-aware: period or employee list; respects hide settings
 - [x] Employee position field (คนขับรถ/เด็กติดรถ/ออฟฟิสทั่วไป/ผู้จัดการ/ผู้จัดการใหญ่)
+- [x] No-route group in period modal labeled "ออฟฟิส"
+- [x] Loan edit button always visible (ไม่ซ่อนเมื่อ completed)
 - [ ] กำหนดสายพนักงาน + ตำแหน่ง + อัปเดตยอดบัตรค้าง (admin ทำเอง)
+- [ ] รูปพนักงาน + รูปบัตร via Cloudinary (feature #3)
 - [ ] ระบบเช็คเวลาเข้างาน (feature #2)
 - [ ] โปรไฟล์พนักงาน (feature #3)
 - [ ] รูปใบอนุญาตทำงาน (Supabase Storage)
