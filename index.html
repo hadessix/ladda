@@ -2167,32 +2167,80 @@ function openPeriod(periodId){
   const mLbl=prMonthLbl(`${y}-${mo}`);
   const isPaid=period.status==='paid';
   const ents=PR.entries.filter(e=>e.period_id===periodId);
-  // group by route
+  // group by route, preserve route sort_order
   const byRoute={};
   ents.forEach(e=>{
     const emp=PR.employees.find(x=>x.id===e.employee_id);if(!emp)return;
     const k=emp.route_id||'__none__';
     if(!byRoute[k])byRoute[k]=[];byRoute[k].push({e,emp});
   });
-  let rows='';
-  Object.entries(byRoute).forEach(([rid,items])=>{
-    const rt=S.shops.find(s=>s.id===rid)||S.groups.find(g=>g.id===rid);
-    rows+=`<tr><td colspan="6" style="padding:10px 8px 4px;font-size:12px;color:var(--text3);font-weight:600;letter-spacing:1px;">— ${rt?rt.name:'ไม่มีสาย'} —</td></tr>`;
+  // sort routes: shops first by sort_order, then __none__
+  const sortedKeys=Object.keys(byRoute).sort((a,b)=>{
+    if(a==='__none__')return 1;if(b==='__none__')return -1;
+    const ra=S.shops.find(s=>s.id===a);const rb=S.shops.find(s=>s.id===b);
+    return (ra?.sort_order||0)-(rb?.sort_order||0);
+  });
+  let blocks='';
+  sortedKeys.forEach(rid=>{
+    const items=byRoute[rid];
+    const rt=S.shops.find(s=>s.id===rid);
+    const rtColor=rt?.color||'#888';
+    const rtName=rt?rt.name:'ไม่มีสาย';
+    const rtTotal=items.reduce((s,{e,emp})=>{
+      const deds=PR.deductions.filter(d=>d.entry_id===e.id);
+      return s+(emp.daily_rate||0)*(e.days_worked||0)+(e.bonus||0)-deds.reduce((a,d)=>a+d.amount,0)-(e.advance||0);
+    },0);
+    let rows='';
     items.forEach(({e,emp})=>{
       const deds=PR.deductions.filter(d=>d.entry_id===e.id);
-      const totalDed=deds.reduce((s,d)=>s+d.amount,0);
+      const roomDed=deds.filter(d=>d.type==='room').reduce((s,d)=>s+d.amount,0);
+      const permitDed=deds.filter(d=>d.type==='permit').reduce((s,d)=>s+d.amount,0);
+      const otherDed=deds.filter(d=>d.type!=='room'&&d.type!=='permit').reduce((s,d)=>s+d.amount,0);
+      const otherTags=deds.filter(d=>d.type!=='room'&&d.type!=='permit').map(d=>`<div style="font-size:10px;color:var(--text3);">${d.label} ${fmt(d.amount)}</div>`).join('');
       const base=(emp.daily_rate||0)*(e.days_worked||0);
+      const totalDed=deds.reduce((s,d)=>s+d.amount,0);
       const net=base+(e.bonus||0)-totalDed-(e.advance||0);
-      const dedHtml=deds.map(d=>`<span class="loan-tag loan-${d.type==='permit'?'permit':d.type==='phone'||d.type==='room'?'other':'loan'}">${d.label} ${fmt(d.amount)}</span>`).join(' ');
-      rows+=`<tr>
-        <td>${emp.name}${e.bonus>0?`<div style="font-size:11px;color:var(--green);">+${fmt(e.bonus)}</div>`:''}${e.advance>0?`<div style="font-size:11px;color:var(--amber);">เบิก ${fmt(e.advance)}</div>`:''}</td>
-        <td>${isPaid?e.days_worked:`<input type="number" min="0" max="31" value="${e.days_worked||0}" style="width:44px;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:2px 4px;font-size:13px;font-family:var(--mono);" onchange="prUpdateEntry('${e.id}','days_worked',this.value)">`}</td>
-        <td style="font-family:var(--mono);font-size:13px;color:var(--green);">${fmt(base)}</td>
-        <td style="font-size:12px;">${dedHtml}</td>
-        <td class="pr-net">${fmt(net)}</td>
-        <td>${isPaid?'':` <button onclick="openPrEntryDetail('${e.id}','${periodId}')" style="background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:2px 8px;cursor:pointer;font-size:12px;">⚙</button>`}</td>
+      rows+=`<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:7px 8px;min-width:90px;">
+          <div style="font-size:14px;font-weight:500;">${emp.name}</div>
+          <div style="font-size:11px;color:var(--text3);font-family:var(--mono);">${fmt(emp.daily_rate||0)}/วัน</div>
+          ${e.bonus>0?`<div style="font-size:11px;color:var(--green);">+โบนัส ${fmt(e.bonus)}</div>`:''}
+          ${e.advance>0?`<div style="font-size:11px;color:var(--amber);">เบิก ${fmt(e.advance)}</div>`:''}
+        </td>
+        <td style="padding:7px 8px;text-align:center;white-space:nowrap;">
+          ${isPaid?`<span style="font-family:var(--mono);font-size:15px;">${e.days_worked}</span>`:`<input type="number" min="0" max="31" value="${e.days_worked||0}" style="width:48px;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:3px 4px;font-size:14px;font-family:var(--mono);text-align:center;" onchange="prUpdateEntry('${e.id}','days_worked',this.value)">`}
+        </td>
+        <td style="padding:7px 8px;text-align:right;font-family:var(--mono);font-size:14px;color:var(--green);white-space:nowrap;">${fmt(base)}</td>
+        <td style="padding:7px 8px;text-align:right;font-family:var(--mono);font-size:13px;color:var(--text2);white-space:nowrap;">${roomDed>0?fmt(roomDed):'-'}</td>
+        <td style="padding:7px 8px;text-align:right;font-family:var(--mono);font-size:13px;color:var(--text2);white-space:nowrap;">${permitDed>0?fmt(permitDed):'-'}</td>
+        <td style="padding:7px 8px;text-align:right;font-size:12px;color:var(--text2);">${otherDed>0?`<div style="font-family:var(--mono);">${fmt(otherDed)}</div>${otherTags}`:'-'}</td>
+        <td style="padding:7px 10px;text-align:right;font-family:var(--mono);font-size:15px;font-weight:600;color:${net<0?'var(--red)':'var(--text)'};white-space:nowrap;">${fmt(net)}</td>
+        <td style="padding:7px 8px;text-align:center;">${isPaid?'':` <button onclick="openPrEntryDetail('${e.id}','${periodId}')" style="background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;">⚙</button>`}</td>
       </tr>`;
     });
+    blocks+=`<div style="margin-bottom:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg3);border-bottom:1px solid var(--border);">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="width:10px;height:10px;border-radius:50%;background:${rtColor};display:inline-block;"></span>
+          <span style="font-size:14px;font-weight:600;">${rtName}</span>
+          <span style="font-size:12px;color:var(--text3);">${items.length} คน</span>
+        </div>
+        <span style="font-family:var(--mono);font-size:14px;color:var(--green);">${fmt(rtTotal)}</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="background:var(--bg2);border-bottom:1px solid var(--border);">
+          <th style="padding:6px 8px;text-align:left;font-size:12px;color:var(--text3);font-weight:500;min-width:90px;">ชื่อ</th>
+          <th style="padding:6px 8px;text-align:center;font-size:12px;color:var(--text3);font-weight:500;">วัน</th>
+          <th style="padding:6px 8px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">ค่าแรง</th>
+          <th style="padding:6px 8px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">ห้องพัก</th>
+          <th style="padding:6px 8px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">ค่าบัตร</th>
+          <th style="padding:6px 8px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">อื่นๆ</th>
+          <th style="padding:6px 10px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">สุทธิ</th>
+          <th style="padding:6px 8px;"></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
   });
   const grandTotal=ents.reduce((s,e)=>{
     const emp=PR.employees.find(x=>x.id===e.employee_id);if(!emp)return s;
@@ -2200,14 +2248,11 @@ function openPeriod(periodId){
     return s+(emp.daily_rate||0)*(e.days_worked||0)+(e.bonus||0)-deds.reduce((a,d)=>a+d.amount,0)-(e.advance||0);
   },0);
   OM(`งวด ${slotLbl} ${mLbl}`,
-    `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-      <div style="font-size:13px;color:var(--text2);">${ents.length} คน · <span style="font-family:var(--mono);color:var(--green);font-size:15px;">${fmt(grandTotal)}</span></div>
-      ${isPaid?`<span style="font-size:12px;color:var(--green);background:var(--gdim);border:1px solid var(--gbr);padding:2px 8px;border-radius:4px;">✅ จ่ายแล้ว</span>`:`<span style="font-size:12px;color:var(--amber);background:var(--adim);border:1px solid var(--abr);padding:2px 8px;border-radius:4px;">⏳ รอจ่าย</span>`}
+    `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div style="font-size:13px;color:var(--text2);">${ents.length} คน · <span style="font-family:var(--mono);color:var(--green);font-size:16px;font-weight:600;">${fmt(grandTotal)}</span></div>
+      ${isPaid?`<span style="font-size:12px;color:var(--green);background:var(--gdim);border:1px solid var(--gbr);padding:3px 10px;border-radius:4px;">✅ จ่ายแล้ว</span>`:`<span style="font-size:12px;color:var(--amber);background:var(--adim);border:1px solid var(--abr);padding:3px 10px;border-radius:4px;">⏳ รอจ่าย</span>`}
     </div>
-    <div style="overflow-x:auto;"><table class="pr-entry-table">
-      <thead><tr><th>ชื่อ</th><th>วัน</th><th>ฐาน</th><th>หัก</th><th>สุทธิ</th><th></th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div>`,
+    <div style="overflow-x:auto;">${blocks}</div>`,
     `<div style="display:flex;gap:8px;">
       <button class="btn btn-x" onclick="CMask()">ปิด</button>
       ${!isPaid?`<button class="btn btn-g" onclick="confirmMarkPaid('${periodId}')">✅ จ่ายแล้ว</button>`:''}
