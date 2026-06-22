@@ -320,7 +320,6 @@ main{display:flex;flex:1;overflow:hidden;}
     <div class="pr-logo">💼 ระบบเงินเดือน</div>
     <div style="display:flex;align-items:center;gap:8px;">
       <span class="role-badge role-admin">👑 ผู้ดูแล</span>
-      <button onclick="openPrSettings()" title="ตั้งค่า" style="background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:6px;width:34px;height:34px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;">⚙️</button>
       <button class="pr-xbtn" onclick="backFromPayroll()">← หน้าหลัก</button>
     </div>
   </div>
@@ -329,6 +328,19 @@ main{display:flex;flex:1;overflow:hidden;}
     <button class="pr-tab" id="pr-tab-employees" onclick="setPrTab('employees')">👥 พนักงาน</button>
   </div>
   <div class="pr-body" id="pr-body"><div class="empty"><div class="ei">⏳</div><p>กำลังโหลด…</p></div></div>
+
+  <!-- floating gear FAB -->
+  <button id="pr-fab" onclick="togglePrTray()" style="position:fixed;bottom:24px;right:24px;width:52px;height:52px;border-radius:50%;background:var(--bg3);border:1px solid var(--border);color:var(--text2);font-size:22px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:900;transition:transform .2s;">⚙️</button>
+
+  <!-- bottom tray backdrop -->
+  <div id="pr-tray-bg" onclick="closePrTray()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:901;"></div>
+
+  <!-- bottom tray -->
+  <div id="pr-tray" style="display:none;position:fixed;bottom:0;left:0;right:0;background:var(--bg2);border-top:1px solid var(--border);border-radius:18px 18px 0 0;padding:12px 0 32px;z-index:902;transform:translateY(100%);transition:transform .25s ease;">
+    <div style="width:36px;height:4px;background:var(--border2);border-radius:2px;margin:0 auto 16px;"></div>
+    <div style="padding:0 16px 8px;font-size:12px;color:var(--text3);letter-spacing:.5px;">ตั้งค่าการแสดงผล</div>
+    <div id="pr-tray-items"></div>
+  </div>
 </div>
 <!-- LOGIN SCREEN -->
 <div id="login-screen">
@@ -2034,24 +2046,49 @@ function toast(msg){const t=document.createElement('div');t.className='toast';t.
 let PR={tab:'periods',month:null,employees:[],loans:[],periods:[],entries:[],deductions:[],_loaded:false};
 let _prSettings=(()=>{try{return JSON.parse(localStorage.getItem('pr_settings')||'{}')}catch{return{}}})();
 function _savePrSettings(){localStorage.setItem('pr_settings',JSON.stringify(_prSettings));}
-function openPrSettings(){
-  const chk=(k)=>`<label style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--bg3);border-radius:8px;cursor:pointer;">
-    <input type="checkbox" id="prs-${k}" ${_prSettings[k]?'checked':''} onchange="_prSettings['${k}']=this.checked;_savePrSettings();renderPayroll();" style="width:16px;height:16px;cursor:pointer;">
-    <span style="font-size:14px;"></span>
-  </label>`;
-  OM('⚙️ ตั้งค่าการแสดงผล',
-    `<div style="display:flex;flex-direction:column;gap:8px;">
-      <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--bg3);border-radius:8px;cursor:pointer;">
-        <input type="checkbox" id="prs-hideRates" ${_prSettings.hideRates?'checked':''} onchange="_prSettings.hideRates=this.checked;_savePrSettings();renderPayroll();" style="width:16px;height:16px;cursor:pointer;">
-        <div>
-          <div style="font-size:14px;font-weight:500;">ซ่อนค่าแรงรายวัน</div>
-          <div style="font-size:12px;color:var(--text3);">ซ่อน ฿XXX/วัน ในหน้าพนักงาน และซ่อนคอลัมน์ค่าแรง+ฐานในหน้างวด</div>
-        </div>
-      </label>
-    </div>`,
-    `<button class="btn btn-x" onclick="CMask()">ปิด</button>`
-  );
+function _renderTrayItems(){
+  const items=[
+    {
+      icon: _prSettings.hideRates?'👁️‍🗨️':'👁️',
+      label: _prSettings.hideRates?'แสดงค่าแรงรายวัน':'ซ่อนค่าแรงรายวัน',
+      sub: 'ซ่อน/แสดง ฿XXX/วัน และคอลัมน์ฐานในงวด',
+      action: `_prSettings.hideRates=!_prSettings.hideRates;_savePrSettings();renderPayroll();_renderTrayItems();`
+    },
+  ];
+  const el=document.getElementById('pr-tray-items');if(!el)return;
+  el.innerHTML=items.map(it=>`
+    <button onclick="${it.action}" style="display:flex;align-items:center;gap:14px;width:100%;padding:14px 20px;background:transparent;border:none;border-top:1px solid var(--border);color:var(--text);cursor:pointer;text-align:left;" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='transparent'">
+      <span style="font-size:22px;width:32px;text-align:center;">${it.icon}</span>
+      <div>
+        <div style="font-size:15px;font-weight:500;">${it.label}</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px;">${it.sub}</div>
+      </div>
+      ${_prSettings.hideRates&&it.label.includes('แสดง')?`<span style="margin-left:auto;font-size:11px;padding:2px 8px;background:var(--adim);border:1px solid var(--abr);color:var(--amber);border-radius:10px;">เปิดอยู่</span>`:''}
+    </button>`).join('');
 }
+function togglePrTray(){
+  const tray=document.getElementById('pr-tray');
+  const bg=document.getElementById('pr-tray-bg');
+  const fab=document.getElementById('pr-fab');
+  const isOpen=tray.style.transform==='translateY(0%)';
+  if(isOpen){closePrTray();}
+  else{
+    _renderTrayItems();
+    bg.style.display='block';
+    tray.style.display='block';
+    requestAnimationFrame(()=>{tray.style.transform='translateY(0%)';});
+    fab.style.transform='rotate(45deg)';
+  }
+}
+function closePrTray(){
+  const tray=document.getElementById('pr-tray');
+  const bg=document.getElementById('pr-tray-bg');
+  const fab=document.getElementById('pr-fab');
+  tray.style.transform='translateY(100%)';
+  fab.style.transform='rotate(0deg)';
+  setTimeout(()=>{tray.style.display='none';bg.style.display='none';},250);
+}
+function openPrSettings(){togglePrTray();}
 
 function prMonthNow(){const d=new Date();return`${d.getFullYear()+543}-${String(d.getMonth()+1).padStart(2,'0')}`;}
 function prMonthLbl(m){const[y,mo]=m.split('-').map(Number);return['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][mo-1]+' '+y;}
@@ -2062,11 +2099,14 @@ function showPayroll(){
   document.getElementById('app').style.display='none';
   document.getElementById('overview-screen').style.display='none';
   document.getElementById('payroll-screen').style.display='flex';
+  const fab=document.getElementById('pr-fab');if(fab)fab.style.display='flex';
   if(!PR.month)PR.month=prMonthNow();
   if(!PR._loaded){loadPayroll().then(()=>renderPayroll());}
   else renderPayroll();
 }
 function backFromPayroll(){
+  closePrTray();
+  const fab=document.getElementById('pr-fab');if(fab)fab.style.display='none';
   document.getElementById('payroll-screen').style.display='none';
   document.getElementById('app').style.display='flex';
 }
