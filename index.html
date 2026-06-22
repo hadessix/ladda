@@ -2139,7 +2139,6 @@ async function generatePeriod(beYM,slot){
       if(emp.phone_fee>0)dedRows.push({id:uid(),entry_id:entry.id,loan_id:null,type:'phone',label:'ค่าโทร',amount:emp.phone_fee});
       if(emp.room_fee>0)dedRows.push({id:uid(),entry_id:entry.id,loan_id:null,type:'room',label:'ค่าห้อง',amount:emp.room_fee});
     });
-    if(dedRows.length>0){await sbUpsert('payroll_deductions',dedRows);PR.deductions.push(...dedRows);}
     entryRows.forEach(entry=>{
       const emp=PR.employees.find(e=>e.id===entry.employee_id);
       const totalDed=dedRows.filter(d=>d.entry_id===entry.id).reduce((s,d)=>s+d.amount,0);
@@ -2147,6 +2146,7 @@ async function generatePeriod(beYM,slot){
     });
     await sbUpsert('payroll_entries',entryRows);
     PR.entries.push(...entryRows);
+    if(dedRows.length>0){await sbUpsert('payroll_deductions',dedRows);PR.deductions.push(...dedRows);}
     toast(`สร้างงวด ${pk} แล้ว (${activeEmps.length} คน) ✓`);renderPayroll();
   }catch(e){toast('สร้างงวดไม่สำเร็จ: '+e.message);console.error(e);}
 }
