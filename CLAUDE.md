@@ -273,7 +273,7 @@ RLS is disabled; anon key has full CRUD on all tables (accessed only via Worker)
 
 ## Payroll System (`PR` state)
 
-เพิ่มใน branch `feat/payroll` — admin-only หน้าเงินเดือนแยกจาก main app
+admin-only หน้าเงินเดือน — merged to main, deployed to production
 
 ### การเข้าถึง
 - ปุ่ม **💼 เงินเดือน** ใน header (แสดงเฉพาะ admin)
@@ -340,29 +340,37 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 | ฟังก์ชัน | หน้าที่ |
 |---|---|
 | `showPayroll()` | เปิดหน้าเงินเดือน + โหลดข้อมูล |
-| `loadPayroll()` | โหลด 5 tables พร้อมกัน |
+| `loadPayroll()` | โหลด 5 tables พร้อมกัน; sets `PR._loaded=true` |
 | `setPrTab(tab)` | เปลี่ยน tab periods/employees |
-| `generatePeriod(beYM,slot)` | สร้างงวด + entries + deductions |
-| `openPeriod(periodId)` | modal แสดงสลิปทุกคนในงวด |
+| `generatePeriod(beYM,slot)` | สร้างงวด + entries + deductions; guard `PR._loaded`; ถ้ามี stale period (ไม่มี entries) จะลบแล้วสร้างใหม่ |
+| `openPeriod(periodId)` | modal สลิปทุกคน จัดกลุ่มเป็น card ตามสาย; แยก col หัก: ห้องพัก / ค่าบัตร / อื่นๆ; แสดง daily_rate/วัน |
 | `prUpdateEntry(id,field,val)` | แก้ days/bonus/advance แล้ว save |
 | `openPrEntryDetail(id,periodId)` | modal แก้ละเอียดต่อคน |
 | `openAddDed(entryId,periodId)` | เพิ่มรายการหัก (จาก loan หรือ manual) |
 | `markPeriodPaid(periodId)` | จ่ายแล้ว + update loans |
-| `renderPrEmployees()` | tab พนักงาน (แยก active/inactive) |
+| `renderPrEmployees()` | tab พนักงาน (แยก active/inactive, grouped by route); มี `_prAssignMode` toggle |
+| `quickAssignRoute(empId,routeId)` | กำหนด route_id ให้พนักงานแบบ inline (ไม่ต้องเปิด modal) |
 | `openAddEmployee()` | modal เพิ่มพนักงาน |
-| `saveEmployee(editId)` | บันทึกพนักงาน |
+| `openEditEmployee(empId)` | modal แก้ไขพนักงาน (ชื่อ/สาย/ค่าแรง/ค่าโทร/ค่าห้อง) |
+| `saveEmployee(editId)` | บันทึกพนักงาน (editId=null → เพิ่มใหม่) |
 | `openEmpDetail(empId)` | โปรไฟล์พนักงาน + ประวัติ loan |
 | `setEmpStatus(empId,status)` | active/resigned/blacklisted |
 | `openAddLoan(empId)` | เพิ่ม loan/บัตร |
 | `saveLoan(empId)` | บันทึก loan |
 
+### Payroll gotchas
+- **uid collision**: `uid()` ใช้ `crypto.randomUUID()` — อย่าเปลี่ยนกลับเป็น Date.now+random; การสร้าง 42 entries พร้อมกันใน `.map()` จะ collision แน่นอนถ้าใช้ timestamp-based id
+- **insert order**: ต้อง upsert `payroll_entries` ก่อน `payroll_deductions` เสมอ (FK: deductions.entry_id → entries.id)
+- **generatePeriod guard**: เช็ค `PR._loaded` ก่อนทำงาน; ถ้า render หน้า payroll ก่อน loadPayroll เสร็จ PR.employees จะว่างเปล่า
+
 ### งานที่ยังต้องทำ (Payroll)
-- [ ] นำเข้าข้อมูลพนักงานจาก Excel (G:\...\งด.พนง เฮียรวย\2569\)
+- [x] นำเข้าข้อมูลพนักงาน 42 คน + 21 permit loans (เดือน6.69.xlsx)
+- [ ] กำหนดสายให้พนักงานทุกคน (ปัจจุบัน route_id=null ทุกคน — ใช้ ⚡ กำหนดสาย ในหน้าพนักงาน)
+- [ ] อัปเดตยอดค้างบัตรใบอนุญาต + วันหมดอายุ (admin ทำเอง)
 - [ ] รูปใบอนุญาตทำงาน (Supabase Storage)
 - [ ] ดอกเบี้ยเงินยืม (5–10%)
-- [ ] โปรไฟล์พนักงาน (feature #3)
 - [ ] เชื่อมระบบเช็คเวลาเข้างาน (feature #2)
-- [ ] merge feat/payroll → main แล้ว deploy production
+- [ ] โปรไฟล์พนักงาน (feature #3)
 
 ## Roadmap
 
@@ -374,10 +382,14 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - [x] calcCBGroup รวมทุก route ในกลุ่ม + firstRouteWithMoney
 - [x] Count บันทึกตรง (saveCountDirect) ไม่มี session step
 - [x] Exchange pair แสดงเป็น row เดียว (renderExchangePair)
-- [x] Payroll system — employees, loans, periods, auto-calculation (feat/payroll)
-- [ ] นำเข้าพนักงานจาก Excel + รูปใบอนุญาต
+- [x] Payroll system — employees, loans, periods, auto-calculation
+- [x] Payroll merged to main + deployed to production
+- [x] openPeriod redesign — grouped by route card, split deduction columns, daily_rate display
+- [x] Employee quick-assign route mode (`_prAssignMode`)
+- [ ] กำหนดสายพนักงาน + อัปเดตยอดบัตรค้าง (admin ทำเอง)
 - [ ] ระบบเช็คเวลาเข้างาน (feature #2)
 - [ ] โปรไฟล์พนักงาน (feature #3)
+- [ ] รูปใบอนุญาตทำงาน (Supabase Storage)
 - [ ] Supabase RLS per authenticated user
 - [ ] PWA — manifest + service worker
 - [ ] Export รายงาน (PDF / Excel)
