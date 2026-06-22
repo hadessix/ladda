@@ -2461,41 +2461,50 @@ function renderPrEmployees(){
     });
     html+=`</div>`;
   } else {
-  // grouped view
-  Object.entries(byRoute).forEach(([rid,emps])=>{
-    const rt=S.shops.find(s=>s.id===rid)||S.groups.find(g=>g.id===rid);
-    html+=`<div style="margin-bottom:16px;"><div style="font-size:12px;color:var(--text3);letter-spacing:1px;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--border);">— ${rt?rt.name:'ไม่มีสาย'} —</div>`;
-    emps.forEach(emp=>{
-      const loans=PR.loans.filter(l=>l.employee_id===emp.id&&l.status==='active');
-      html+=`<div class="pr-emp-row">
-        <div style="width:8px;height:8px;border-radius:50%;background:${rt?rt.color||'var(--green)':'var(--border2)'};flex-shrink:0;"></div>
-        <div style="flex:1;">
-          <div class="pr-emp-name">${emp.name}${loans.length>0?` <span style="font-size:11px;color:var(--amber);background:var(--adim);border:1px solid var(--abr);padding:1px 6px;border-radius:4px;">${loans.length} ค้าง</span>`:''}</div>
-          <div style="font-size:12px;color:var(--text3);">${rt?rt.name:'ไม่มีสาย'} · ${emp.nationality||'ไทย'}</div>
-        </div>
-        <div class="pr-emp-rate">${fmt(emp.daily_rate||0)}/วัน</div>
-        <button onclick="openEmpDetail('${emp.id}')" style="background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:13px;">ดู</button>
-      </div>`;
-    });
-    html+=`</div>`;
+  // grid view — route label left, employee chips right
+  // sort routes by shop sort_order; __none__ last
+  const sortedRouteKeys=Object.keys(byRoute).sort((a,b)=>{
+    if(a==='__none__')return 1;if(b==='__none__')return -1;
+    const ra=S.shops.find(s=>s.id===a);const rb=S.shops.find(s=>s.id===b);
+    return (ra?.sort_order||0)-(rb?.sort_order||0);
   });
-  } // end grouped
+  html+=`<div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;">`;
+  sortedRouteKeys.forEach((rid,ri)=>{
+    const emps=byRoute[rid];
+    const rt=S.shops.find(s=>s.id===rid);
+    const rtColor=rt?.color||'#555';
+    const rtName=rt?rt.name:'ไม่มีสาย';
+    const chips=emps.map(emp=>{
+      const loans=PR.loans.filter(l=>l.employee_id===emp.id&&l.status==='active');
+      return `<div onclick="openEmpDetail('${emp.id}')" style="display:inline-flex;flex-direction:column;align-items:flex-start;gap:1px;padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;cursor:pointer;min-width:80px;transition:background .15s;" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='var(--bg2)'">
+        <div style="font-size:13px;font-weight:500;white-space:nowrap;">${emp.name}${loans.length>0?` <span style="font-size:10px;color:var(--amber);">●</span>`:''}</div>
+        <div style="font-size:11px;color:var(--text3);font-family:var(--mono);">${fmt(emp.daily_rate||0)}</div>
+      </div>`;
+    }).join('');
+    html+=`<div style="display:flex;align-items:stretch;${ri>0?'border-top:1px solid var(--border)':''};">
+      <div style="flex:0 0 90px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:3px;padding:10px 8px;background:${rtColor}18;border-right:3px solid ${rtColor};">
+        <div style="width:8px;height:8px;border-radius:50%;background:${rtColor};"></div>
+        <div style="font-size:12px;font-weight:600;text-align:center;color:var(--text);line-height:1.3;">${rtName}</div>
+        <div style="font-size:11px;color:var(--text3);">${emps.length} คน</div>
+      </div>
+      <div style="flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 12px;">${chips}</div>
+    </div>`;
+  });
+  html+=`</div>`;
+  } // end grid
   if(inactive.length>0){
-    html+=`<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px;">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:8px;">ออกจากงานแล้ว (${inactive.length} คน)</div>`;
+    html+=`<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:12px;">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:8px;">ออกจากงานแล้ว (${inactive.length} คน)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">`;
     inactive.forEach(emp=>{
       const isBL=emp.status==='blacklisted';
       const debt=PR.loans.filter(l=>l.employee_id===emp.id&&l.status==='active').reduce((s,l)=>s+(l.total_amount-l.paid_amount),0);
-      html+=`<div class="pr-emp-row" style="opacity:0.65;">
-        <div style="width:8px;height:8px;border-radius:50%;background:${isBL?'var(--red)':'var(--border2)'};flex-shrink:0;"></div>
-        <div style="flex:1;">
-          <div class="pr-emp-name">${emp.name}${isBL?' <span style="font-size:11px;color:var(--red);">🚫</span>':''}</div>
-          <div style="font-size:12px;color:var(--text3);">${emp.resign_date||''}${debt>0?` · หนี้ค้าง ${fmt(debt)}`:''}</div>
-        </div>
-        <button onclick="openEmpDetail('${emp.id}')" style="background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:13px;">ดู</button>
+      html+=`<div onclick="openEmpDetail('${emp.id}')" style="display:inline-flex;flex-direction:column;gap:1px;padding:5px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;cursor:pointer;opacity:0.6;">
+        <div style="font-size:13px;color:${isBL?'var(--red)':'var(--text2)'};">${emp.name}${isBL?' 🚫':''}</div>
+        ${debt>0?`<div style="font-size:10px;color:var(--red);">หนี้ ${fmt(debt)}</div>`:''}
       </div>`;
     });
-    html+=`</div>`;
+    html+=`</div></div>`;
   }
   if(PR.employees.length===0)html+=`<div class="empty"><div class="ei">👥</div><p>ยังไม่มีพนักงาน<br>กด + เพิ่มพนักงาน เพื่อเริ่มต้น</p></div>`;
   return html;
