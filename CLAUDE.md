@@ -348,11 +348,12 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 | `openPrEntryDetail(id,periodId)` | modal แก้ละเอียดต่อคน |
 | `openAddDed(entryId,periodId)` | เพิ่มรายการหัก (จาก loan หรือ manual) |
 | `markPeriodPaid(periodId)` | จ่ายแล้ว + update loans |
-| `renderPrEmployees()` | tab พนักงาน (แยก active/inactive, grouped by route); มี `_prAssignMode` toggle |
+| `renderPrEmployees()` | tab พนักงาน (แยก active/inactive, grouped by route/dept); กรองตาม `_prSettings.hideManager/hideTopManager` |
 | `quickAssignRoute(empId,routeId)` | กำหนด route_id ให้พนักงานแบบ inline (ไม่ต้องเปิด modal) |
-| `openAddEmployee()` | modal เพิ่มพนักงาน |
-| `openEditEmployee(empId)` | modal แก้ไขพนักงาน (ชื่อ/สาย/ค่าแรง/ค่าโทร/ค่าห้อง) |
-| `saveEmployee(editId)` | บันทึกพนักงาน (editId=null → เพิ่มใหม่) |
+| `prMoveRoute(routeId,dir)` | สลับ sort_order ของ route ขึ้น/ลง → upsert routes |
+| `openAddEmployee()` | modal เพิ่มพนักงาน (ชื่อ/สาย/แผนก/ตำแหน่ง/ค่าแรง/ค่าโทร/ค่าห้อง) |
+| `openEditEmployee(empId)` | modal แก้ไขพนักงาน |
+| `saveEmployee(editId)` | บันทึกพนักงาน (editId=null → เพิ่มใหม่); fields รวม `position` |
 | `openEmpDetail(empId)` | โปรไฟล์พนักงาน + ประวัติ loan |
 | `setEmpStatus(empId,status)` | active/resigned/blacklisted |
 | `openAddLoan(empId)` | เพิ่ม loan/บัตร |
@@ -362,10 +363,31 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - **uid collision**: `uid()` ใช้ `crypto.randomUUID()` — อย่าเปลี่ยนกลับเป็น Date.now+random; การสร้าง 42 entries พร้อมกันใน `.map()` จะ collision แน่นอนถ้าใช้ timestamp-based id
 - **insert order**: ต้อง upsert `payroll_entries` ก่อน `payroll_deductions` เสมอ (FK: deductions.entry_id → entries.id)
 - **generatePeriod guard**: เช็ค `PR._loaded` ก่อนทำงาน; ถ้า render หน้า payroll ก่อน loadPayroll เสร็จ PR.employees จะว่างเปล่า
+- **_openPeriodId**: เก็บ periodId ที่ modal เปิดอยู่; tray toggle ใช้ re-open modal หลังเปลี่ยน settings; ต้อง check `PR.tab==='periods'` ก่อน ไม่งั้นจะเด้งไปงวดจ่ายตอนอยู่ tab พนักงาน
+- **_prSettings** (localStorage `pr_settings`): `{ hideRates, hideManager, hideTopManager }` — hideManager/hideTopManager กรองพนักงานตาม `emp.position` ทั้งหน้าพนักงานและ openPeriod modal
+
+### Employee fields
+| field | type | หมายเหตุ |
+|---|---|---|
+| `name` | text | ชื่อพนักงาน |
+| `route_id` | text | สายที่สังกัด (null = ยังไม่มีสาย) |
+| `department` | text | แผนก (ออฟฟิส/บัญชี/คลังสินค้า/ขนส่ง/อื่นๆ) — ใช้จัดกลุ่มใน grid เมื่อไม่มีสาย |
+| `position` | text | ตำแหน่งงาน (คนขับรถ/เด็กติดรถ/ออฟฟิสทั่วไป/ผู้จัดการ/ผู้จัดการใหญ่) — ใช้ filter ใน _prSettings |
+| `daily_rate` | numeric | ค่าแรงต่อวัน |
+| `nationality` | text | สัญชาติ |
+| `phone_fee` | numeric | ค่าโทรต่องวด |
+| `room_fee` | numeric | ค่าห้องต่องวด |
+| `status` | text | active/resigned/blacklisted |
+
+### Payroll FAB (floating buttons)
+- `#pr-fab-group`: `position:fixed; top:80px; right:24px` — แสดงเมื่อ `showPayroll()`, ซ่อนเมื่อ `backFromPayroll()`
+- 📤 `_prShareCurrent()`: ถ้า tab=employees → `shareEmployeeList()`; ถ้า tab=periods → `sharePeriod()` งวดแรกของเดือน
+- ⚙️ `togglePrTray()`: เปิด/ปิด bottom tray settings
 
 ### งานที่ยังต้องทำ (Payroll)
 - [x] นำเข้าข้อมูลพนักงาน 42 คน + 21 permit loans (เดือน6.69.xlsx)
-- [ ] กำหนดสายให้พนักงานทุกคน (ปัจจุบัน route_id=null ทุกคน — ใช้ ⚡ กำหนดสาย ในหน้าพนักงาน)
+- [ ] กำหนดสายให้พนักงานทุกคน (ใช้ ⚡ กำหนดสาย ในหน้าพนักงาน)
+- [ ] กำหนดตำแหน่งงานให้พนักงาน (admin ทำเอง)
 - [ ] อัปเดตยอดค้างบัตรใบอนุญาต + วันหมดอายุ (admin ทำเอง)
 - [ ] รูปใบอนุญาตทำงาน (Supabase Storage)
 - [ ] ดอกเบี้ยเงินยืม (5–10%)
@@ -386,7 +408,11 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - [x] Payroll merged to main + deployed to production
 - [x] openPeriod redesign — grouped by route card, split deduction columns, daily_rate display
 - [x] Employee quick-assign route mode (`_prAssignMode`)
-- [ ] กำหนดสายพนักงาน + อัปเดตยอดบัตรค้าง (admin ทำเอง)
+- [x] Route reorder (↑↓) via `prMoveRoute()`
+- [x] Payroll settings tray (gear FAB) — hideRates, hideManager, hideTopManager
+- [x] Share button (📤 FAB) — context-aware: period or employee list; respects hide settings
+- [x] Employee position field (คนขับรถ/เด็กติดรถ/ออฟฟิสทั่วไป/ผู้จัดการ/ผู้จัดการใหญ่)
+- [ ] กำหนดสายพนักงาน + ตำแหน่ง + อัปเดตยอดบัตรค้าง (admin ทำเอง)
 - [ ] ระบบเช็คเวลาเข้างาน (feature #2)
 - [ ] โปรไฟล์พนักงาน (feature #3)
 - [ ] รูปใบอนุญาตทำงาน (Supabase Storage)
