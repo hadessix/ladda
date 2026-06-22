@@ -320,6 +320,7 @@ main{display:flex;flex:1;overflow:hidden;}
     <div class="pr-logo">💼 ระบบเงินเดือน</div>
     <div style="display:flex;align-items:center;gap:8px;">
       <span class="role-badge role-admin">👑 ผู้ดูแล</span>
+      <button onclick="togglePrTray()" title="ตั้งค่า" style="background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:6px;width:34px;height:34px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;" id="pr-gear-btn">⚙️</button>
       <button class="pr-xbtn" onclick="backFromPayroll()">← หน้าหลัก</button>
     </div>
   </div>
@@ -328,9 +329,6 @@ main{display:flex;flex:1;overflow:hidden;}
     <button class="pr-tab" id="pr-tab-employees" onclick="setPrTab('employees')">👥 พนักงาน</button>
   </div>
   <div class="pr-body" id="pr-body"><div class="empty"><div class="ei">⏳</div><p>กำลังโหลด…</p></div></div>
-
-  <!-- floating gear FAB -->
-  <button id="pr-fab" onclick="togglePrTray()" style="position:fixed;bottom:24px;right:24px;width:52px;height:52px;border-radius:50%;background:var(--bg3);border:1px solid var(--border);color:var(--text2);font-size:22px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:900;transition:transform .2s;">⚙️</button>
 
   <!-- bottom tray backdrop -->
   <div id="pr-tray-bg" onclick="closePrTray()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:901;"></div>
@@ -2069,7 +2067,7 @@ function _renderTrayItems(){
 function togglePrTray(){
   const tray=document.getElementById('pr-tray');
   const bg=document.getElementById('pr-tray-bg');
-  const fab=document.getElementById('pr-fab');
+  const gear=document.getElementById('pr-gear-btn');
   const isOpen=tray.style.transform==='translateY(0%)';
   if(isOpen){closePrTray();}
   else{
@@ -2077,15 +2075,15 @@ function togglePrTray(){
     bg.style.display='block';
     tray.style.display='block';
     requestAnimationFrame(()=>{tray.style.transform='translateY(0%)';});
-    fab.style.transform='rotate(45deg)';
+    if(gear)gear.style.transform='rotate(45deg)';
   }
 }
 function closePrTray(){
   const tray=document.getElementById('pr-tray');
   const bg=document.getElementById('pr-tray-bg');
-  const fab=document.getElementById('pr-fab');
+  const gear=document.getElementById('pr-gear-btn');
   tray.style.transform='translateY(100%)';
-  fab.style.transform='rotate(0deg)';
+  if(gear)gear.style.transform='rotate(0deg)';
   setTimeout(()=>{tray.style.display='none';bg.style.display='none';},250);
 }
 function openPrSettings(){togglePrTray();}
@@ -2099,14 +2097,12 @@ function showPayroll(){
   document.getElementById('app').style.display='none';
   document.getElementById('overview-screen').style.display='none';
   document.getElementById('payroll-screen').style.display='flex';
-  const fab=document.getElementById('pr-fab');if(fab)fab.style.display='flex';
   if(!PR.month)PR.month=prMonthNow();
   if(!PR._loaded){loadPayroll().then(()=>renderPayroll());}
   else renderPayroll();
 }
 function backFromPayroll(){
   closePrTray();
-  const fab=document.getElementById('pr-fab');if(fab)fab.style.display='none';
   document.getElementById('payroll-screen').style.display='none';
   document.getElementById('app').style.display='flex';
 }
@@ -2160,7 +2156,10 @@ function renderPrPeriods(){
         <div class="pr-period-title">${lbl}</div>
         <div class="pr-period-sub">${prMonthLbl(m)}</div>
         <div style="margin:8px 0;font-family:var(--mono);font-size:16px;color:${isPaid?'var(--green)':'var(--amber)'};">${fmt(total)}</div>
-        <div style="font-size:11px;color:var(--text3);">${ents.length} คน · ${isPaid?'✅ จ่ายแล้ว':'⏳ รอจ่าย'}</div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:11px;color:var(--text3);">${ents.length} คน · ${isPaid?'✅ จ่ายแล้ว':'⏳ รอจ่าย'}</span>
+          <button onclick="event.stopPropagation();sharePeriod('${period.id}')" style="margin-left:auto;background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:11px;">📤</button>
+        </div>
       </div>`;
     }
   });
@@ -2380,6 +2379,54 @@ async function sharePeriod(periodId){
   }
 }
 
+async function shareEmployeeList(){
+  const active=PR.employees.filter(e=>e.status==='active');
+  const fmtN=n=>String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+  const groupedIds=new Set(Object.values(S.groupMembers).flat());
+  const sortedGroups=[...S.groups].sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+  let lines=[`👥 รายชื่อพนักงาน (${active.length} คน)`,'─'.repeat(30)];
+  // grouped routes
+  sortedGroups.forEach(grp=>{
+    const members=(S.groupMembers[grp.id]||[]).map(id=>S.shops.find(s=>s.id===id)).filter(Boolean).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+    const grpEmps=members.flatMap(r=>active.filter(e=>e.route_id===r.id));
+    if(!grpEmps.length)return;
+    lines.push('');lines.push(`📁 ${grp.name}`);
+    members.forEach(rt=>{
+      const emps=active.filter(e=>e.route_id===rt.id);
+      if(!emps.length)return;
+      lines.push(`  📍 ${rt.name}`);
+      emps.forEach(emp=>{
+        const p=_prSettings.hideRates?'':`  ฿${fmtN(emp.daily_rate||0)}/วัน`;
+        lines.push(`    • ${emp.name}${p}`);
+      });
+    });
+  });
+  // standalone routes
+  const standaloneRoutes=[...S.shops].filter(r=>!groupedIds.has(r.id)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+  standaloneRoutes.forEach(rt=>{
+    const emps=active.filter(e=>e.route_id===rt.id);
+    if(!emps.length)return;
+    lines.push('');lines.push(`📍 ${rt.name}`);
+    emps.forEach(emp=>{
+      const p=_prSettings.hideRates?'':`  ฿${fmtN(emp.daily_rate||0)}/วัน`;
+      lines.push(`  • ${emp.name}${p}`);
+    });
+  });
+  // dept + none
+  const deptMap={};
+  active.filter(e=>!e.route_id).forEach(e=>{const k=e.department||'ไม่มีสาย';if(!deptMap[k])deptMap[k]=[];deptMap[k].push(e);});
+  Object.entries(deptMap).forEach(([dept,emps])=>{
+    lines.push('');lines.push(`🏢 ${dept}`);
+    emps.forEach(emp=>{
+      const p=_prSettings.hideRates?'':`  ฿${fmtN(emp.daily_rate||0)}/วัน`;
+      lines.push(`  • ${emp.name}${p}`);
+    });
+  });
+  const text=lines.join('\n');
+  if(navigator.share){try{await navigator.share({title:'รายชื่อพนักงาน',text});return;}catch(e){if(e.name==='AbortError')return;}}
+  try{await navigator.clipboard.writeText(text);toast('คัดลอกรายชื่อพนักงานแล้ว ✓');}
+  catch{const ta=document.createElement('textarea');ta.value=text;ta.style.cssText='position:fixed;opacity:0';document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('คัดลอกแล้ว ✓');}
+}
 async function prUpdateEntry(entryId,field,value){
   const e=PR.entries.find(x=>x.id===entryId);if(!e)return;
   const emp=PR.employees.find(x=>x.id===e.employee_id);if(!emp)return;
@@ -2563,6 +2610,7 @@ function renderPrEmployees(){
     <div style="font-size:16px;font-weight:600;">พนักงาน (${active.length} คน)${unassigned>0?` <span style="font-size:12px;color:var(--amber);background:var(--adim);border:1px solid var(--abr);padding:1px 7px;border-radius:10px;">${unassigned} ยังไม่มีสาย</span>`:''}</div>
     <div style="display:flex;gap:8px;">
       <button class="btn ${_prAssignMode?'btn-a':'btn-b'}" onclick="_prAssignMode=!_prAssignMode;renderPayroll();">${_prAssignMode?'✅ เสร็จแล้ว':'⚡ กำหนดสาย'}</button>
+      <button class="btn btn-b" onclick="shareEmployeeList()">📤</button>
       <button class="btn btn-b" onclick="openAddEmployee()">+ เพิ่มพนักงาน</button>
     </div>
   </div>`;
