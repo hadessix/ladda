@@ -2109,6 +2109,7 @@ function renderPrPeriods(){
 function prAdjMonth(d){PR.month=prMonthAdj(PR.month,d);renderPayroll();}
 
 async function generatePeriod(beYM,slot){
+  if(!PR._loaded){toast('กำลังโหลดข้อมูล กรุณารอสักครู่…');return;}
   const slotMap={A:{from:1,to:10,payD:11},B:{from:11,to:20,payD:21},C:{from:21,to:0,payD:1}};
   const s=slotMap[slot];
   const[y,m]=beYM.split('-').map(Number);const ceY=y-543;
