@@ -36,7 +36,7 @@ Everything lives in `index.html` in this order:
    - Field mappers (`entryToRow`, `rowToEntry`)
    - Global state (`S`, `AUTH`, `PR`)
    - Data loading (`loadAll`)
-   - Auth (`authInit`, `sha256`, `pinCheck`, `showApp`, `logout`, `isAdmin`)
+   - Auth (`authInit`, `sha256`, `pinCheck`, `showApp`, `logout`, `isAdmin`, `isHR`)
    - Render functions (`render`, `renderSidebar`, `renderContent`, `renderShopContent`, `renderGroupContent`)
    - Overview page (`showOverview`, `backToMain`, `renderOverview`, `renderOvTabs`, `toggleOvVisible`, `setOvYear`, `setOvMonth`)
    - Feature logic (count, income, expense, exchange, payowner)
@@ -58,7 +58,7 @@ S = {
   year:  "YYYY"
 }
 
-AUTH = { role: 'user' | 'admin' | 'viewer' }  // persisted in localStorage: 'ladda_role'
+AUTH = { role: 'user' | 'admin' | 'viewer' | 'hr' }  // persisted in localStorage: 'ladda_role'
 // Token: localStorage 'ladda_token' (JWT issued by Worker, 30-day expiry)
 ```
 
@@ -151,26 +151,60 @@ RLS is disabled; anon key has full CRUD on all tables (accessed only via Worker)
   └─ มี ladda_role + ladda_token ใน localStorage?
         ├─ ใช่ → showApp()
         │         ├─ admin/user → main app (#app)
-        │         └─ viewer     → overview screen (#overview-screen)
+        │         ├─ viewer     → overview screen (#overview-screen)
+        │         └─ hr         → payroll screen (#payroll-screen) tab พนักงาน, ไม่มี FAB, ไม่มี tab งวดจ่าย
         └─ ไม่ → แสดงหน้า password input
                    └─ กรอก PIN → sha256(PIN) → POST /auth (Worker)
                          ├─ admin  → token + role → main app
                          ├─ user   → token + role → main app
                          ├─ viewer → token + role → overview screen (read-only)
+                         ├─ hr     → token + role → payroll employee tab (read-only salary)
                          └─ ผิด   → error, ล้าง input
 ```
 
 - PIN จริงและ hash ไม่มีใน source code เลย — อยู่แค่ใน Cloudflare Worker env vars
 - `isAdmin()` guards all delete/manage actions
+- `isHR()` guards salary fields and payroll-only features
 - Logout: ลบ `ladda_role` + `ladda_token` → แสดงหน้า login
 
 ## Roles
 
 | Role | PIN | สิทธิ์ |
 |---|---|---|
-| `admin` | (Worker secret) | ทุกอย่าง รวมถึงลบ จัดการสาย/กลุ่ม ตั้งค่า overview |
-| `user` | (Worker secret) | ดู + เพิ่มข้อมูล, ลบไม่ได้, จัดการสายไม่ได้ |
-| `viewer` | (Worker secret) | เข้าได้เฉพาะหน้าภาพรวม (overview), ดูอย่างเดียว |
+| `admin` | (Worker secret `HASH_ADMIN`) | ทุกอย่าง รวมถึงลบ จัดการสาย/กลุ่ม ตั้งค่า overview |
+| `user` | (Worker secret `HASH_USER`) | ดู + เพิ่มข้อมูล, ลบไม่ได้, จัดการสายไม่ได้ |
+| `viewer` | (Worker secret `HASH_VIEWER`) | เข้าได้เฉพาะหน้าภาพรวม (overview), ดูอย่างเดียว |
+| `hr` | (Worker secret `HASH_HR`) | เข้าได้เฉพาะหน้าพนักงาน — เพิ่ม/แก้ชื่อ/สาย/สัญชาติ/รูป; ไม่เห็นค่าแรง/payment_type/loan/งวดจ่าย |
+
+### HR Role — รายละเอียด
+
+HR เข้าได้เฉพาะ payroll screen tab พนักงาน เท่านั้น:
+- **ทำได้**: เพิ่มพนักงานใหม่, แก้ชื่อ/สาย/สัญชาติ/หมายเหตุ, อัปโหลดรูป
+- **ทำไม่ได้**: เห็นค่าแรง, ค่าโทร, ค่าห้อง, แผนก, ตำแหน่ง, payment_type, loan, สถานะออกจากงาน, tab งวดจ่าย
+- `backFromPayroll()` สำหรับ HR จะ `logout()` แทนกลับ main app
+- `loadPayroll()` ฝั่ง HR โหลด: employees + routes + groups + group_members (เพื่อจัดกลุ่มสาย)
+- `saveEmployee()` ฝั่ง HR: บันทึกเฉพาะ name/route_id/nationality/notes; daily_rate คงเดิม (default 360 ถ้าใหม่)
+
+### employees_salary table (data isolation)
+
+ข้อมูลเงินเดือนแยกออกมาจาก employees เพื่อความปลอดภัย — Worker บล็อก HR ระดับ API:
+
+```sql
+employees_salary (
+  employee_id  text PRIMARY KEY REFERENCES employees(id) ON DELETE CASCADE,
+  daily_rate   numeric DEFAULT 360,
+  phone_fee    numeric DEFAULT 0,
+  room_fee     numeric DEFAULT 0,
+  department   text,
+  position     text,
+  payment_type text DEFAULT 'เงินสดW'
+)
+```
+
+- Worker: `HR_BLOCKED_TABLES = ['employees_salary', 'payroll_periods', 'payroll_entries', 'payroll_deductions', 'employee_loans']` → 403 ถ้า role=hr
+- admin: `loadPayroll()` โหลดทั้ง employees + employees_salary แล้ว merge salary fields เข้า emp objects
+- admin: `saveEmployee()` upsert employees ก่อน แล้ว upsert employees_salary แยก
+- **แม้ HR เอา token ไปโยนใส่ Claude ก็ได้ 403** เพราะบล็อกที่ Worker ไม่ใช่ที่ UI
 
 ## Overview Page (`#overview-screen`)
 
@@ -218,9 +252,10 @@ RLS is disabled; anon key has full CRUD on all tables (accessed only via Worker)
 | `authInit()` | ตรวจ localStorage → showApp() หรือแสดงหน้า login |
 | `sha256(str)` | async — SHA-256 via Web Crypto API |
 | `pinCheck()` | async — hash → POST Worker /auth → token + role → showApp() |
-| `showApp()` | ซ่อน login; viewer→overview, admin/user→app |
-| `logout()` | ลบ localStorage token+role, ซ่อน overview+app, แสดง login |
+| `showApp()` | ซ่อน login; viewer→overview, hr→payroll employee tab, admin/user→app |
+| `logout()` | ลบ localStorage token+role, ซ่อน overview+app+payroll, แสดง login |
 | `isAdmin()` | คืน true ถ้า role === 'admin' |
+| `isHR()` | คืน true ถ้า role === 'hr' |
 | `loadAll()` | โหลดข้อมูลทั้งหมดจาก Worker/Supabase |
 | `render()` | re-render ทุก component |
 | `renderSidebar()` | sidebar: กลุ่ม + สายไม่มีกลุ่ม |
@@ -276,23 +311,26 @@ RLS is disabled; anon key has full CRUD on all tables (accessed only via Worker)
 |---|---|---|
 | PIN hashing | ✅ Done | hash อยู่ใน Worker env เท่านั้น ไม่มีใน source |
 | Cloudflare Worker proxy | ✅ Done | ไม่มี Supabase key ใน source; JWT token 30 วัน |
+| Salary data isolation | ✅ Done | employees_salary แยก table; Worker 403 ถ้า hr เข้า |
 | Supabase RLS | 🔲 TODO | ยังใช้ anon key (ผ่าน Worker); RLS จริงต้องการ auth token |
 
 ### Worker (`worker.js`)
 - URL: `https://ladda-api.hades-six.workers.dev`
-- `POST /auth` → ตรวจ hash → ออก JWT (role: admin/user/viewer)
+- `POST /auth` → ตรวจ hash → ออก JWT (role: admin/user/viewer/hr)
 - `GET|POST|DELETE /api/:table` → validate JWT → proxy ไป Supabase
-- Secrets: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `HASH_USER`, `HASH_ADMIN`, `HASH_VIEWER`, `JWT_SECRET`
+- Secrets: `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `HASH_USER`, `HASH_ADMIN`, `HASH_VIEWER`, `HASH_HR`, `JWT_SECRET`
 - 401 จาก Worker → `logout()` อัตโนมัติ
+- `HR_BLOCKED_TABLES`: `employees_salary`, `payroll_periods`, `payroll_entries`, `payroll_deductions`, `employee_loans` → return 403 ถ้า role=hr
 
 ## Payroll System (`PR` state)
 
-admin-only หน้าเงินเดือน — deployed to production
+admin + hr เข้าได้ (hr เห็นแค่ tab พนักงาน ไม่เห็นค่าแรง)
 
 ### การเข้าถึง
 - ปุ่ม **💼 เงินเดือน** ใน header (แสดงเฉพาะ admin)
-- `showPayroll()` → ซ่อน `#app` + แสดง `#payroll-screen`; header แสดง "🪙 นับเงิน" (กลับ) + 👑 badge ทางขวา
-- `backFromPayroll()` → กลับ main app
+- HR: เข้าโดยตรงหลัง login ไม่มีปุ่ม "🪙 นับเงิน" กลับ — กด logout แทน
+- `showPayroll()` → ซ่อน `#app` + แสดง `#payroll-screen`
+- `backFromPayroll()` → admin: กลับ main app; hr: logout()
 
 ### Global State
 ```js
@@ -300,10 +338,10 @@ PR = {
   tab: 'periods' | 'employees',
   month: "YYYY-MM",   // BE year, calendar month เช่น "2568-06"
   employees: [],
-  loans: [],          // employee_loans
-  periods: [],        // payroll_periods
-  entries: [],        // payroll_entries
-  deductions: [],     // payroll_deductions
+  loans: [],          // employee_loans (admin only)
+  periods: [],        // payroll_periods (admin only)
+  entries: [],        // payroll_entries (admin only)
+  deductions: [],     // payroll_deductions (admin only)
   _loaded: false
 }
 ```
@@ -314,19 +352,25 @@ employees (
   id           text PRIMARY KEY,
   name         text NOT NULL,
   route_id     text,
-  department   text,
-  position     text,
-  daily_rate   numeric,
   nationality  text,
-  phone_fee    numeric,
-  room_fee     numeric,
   status       text DEFAULT 'active',
-  payment_type text DEFAULT 'เงินสดW',   -- เงินสดW | โอนจ่ายW | โอนจ่ายM | รายเดือน
   photo_url    text,
   permit_photos jsonb,   -- array of up to 4 URLs (work permit, non-Thai only)
   license_photo text,    -- driver's license URL
-  notes        text
+  notes        text,
+  start_date   date      -- วันที่เริ่มงาน
 )
+
+employees_salary (
+  employee_id  text PRIMARY KEY REFERENCES employees(id) ON DELETE CASCADE,
+  daily_rate   numeric DEFAULT 360,
+  phone_fee    numeric DEFAULT 0,
+  room_fee     numeric DEFAULT 0,
+  department   text,
+  position     text,
+  payment_type text DEFAULT 'เงินสดW'
+)
+
 employee_loans    -- บัตร(ใบอนุญาต)/ยืม ที่ผ่อนอยู่
 payroll_periods   -- งวด 10 วัน (3 งวด/เดือน)
 payroll_entries   -- สลิปต่อคนต่องวด
@@ -375,7 +419,7 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 | ฟังก์ชัน | หน้าที่ |
 |---|---|
 | `showPayroll()` | เปิดหน้าเงินเดือน + โหลดข้อมูล |
-| `loadPayroll()` | โหลด 5 tables พร้อมกัน; sets `PR._loaded=true` |
+| `loadPayroll()` | admin: โหลด employees+salary+loans+periods+entries+deds; hr: โหลด employees+routes+groups+group_members |
 | `renderPayroll()` | inject HTML เข้า `#pr-body` (ต้องเรียก ไม่ใช่ `renderPrEmployees()`) |
 | `setPrTab(tab)` | เปลี่ยน tab periods/employees |
 | `generatePeriod(beYM,slot)` | สร้างงวด + entries + deductions; guard `PR._loaded`; ถ้ามี stale period (ไม่มี entries) จะลบแล้วสร้างใหม่ |
@@ -384,23 +428,28 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 | `openPrEntryDetail(id,periodId)` | modal แก้ละเอียดต่อคน |
 | `openAddDed(entryId,periodId)` | เพิ่มรายการหัก (จาก loan หรือ manual) |
 | `markPeriodPaid(periodId)` | จ่ายแล้ว + update loans |
-| `renderPrEmployees()` | **returns HTML string** — tab พนักงาน; drag-to-reassign chips; grouped by route/dept; กรองตาม `_prSettings` |
+| `renderPrEmployees()` | **returns HTML string** — tab พนักงาน; drag-to-reassign chips; grouped by route/dept; กรองตาม `_prSettings`; salary chip ซ่อนถ้า isHR() |
 | `quickAssignRoute(empId,routeId)` | กำหนด route_id ให้พนักงาน (inline, ไม่ต้องเปิด modal) |
 | `prMoveRoute(routeId,dir)` | สลับ sort_order ของ route ขึ้น/ลง → upsert routes |
-| `openAddEmployee()` | modal เพิ่มพนักงาน (ชื่อ/สาย/แผนก/ตำแหน่ง/ค่าแรง/ค่าโทร/ค่าห้อง/payment_type) |
-| `openEditEmployee(empId)` | modal แก้ไขพนักงาน |
-| `saveEmployee(editId)` | บันทึกพนักงาน (editId=null → เพิ่มใหม่); fields รวม `position`, `payment_type` |
-| `openEmpDetail(empId)` | โปรไฟล์พนักงาน + รูปภาพ + ประวัติ loan + payment_type |
-| `setEmpStatus(empId,status)` | active/resigned/blacklisted |
-| `openAddLoan(empId)` | เพิ่ม loan/บัตร |
+| `openAddEmployee()` | admin: form เต็ม; hr: form แค่ ชื่อ/สาย/สัญชาติ/หมายเหตุ |
+| `openEditEmployee(empId)` | admin: form เต็ม; hr: form แค่ ชื่อ/สาย/สัญชาติ/หมายเหตุ |
+| `saveEmployee(editId)` | admin: upsert employees + employees_salary; hr: upsert employees เท่านั้น (คง daily_rate เดิม) |
+| `openEmpDetail(empId)` | admin: โปรไฟล์เต็ม + loan + status buttons; hr: เห็นแค่ สาย/สัญชาติ/สถานะ + รูป |
+| `setEmpStatus(empId,status)` | active/resigned/blacklisted (admin only) |
+| `openAddLoan(empId)` | เพิ่ม loan/บัตร (admin only) |
 | `saveLoan(empId)` | บันทึก loan |
-| `sharePeriod(periodId)` | แชร์/คัดลอกข้อความสรุปงวด แบ่ง 2 ชุด (ดูด้านล่าง) |
+| `sharePeriod(periodId)` | เปิด modal 3 ปุ่ม: ส่งให้เฮียรวย / ส่งให้บูรชัย / ส่งให้น้องลัดดา |
 | `shareEmployeeList()` | แชร์รายชื่อพนักงาน |
 
-### sharePeriod — 2-group split
-- **ชุดที่ 1**: เงินสดW ทุกสาย; F1 มียอดแยก subtotal ต่างหาก
-- **ชุดที่ 2**: พนักงานในกลุ่มที่มีชื่อ "บูรชัย" (`S.groups.find(g=>g.name.includes('บูรชัย'))`) ที่มี payment_type = เงินสดW หรือ โอนจ่ายM; แสดง `[โอนจ่ายM]` ต่อท้ายบรรทัดที่ไม่ใช่เงินสดW
+### sharePeriod — 3-group split
+
+ใช้ `window._sp1/sp2/sp3` + `window._doShare(key)` pattern (หลีกเลี่ยง Thai encoding ใน onclick):
+
+- **ส่งให้เฮียรวย** (`_sp1`): เงินสดW ทุกสายยกเว้นบูรชัย; F1 แยก subtotal; subtotal เฮียรวย + subtotal F1 แยกกัน
+- **ส่งให้บูรชัย** (`_sp2`): พนักงานในกลุ่ม "บูรชัย" ที่ payment_type = เงินสดW หรือ โอนจ่ายM; **ไม่มี F1 เลย**; แสดง `[โอนจ่ายM]` ต่อท้าย
+- **ส่งให้น้องลัดดา** (`_sp3`): ยอดรวมทุกสายยกเว้น F1 (ใช้ชื่อเฮียรวย) + ยอดรวม F1 + ยอดรวมบูรชัย
 - F1 route หา via `S.shops.find(s=>s.name==='F1')`
+- บูรชัย group หา via `S.groups.find(g=>g.name.includes('บูรชัย'))`
 
 ### Drag-to-Reassign Employee (หน้าพนักงาน)
 - Touch: `ontouchstart="_empTouchStart(event,empId)"` → ghost สร้างหลัง 10px movement → `touchend` ใช้ `_dragZone` ที่ save ระหว่าง `touchmove` (ไม่ใช่ `elementFromPoint` ใน touchend)
@@ -416,27 +465,31 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - **_openPeriodId**: เก็บ periodId ที่ modal เปิดอยู่; tray toggle ใช้ re-open modal หลังเปลี่ยน settings; ต้อง check `PR.tab==='periods'` ก่อน ไม่งั้นจะเด้งไปงวดจ่ายตอนอยู่ tab พนักงาน
 - **_prSettings** (localStorage `pr_settings`): `{ hideRates, hideManager, hideTopManager }` — hideManager/hideTopManager กรองพนักงานตาม `emp.position` ทั้งหน้าพนักงานและ openPeriod modal
 - **renderPayroll() vs renderPrEmployees()**: `renderPrEmployees()` คืน HTML string เท่านั้น; ต้องเรียก `renderPayroll()` เพื่อ inject เข้า DOM จริง
+- **HR loadPayroll**: โหลด employees + routes + groups + group_members เพื่อให้การเรียงสายตรงกับ admin view
 
 ### Employee fields
-| field | type | หมายเหตุ |
-|---|---|---|
-| `name` | text | ชื่อพนักงาน |
-| `route_id` | text | สายที่สังกัด (null = ยังไม่มีสาย) |
-| `department` | text | แผนก (ออฟฟิส/บัญชี/คลังสินค้า/ขนส่ง/อื่นๆ) — ใช้จัดกลุ่มใน grid เมื่อไม่มีสาย |
-| `position` | text | ตำแหน่งงาน (คนขับรถ/เด็กติดรถ/ออฟฟิสทั่วไป/ผู้จัดการ/ผู้จัดการใหญ่) — ใช้ filter ใน _prSettings |
-| `daily_rate` | numeric | ค่าแรงต่อวัน |
-| `nationality` | text | สัญชาติ |
-| `phone_fee` | numeric | ค่าโทรต่องวด |
-| `room_fee` | numeric | ค่าห้องต่องวด |
-| `status` | text | active/resigned/blacklisted |
-| `payment_type` | text | เงินสดW / โอนจ่ายW / โอนจ่ายM / รายเดือน (default: เงินสดW) |
-| `photo_url` | text | Cloudinary URL รูปโปรไฟล์ |
-| `permit_photos` | jsonb | array URL ใบอนุญาตทำงาน (max 4, non-Thai only) |
-| `license_photo` | text | Cloudinary URL ใบขับขี่ |
-| `notes` | text | หมายเหตุ |
+| field | table | type | หมายเหตุ |
+|---|---|---|---|
+| `name` | employees | text | ชื่อพนักงาน |
+| `route_id` | employees | text | สายที่สังกัด (null = ยังไม่มีสาย) |
+| `nationality` | employees | text | สัญชาติ |
+| `status` | employees | text | active/resigned/blacklisted |
+| `photo_url` | employees | text | Cloudinary URL รูปโปรไฟล์ |
+| `permit_photos` | employees | jsonb | array URL ใบอนุญาตทำงาน (max 4, non-Thai only) |
+| `license_photo` | employees | text | Cloudinary URL ใบขับขี่ |
+| `notes` | employees | text | หมายเหตุ |
+| `start_date` | employees | date | วันที่เริ่มงาน |
+| `daily_rate` | employees_salary | numeric | ค่าแรงต่อวัน (default 360) |
+| `phone_fee` | employees_salary | numeric | ค่าโทรต่องวด |
+| `room_fee` | employees_salary | numeric | ค่าห้องต่องวด |
+| `department` | employees_salary | text | แผนก (ออฟฟิศ/บัญชี/คลังสินค้า/ขนส่ง/อื่นๆ) |
+| `position` | employees_salary | text | ตำแหน่งงาน (คนขับรถ/เด็กติดรถ/ออฟฟิศทั่วไป/ผู้จัดการ/ผู้จัดการใหญ่) |
+| `payment_type` | employees_salary | text | เงินสดW / โอนจ่ายW / โอนจ่ายM / รายเดือน (default: เงินสดW) |
+
+> หลัง `loadPayroll()` (admin) salary fields ถูก merge เข้า emp objects แล้ว ใช้ได้เป็น `emp.daily_rate` ปกติ
 
 ### Payroll FAB (floating buttons)
-- `#pr-fab-group`: `position:fixed; top:80px; right:24px` — แสดงเมื่อ `showPayroll()`, ซ่อนเมื่อ `backFromPayroll()`
+- `#pr-fab-group`: `position:fixed; top:80px; right:24px` — แสดงเมื่อ `showPayroll()` (admin เท่านั้น), ซ่อนเมื่อ `backFromPayroll()` หรือ HR login
 - 📤 `_prShareCurrent()`: ถ้า tab=employees → `shareEmployeeList()`; ถ้า tab=periods → `sharePeriod()` งวดแรกของเดือน
 - ⚙️ `togglePrTray()`: เปิด/ปิด bottom tray settings
 
@@ -445,6 +498,9 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - [x] รูปพนักงาน + ใบอนุญาตทำงาน + ใบขับขี่ (Cloudinary)
 - [x] Drag-to-reassign พนักงานระหว่างสาย (touch + mouse)
 - [x] payment_type field + แสดงในโปรไฟล์ + แยกใน sharePeriod
+- [x] HR role — แยก employees_salary table, Worker block, UI strip salary fields
+- [x] sharePeriod แยก 3 ปุ่ม (เฮียรวย / บูรชัย / น้องลัดดา)
+- [x] ประวัติพนักงาน bulk-edit modal (openAllEmployees)
 - [ ] กำหนดสายให้พนักงานทุกคน (admin ทำเอง)
 - [ ] กำหนดตำแหน่งงาน + payment_type ให้พนักงาน (admin ทำเอง)
 - [ ] อัปเดตยอดค้างบัตรใบอนุญาต + วันหมดอายุ (admin ทำเอง)
@@ -466,13 +522,14 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - [x] Employee quick-assign route mode (drag-to-reassign, touch+mouse)
 - [x] Route reorder (↑↓) via `prMoveRoute()`
 - [x] Payroll settings tray (gear FAB) — hideRates, hideManager, hideTopManager
-- [x] Share button (📤 FAB) — context-aware: 2-group period split or employee list
-- [x] Employee position field
+- [x] Share button (📤 FAB) — 3-group period split (เฮียรวย/บูรชัย/น้องลัดดา) or employee list
+- [x] Employee position field + start_date field
 - [x] Employee photo upload via Cloudinary (profile + permit ×4 + license)
 - [x] payment_type field (เงินสดW/โอนจ่ายW/โอนจ่ายM/รายเดือน)
-- [x] sharePeriod split: ชุด1=เงินสดW ทุกสาย (F1 แยก), ชุด2=บูรชัย+F1 (เงินสดW+โอนจ่ายM)
 - [x] Sidebar gear (⚙️) — admin toggle ✏️🗑 + drag-to-reorder members
 - [x] Payroll year/month grid picker (เฉพาะปี/เดือนที่ผ่านมาและมีข้อมูล)
+- [x] HR role — employees_salary isolation, Worker 403, UI strip salary/loan/period
+- [x] ประวัติพนักงาน bulk-edit modal
 - [ ] กำหนดสาย + ตำแหน่ง + payment_type + ยอดบัตรค้าง (admin ทำเอง)
 - [ ] ดอกเบี้ยเงินยืม (5–10%)
 - [ ] ระบบเช็คเวลาเข้างาน (feature #2)
