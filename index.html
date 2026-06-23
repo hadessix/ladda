@@ -2348,12 +2348,38 @@ function renderPayroll(){
 // ── Periods tab ──
 function renderPrPeriods(){
   const m=PR.month;
+  const [yStr,moStr]=m.split('-');
+  const y=Number(yStr),mo=Number(moStr);
+  // year grid: 5 years centered on selected
+  const yStart=y-2;
+  const btnBase='padding:6px 4px;text-align:center;border-radius:6px;cursor:pointer;font-size:12px;line-height:1.3;transition:background .15s;';
+  const navBtn='background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:4px 10px;cursor:pointer;font-size:14px;font-family:var(--font);';
+  const yearCells=Array.from({length:5},(_,i)=>{
+    const yr=yStart+i;
+    const sel=yr===y;
+    return`<div onclick="prSetYear(${yr})" style="${btnBase}border:1px solid ${sel?'var(--amber)':'var(--border)'};background:${sel?'var(--adim)':'var(--bg2)'};color:${sel?'var(--amber)':'var(--text)'};font-weight:${sel?'600':'400'};">
+      <div>${yr}</div><div style="font-size:10px;color:var(--text3);">${yr-543}</div>
+    </div>`;
+  }).join('');
+  const monthCells=Array.from({length:12},(_,i)=>{
+    const mn=i+1;
+    const mk=`${y}-${String(mn).padStart(2,'0')}`;
+    const sel=mo===mn;
+    const hasPeriod=PR.periods.some(p=>p.period_key.startsWith(mk+'-'));
+    return`<div onclick="prSetMonth(${mn})" style="${btnBase}border:1px solid ${sel?'var(--amber)':'var(--border)'};background:${sel?'var(--adim)':'var(--bg2)'};color:${sel?'var(--amber)':'var(--text)'};font-weight:${sel?'600':'400'};position:relative;">
+      ${mn}${hasPeriod?`<span style="position:absolute;top:3px;right:4px;width:5px;height:5px;border-radius:50%;background:${sel?'var(--amber)':'var(--green)'}"></span>`:''}
+    </div>`;
+  }).join('');
   const slots=[{k:'A',lbl:'1–10'},{k:'B',lbl:'11–20'},{k:'C',lbl:'21–31'}];
-  let html=`<div class="pr-month-nav">
-    <button class="pr-month-btn" onclick="prAdjMonth(-1)">‹</button>
-    <div class="pr-month-lbl">${prMonthLbl(m)}</div>
-    <button class="pr-month-btn" onclick="prAdjMonth(1)">›</button>
-  </div><div class="pr-period-grid">`;
+  let html=`<div style="margin-bottom:16px;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;">
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+      <button onclick="prAdjYear(-5)" style="${navBtn}">‹</button>
+      <div style="flex:1;display:grid;grid-template-columns:repeat(5,1fr);gap:4px;">${yearCells}</div>
+      <button onclick="prAdjYear(5)" style="${navBtn}">›</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;">${monthCells}</div>
+  </div>
+  <div class="pr-period-grid">`;
   slots.forEach(({k,lbl})=>{
     const pk=`${m}-${k}`;
     const period=PR.periods.find(p=>p.period_key===pk);
@@ -2382,6 +2408,9 @@ function renderPrPeriods(){
   return html;
 }
 function prAdjMonth(d){PR.month=prMonthAdj(PR.month,d);renderPayroll();}
+function prSetYear(yr){const mo=PR.month.split('-')[1];PR.month=`${yr}-${mo}`;renderPayroll();}
+function prSetMonth(mn){const yr=PR.month.split('-')[0];PR.month=`${yr}-${String(mn).padStart(2,'0')}`;renderPayroll();}
+function prAdjYear(d){const[yr,mo]=PR.month.split('-');PR.month=`${Number(yr)+d}-${mo}`;renderPayroll();}
 
 async function generatePeriod(beYM,slot){
   if(!PR._loaded){toast('กำลังโหลดข้อมูล กรุณารอสักครู่…');return;}
