@@ -1001,6 +1001,7 @@ function renderEntry(e){
       <span class="edt">${ds}</span>
       <span class="ett">${e.title||''}</span>
       <span class="eam ${aclass[e.type]}">${sign[e.type]}${fmt(Math.abs(amt))}</span>
+      ${e.type==='count'?`<button class="delbtn" style="background:var(--blue);margin-right:4px;" onclick="event.stopPropagation();openEditCount('${e.id}')">แก้ไข</button>`:''}
       <button class="delbtn" onclick="delE(event,'${e.id}')" style="${isAdmin()?'':'display:none'}">ลบ</button>
     </div>
     <div class="ebody" id="eb-${e.id}">${body}</div>
@@ -1052,9 +1053,9 @@ function updBLimit(p){
   const tb=document.getElementById(`${p}_tot`);if(tb)tb.textContent=fmt(tot);
   if(over)toast('ไม่สามารถใส่แบงค์เกินจำนวนที่มีในกล่องได้');
 }
-function billInp(p,cols){
+function billInp(p,cols,init){
   const g=cols===2?'bgrid2':'bgrid';
-  return`<div class="${g}">`+BT.map(t=>`<div class="bcell"><label><span class="pill ${BC[t]}">฿${BL[t]}</span></label><input type="number" min="0" value="0" id="${p}_${t}" oninput="updB('${p}')" inputmode="numeric"><div class="bsub" id="${p}s_${t}">= ฿0</div></div>`).join('')+`</div>`;
+  return`<div class="${g}">`+BT.map(t=>{const v=(init&&init[t])||0;return`<div class="bcell"><label><span class="pill ${BC[t]}">฿${BL[t]}</span></label><input type="number" min="0" value="${v}" id="${p}_${t}" oninput="updB('${p}')" inputmode="numeric"><div class="bsub" id="${p}s_${t}">= ฿0</div></div>`;}).join('')+`</div>`;
 }
 function updB(p){
   let tot=0;
@@ -1088,6 +1089,41 @@ async function saveCountDirect(){
     await sbUpsert('entries',entryToRow(entry,S.shop,S.month));
     ge(S.shop,S.month).push(entry);
     CM();render();toast(`บันทึกนับเงินรอบ ${prevRounds+1} รวม ${fmt(total)} ✓`);
+  }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
+}
+function openEditCount(entryId){
+  let entry=null,sid=null;
+  for(const rid of Object.keys(S.entries)){const f=(S.entries[rid][S.month]||[]).find(e=>e.id===entryId);if(f){entry=f;sid=rid;break;}}
+  if(!entry){toast('ไม่พบรายการ');return;}
+  const sub=(entry.subs||[])[0]||{};
+  const bills=sub.bills||eb();
+  const body=`
+    <input type="hidden" id="ec_sid" value="${sid}">
+    <div class="frow">
+      <div class="fg"><label class="flbl">วันที่เริ่ม</label><input type="date" class="finp" id="sf_df" value="${sub.df||entry.df||today()}"></div>
+      <div class="fg"><label class="flbl">วันที่สิ้นสุด</label><input type="date" class="finp" id="sf_dt" value="${sub.dt||entry.dt||today()}"></div>
+    </div>
+    <div class="tbar"><span class="tl">ยอดที่นับได้</span><span class="tv" id="sf_tot">฿0</span></div>
+    ${billInp('sf',null,bills)}`;
+  OM(`แก้ไข ${entry.title||'นับเงิน'}`,body,`<button class="btn btn-x" onclick="CMask()">ยกเลิก</button><button class="btn btn-g" onclick="saveEditCount('${entryId}')">บันทึก</button>`);
+  updB('sf');
+}
+async function saveEditCount(entryId){
+  const df=document.getElementById('sf_df').value;
+  const dt=document.getElementById('sf_dt').value||df;
+  if(!df){toast('กรุณาเลือกวันที่');return;}
+  const bills=gb('sf');
+  const total=bv(bills);
+  if(total===0){toast('กรุณาใส่จำนวนแบงค์ที่นับได้');return;}
+  const sid=document.getElementById('ec_sid').value;
+  const list=ge(sid,S.month);
+  const entry=list.find(e=>e.id===entryId);
+  if(!entry){toast('ไม่พบรายการ');return;}
+  const updated={...entry,df,dt,total,subs:[{df,dt,bills}]};
+  try{
+    await sbUpsert('entries',entryToRow(updated,sid,S.month));
+    Object.assign(entry,updated);
+    CM();render();toast(`แก้ไข${entry.title||'นับเงิน'}แล้ว ✓`);
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
 }
 function addSubCount(){}
