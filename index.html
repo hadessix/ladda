@@ -2639,23 +2639,37 @@ async function sharePeriod(periodId){
   if(f1Id&&byRoute1[f1Id])lines1.push(`รวม F1  ฿${fmtN(tot1F1)}`);
   lines1.push(`รวมทั้งหมด ${cnt1} คน  ฿${fmtN(tot1Main+tot1F1)}`);
 
-  // ── ชุดที่ 2: กลุ่มบูรชัย (เงินสดW + โอนจ่ายM) ──
+  // ── ชุดที่ 2: กลุ่มบูรชัย (เงินสดW + โอนจ่ายM) — F1 ขึ้นก่อน บูรชัยตามหลัง ──
   const cashTransferTypes=new Set(['เงินสดW','โอนจ่ายM']);
-  const byRoute2={};
+  // แยก F1 กับ บูรชัย
+  const byRoute2F1=[];const byRoute2Bur={};
   ents.forEach(e=>{
     const emp=PR.employees.find(x=>x.id===e.employee_id);if(!emp)return;
-    if(!burachaiMemberIds.has(emp.route_id))return;
+    const inBur=burachaiMemberIds.has(emp.route_id);
+    const isF1=emp.route_id===f1Id;
+    if(!inBur&&!isF1)return;
     const pt=emp.payment_type||'เงินสดW';
     if(!cashTransferTypes.has(pt))return;
-    const k=emp.route_id||'__none__';
-    if(!byRoute2[k])byRoute2[k]=[];byRoute2[k].push({e,emp});
+    if(isF1){byRoute2F1.push({e,emp});}
+    else{const k=emp.route_id||'__none__';if(!byRoute2Bur[k])byRoute2Bur[k]=[];byRoute2Bur[k].push({e,emp});}
   });
-  let lines2=[``,`${'─'.repeat(32)}`,`💼 ${burachaiGrp?burachaiGrp.name:'บูรชัย'} — งวด ${slotLbl} ${mLbl}`,'─'.repeat(32),''];
-  let tot2=0,cnt2=0;
-  Object.keys(byRoute2).forEach(rid=>{
+  let lines2=[``,`${'─'.repeat(32)}`,`💼 ${burachaiGrp?burachaiGrp.name:'บูรชัย'}+F1 — งวด ${slotLbl} ${mLbl}`,'─'.repeat(32),''];
+  let tot2=0,cnt2=0,tot2F1=0,cnt2F1=0;
+  // F1 ก่อน (ด้านบน)
+  if(byRoute2F1.length){
+    lines2.push(`📍 F1`);
+    byRoute2F1.forEach(({e,emp})=>{
+      const{line,net}=_entryLine(e,emp);
+      lines2.push(line);
+      tot2F1+=net;cnt2F1++;
+    });
+    lines2.push('');
+  }
+  // บูรชัย
+  Object.keys(byRoute2Bur).forEach(rid=>{
     const rt=S.shops.find(s=>s.id===rid);
     lines2.push(`📍 ${rt?rt.name:'ไม่มีสาย'}`);
-    byRoute2[rid].forEach(({e,emp})=>{
+    byRoute2Bur[rid].forEach(({e,emp})=>{
       const{line,net}=_entryLine(e,emp);
       const pt=emp.payment_type||'เงินสดW';
       lines2.push(line+(pt!=='เงินสดW'?` [${pt}]`:''));
@@ -2664,18 +2678,33 @@ async function sharePeriod(periodId){
     lines2.push('');
   });
   lines2.push('─'.repeat(32));
-  lines2.push(`รวม ${cnt2} คน  ฿${fmtN(tot2)}`);
+  if(byRoute2F1.length)lines2.push(`รวม F1  ฿${fmtN(tot2F1)}`);
+  lines2.push(`รวม ${cnt2} คน  ฿${fmtN(tot2)}`);  // ไม่นับ F1
 
-  const text=[...lines1,...(Object.keys(byRoute2).length?lines2:[])].join('\n');
-  if(navigator.share){
-    try{await navigator.share({title:`งวด ${slotLbl} ${mLbl}`,text});return;}catch(e){if(e.name==='AbortError')return;}
+  const hasLines2=(byRoute2F1.length+Object.keys(byRoute2Bur).length)>0;
+
+  // ── เลือกว่าจะส่งชุดไหน ──
+  async function _doShare(text,title){
+    if(navigator.share){
+      try{await navigator.share({title,text});return;}catch(e){if(e.name==='AbortError')return;}
+    }
+    try{await navigator.clipboard.writeText(text);toast('คัดลอกแล้ว ✓');}
+    catch{
+      const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
+      document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
+      toast('คัดลอกแล้ว ✓');
+    }
   }
-  try{await navigator.clipboard.writeText(text);toast('คัดลอกแล้ว ✓');}
-  catch{
-    const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
-    document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
-    toast('คัดลอกแล้ว ✓');
-  }
+  const title1=`งวด ${slotLbl} ${mLbl} (เฮียรวย)`;
+  const title2=`งวด ${slotLbl} ${mLbl} (บูรชัย)`;
+  OM(`📤 ส่งงวด ${slotLbl} ${mLbl}`,
+    `<div style="display:flex;flex-direction:column;gap:12px;padding:8px 0;">
+      <button onclick="CMask(true);_doShare(${JSON.stringify(lines1.join('\n'))},${JSON.stringify(title1)})" class="btn btn-g" style="font-size:15px;padding:14px;">💼 ส่งให้เฮียรวย</button>
+      ${hasLines2?`<button onclick="CMask(true);_doShare(${JSON.stringify(lines2.join('\n'))},${JSON.stringify(title2)})" class="btn btn-b" style="font-size:15px;padding:14px;">🏢 ส่งให้บูรชัย</button>`:''}
+    </div>`,
+    `<button class="btn btn-x" onclick="CMask()">ยกเลิก</button>`
+  );
+  window._doShare=_doShare;
 }
 
 async function shareEmployeeList(){
