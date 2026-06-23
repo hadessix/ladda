@@ -3001,14 +3001,18 @@ async function _uploadToCloudinary(file, publicId){
   return data.secure_url;
 }
 
+async function _empPhotoUpsert(empId, patch){
+  const emp=PR.employees.find(e=>e.id===empId); if(!emp) return;
+  await sbUpsert('employees',[{...emp,...patch}]);
+  Object.assign(emp,patch);
+}
+
 async function uploadEmpPhoto(empId, input){
   const file=input.files[0]; if(!file) return;
   toast('กำลังอัปโหลด...');
   try{
     const url=await _uploadToCloudinary(file,`emp_${empId}`);
-    await sbUpsert('employees',[{id:empId,photo_url:url}]);
-    const emp=PR.employees.find(e=>e.id===empId);
-    if(emp) emp.photo_url=url;
+    await _empPhotoUpsert(empId,{photo_url:url});
     toast('อัปโหลดรูปสำเร็จ ✓');
     CM(); setTimeout(()=>openEmpDetail(empId),50);
   } catch(e){ toast('อัปโหลดไม่สำเร็จ: '+e.message); }
@@ -3023,8 +3027,7 @@ async function uploadPermitPhoto(empId, input){
     if(photos.length>=4){ toast('อัปโหลดได้สูงสุด 4 รูป'); return; }
     const url=await _uploadToCloudinary(file,`emp_${empId}_permit_${Date.now()}`);
     photos.push(url);
-    await sbUpsert('employees',[{id:empId,permit_photos:photos}]);
-    emp.permit_photos=photos;
+    await _empPhotoUpsert(empId,{permit_photos:photos});
     toast('อัปโหลดใบอนุญาตสำเร็จ ✓');
     CM(); setTimeout(()=>openEmpDetail(empId),50);
   } catch(e){ toast('อัปโหลดไม่สำเร็จ: '+e.message); }
@@ -3035,8 +3038,7 @@ async function delPermitPhoto(empId, idx){
   const emp=PR.employees.find(e=>e.id===empId); if(!emp) return;
   const photos=Array.isArray(emp.permit_photos)?[...emp.permit_photos]:[];
   photos.splice(idx,1);
-  await sbUpsert('employees',[{id:empId,permit_photos:photos}]);
-  emp.permit_photos=photos;
+  await _empPhotoUpsert(empId,{permit_photos:photos});
   CM(); setTimeout(()=>openEmpDetail(empId),50);
 }
 
@@ -3045,9 +3047,7 @@ async function uploadLicensePhoto(empId, input){
   toast('กำลังอัปโหลด...');
   try{
     const url=await _uploadToCloudinary(file,`emp_${empId}_license`);
-    await sbUpsert('employees',[{id:empId,license_photo:url}]);
-    const emp=PR.employees.find(e=>e.id===empId);
-    if(emp) emp.license_photo=url;
+    await _empPhotoUpsert(empId,{license_photo:url});
     toast('อัปโหลดใบขับขี่สำเร็จ ✓');
     CM(); setTimeout(()=>openEmpDetail(empId),50);
   } catch(e){ toast('อัปโหลดไม่สำเร็จ: '+e.message); }
@@ -3055,9 +3055,7 @@ async function uploadLicensePhoto(empId, input){
 
 async function delLicensePhoto(empId){
   if(!confirm('ลบรูปใบขับขี่นี้?')) return;
-  await sbUpsert('employees',[{id:empId,license_photo:null}]);
-  const emp=PR.employees.find(e=>e.id===empId);
-  if(emp) emp.license_photo=null;
+  await _empPhotoUpsert(empId,{license_photo:null});
   CM(); setTimeout(()=>openEmpDetail(empId),50);
 }
 
