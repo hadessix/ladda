@@ -3043,7 +3043,7 @@ async function _empDrop(empId,zone){
   if(emp&&emp.route_id!==(routeId||null)){
     toast('กำลังย้ายสาย...');
     await quickAssignRoute(empId,routeId);
-    renderPrEmployees();
+    renderPayroll();
     toast('ย้ายสายสำเร็จ ✓');
   }
 }
