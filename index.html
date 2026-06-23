@@ -2990,6 +2990,25 @@ async function saveEmployee(editId){
   }catch(e){toast('บันทึกไม่สำเร็จ: '+e.message);}
 }
 
+async function uploadEmpPhoto(empId, input){
+  const file=input.files[0]; if(!file) return;
+  toast('กำลังอัปโหลด...');
+  const fd=new FormData();
+  fd.append('file',file);
+  fd.append('upload_preset','ladda_employees');
+  fd.append('public_id',`emp_${empId}`);
+  try{
+    const res=await fetch('https://api.cloudinary.com/v1_1/dai58zx93/image/upload',{method:'POST',body:fd});
+    const data=await res.json();
+    if(!data.secure_url) throw new Error('upload failed');
+    await sbUpsert('employees',[{id:empId,photo_url:data.secure_url}]);
+    const emp=PR.employees.find(e=>e.id===empId);
+    if(emp) emp.photo_url=data.secure_url;
+    toast('อัปโหลดรูปสำเร็จ ✓');
+    CM(); setTimeout(()=>openEmpDetail(empId),50);
+  } catch(e){ toast('อัปโหลดไม่สำเร็จ: '+e.message); }
+}
+
 function openEmpDetail(empId){
   const emp=PR.employees.find(e=>e.id===empId);if(!emp)return;
   const rt=S.shops.find(s=>s.id===emp.route_id)||S.groups.find(g=>g.id===emp.route_id);
@@ -3010,7 +3029,17 @@ function openEmpDetail(empId){
         <div style="height:4px;background:var(--bg3);border-radius:2px;margin-top:6px;"><div style="height:100%;width:${pct}%;background:${l.status==='active'?'var(--amber)':'var(--green)'};border-radius:2px;transition:.3s;"></div></div>
       </div>`;
     }).join('');
+  const photoHtml=`<div style="text-align:center;margin-bottom:16px;">
+    ${emp.photo_url
+      ?`<img src="${emp.photo_url}" style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:2px solid var(--border);margin-bottom:8px;">`
+      :`<div style="width:90px;height:90px;border-radius:50%;background:var(--bg3);border:2px solid var(--border);display:inline-flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:8px;">👤</div>`}
+    <br><label style="font-size:12px;color:var(--text3);cursor:pointer;padding:3px 10px;border:1px dashed var(--border2);border-radius:6px;">
+      📷 ${emp.photo_url?'เปลี่ยนรูป':'อัปโหลดรูป'}
+      <input type="file" accept="image/*" style="display:none;" onchange="uploadEmpPhoto('${emp.id}',this)">
+    </label>
+  </div>`;
   OM(`👤 ${emp.name}`,
+    photoHtml+
     `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
       <div class="sc"><div class="lb">สาย</div><div class="vl" style="font-size:14px;">${rt?rt.name:'—'}</div></div>
       <div class="sc"><div class="lb">ตำแหน่ง</div><div class="vl" style="font-size:14px;">${emp.position||'—'}</div></div>
