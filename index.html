@@ -2795,7 +2795,7 @@ function renderPrEmployees(){
   function _empChips(emps){
     return emps.map(emp=>{
       const loans=PR.loans.filter(l=>l.employee_id===emp.id&&l.status==='active');
-      return`<div data-emp-id="${emp.id}" onclick="openEmpDetail('${emp.id}')" ontouchstart="_empTouchStart(event,'${emp.id}')" style="display:inline-flex;flex-direction:column;gap:1px;padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;cursor:grab;min-width:80px;transition:background .15s;user-select:none;-webkit-user-select:none;" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='var(--bg2)'">
+      return`<div data-emp-id="${emp.id}" onclick="openEmpDetail('${emp.id}')" ontouchstart="_empTouchStart(event,'${emp.id}')" onmousedown="_empMouseStart(event,'${emp.id}')" style="display:inline-flex;flex-direction:column;gap:1px;padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;cursor:grab;min-width:80px;transition:background .15s;user-select:none;-webkit-user-select:none;" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='var(--bg2)'">
         <div style="font-size:13px;font-weight:500;white-space:nowrap;">${emp.name}${loans.length>0?`<span style="font-size:10px;color:var(--amber);margin-left:3px;">●</span>`:''}</div>
         ${_prSettings.hideRates?'':` <div style="font-size:11px;color:var(--text3);font-family:var(--mono);">${fmt(emp.daily_rate||0)}</div>`}
       </div>`;
@@ -3008,36 +3008,91 @@ function _empTouchMove(e){
   e.preventDefault(); // กัน scroll เฉพาะตอนลากจริงๆ
 }
 
-async function _empTouchEnd(e){
-  if(!_dragEmpId)return;
-  const empId=_dragEmpId, moved=_dragMoved;
-  _dragEmpId=null; _dragMoved=false; _dragSrc=null;
-  if(_dragGhost){_dragGhost.remove();_dragGhost=null;}
-  if(_dragZone){_dragZone.style.background='';_dragZone=null;}
-  if(moved){
-    const t=e.changedTouches[0];
-    const el=document.elementFromPoint(t.clientX,t.clientY);
-    const zone=el?.closest('[data-drop-route]');
-    if(zone){
-      const routeId=zone.dataset.dropRoute||null;
-      const emp=PR.employees.find(x=>x.id===empId);
-      if(emp&&emp.route_id!==(routeId||null)){
-        toast('กำลังย้ายสาย...');
-        await quickAssignRoute(empId,routeId);
-        renderPrEmployees();
-        toast('ย้ายสายสำเร็จ ✓');
-      }
-    }
-  }
-  // tap: click event fires openEmpDetail() เองผ่าน onclick
-}
-
-document.addEventListener('touchmove',e=>{if(_dragEmpId)_empTouchMove(e);},{passive:false});
-document.addEventListener('touchend',e=>{if(_dragEmpId)_empTouchEnd(e);});
-document.addEventListener('touchcancel',()=>{
+function _empDragCleanup(){
   if(_dragGhost){_dragGhost.remove();_dragGhost=null;}
   if(_dragZone){_dragZone.style.background='';_dragZone=null;}
   _dragEmpId=null;_dragMoved=false;_dragSrc=null;
+}
+function _empCreateGhost(x,y){
+  if(!_dragSrc)return;
+  const rect=_dragSrc.getBoundingClientRect();
+  _dragGhost=_dragSrc.cloneNode(true);
+  Object.assign(_dragGhost.style,{
+    position:'fixed',zIndex:'9999',pointerEvents:'none',
+    width:rect.width+'px',opacity:'0.9',
+    left:(x-rect.width/2)+'px',top:(y-50)+'px',
+    transform:'scale(1.1)',boxShadow:'0 6px 20px #0009',
+    background:'var(--bg3)',border:'2px solid var(--amber)',borderRadius:'8px'
+  });
+  document.body.appendChild(_dragGhost);
+}
+function _empUpdateZone(x,y){
+  if(!_dragGhost)return;
+  _dragGhost.style.display='none';
+  const el=document.elementFromPoint(x,y);
+  _dragGhost.style.display='';
+  const zone=el?.closest('[data-drop-route]');
+  if(_dragZone&&_dragZone!==zone)_dragZone.style.background='';
+  _dragZone=zone||null;
+  if(_dragZone)_dragZone.style.background='var(--amber)22';
+}
+async function _empDrop(empId,zone){
+  if(!zone)return;
+  const routeId=zone.dataset.dropRoute||null;
+  const emp=PR.employees.find(x=>x.id===empId);
+  if(emp&&emp.route_id!==(routeId||null)){
+    toast('กำลังย้ายสาย...');
+    await quickAssignRoute(empId,routeId);
+    renderPrEmployees();
+    toast('ย้ายสายสำเร็จ ✓');
+  }
+}
+
+// touch
+document.addEventListener('touchmove',e=>{
+  if(!_dragEmpId)return;
+  const t=e.touches[0];
+  const dx=t.clientX-_dragStartX,dy=t.clientY-_dragStartY;
+  if(!_dragMoved&&Math.sqrt(dx*dx+dy*dy)<10)return;
+  if(!_dragMoved){_dragMoved=true;_empCreateGhost(t.clientX,t.clientY);}
+  if(!_dragGhost)return;
+  _dragGhost.style.left=(t.clientX-parseInt(_dragGhost.style.width)/2)+'px';
+  _dragGhost.style.top=(t.clientY-50)+'px';
+  _empUpdateZone(t.clientX,t.clientY);
+  e.preventDefault();
+},{passive:false});
+document.addEventListener('touchend',async e=>{
+  if(!_dragEmpId)return;
+  const empId=_dragEmpId,moved=_dragMoved,zone=_dragZone;
+  _empDragCleanup();
+  if(moved) await _empDrop(empId,zone);
+});
+document.addEventListener('touchcancel',_empDragCleanup);
+
+// mouse (desktop)
+function _empMouseStart(e,empId){
+  if(e.button!==0)return;
+  e.preventDefault();
+  _dragEmpId=empId;_dragMoved=false;_dragGhost=null;
+  _dragSrc=e.currentTarget;
+  _dragStartX=e.clientX;_dragStartY=e.clientY;
+}
+document.addEventListener('mousemove',e=>{
+  if(!_dragEmpId)return;
+  const dx=e.clientX-_dragStartX,dy=e.clientY-_dragStartY;
+  if(!_dragMoved&&Math.sqrt(dx*dx+dy*dy)<6)return;
+  if(!_dragMoved){_dragMoved=true;_empCreateGhost(e.clientX,e.clientY);}
+  if(!_dragGhost)return;
+  _dragGhost.style.left=(e.clientX-parseInt(_dragGhost.style.width)/2)+'px';
+  _dragGhost.style.top=(e.clientY-50)+'px';
+  _empUpdateZone(e.clientX,e.clientY);
+});
+document.addEventListener('mouseup',async e=>{
+  if(!_dragEmpId)return;
+  const empId=_dragEmpId,moved=_dragMoved,zone=_dragZone;
+  _empDragCleanup();
+  if(moved) await _empDrop(empId,zone);
+  // !moved → click fires openEmpDetail เอง
 });
 
 async function quickAssignRoute(empId,routeId){
