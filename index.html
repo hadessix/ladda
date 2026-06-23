@@ -2908,8 +2908,9 @@ function renderPrEmployees(){
   const unassigned=active.filter(e=>!e.route_id).length;
   let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:8px;flex-wrap:wrap;">
     <div style="font-size:16px;font-weight:600;">พนักงาน (${active.length} คน)${unassigned>0?` <span style="font-size:12px;color:var(--amber);background:var(--adim);border:1px solid var(--abr);padding:1px 7px;border-radius:10px;">${unassigned} ยังไม่มีสาย</span>`:''}</div>
-    <div style="display:flex;gap:8px;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn ${_prAssignMode?'btn-a':'btn-b'}" onclick="_prAssignMode=!_prAssignMode;renderPayroll();">${_prAssignMode?'✅ เสร็จแล้ว':'⚡ กำหนดสาย'}</button>
+      <button class="btn btn-b" onclick="openAllEmployees()">📋 ดูทั้งหมด</button>
       <button class="btn btn-b" onclick="openAddEmployee()">+ เพิ่มพนักงาน</button>
     </div>
   </div>`;
@@ -3431,6 +3432,67 @@ function openEmpDetail(empId){
   );
 }
 
+function openAllEmployees(){
+  const sorted=[...PR.employees].filter(e=>e.status==='active').sort((a,b)=>{
+    const ra=S.shops.find(s=>s.id===a.route_id);const rb=S.shops.find(s=>s.id===b.route_id);
+    const na=ra?ra.name:'zzz';const nb=rb?rb.name:'zzz';
+    return na.localeCompare(nb,'th')||a.name.localeCompare(b.name,'th');
+  });
+  const routeOpts=`<option value="">-- ไม่มีสาย --</option>`+S.shops.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  const rows=sorted.map((emp,i)=>{
+    const rt=S.shops.find(s=>s.id===emp.route_id);
+    const statusDot=emp.status==='active'?'🟢':'🔴';
+    return`<tr style="border-bottom:1px solid var(--border);${i%2===0?'':'background:var(--bg3)'};">
+      <td style="padding:6px 8px;font-size:13px;font-weight:500;white-space:nowrap;">${statusDot} ${emp.name}</td>
+      <td style="padding:6px 4px;">
+        <select onchange="quickAssignRoute('${emp.id}',this.value)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--font);width:100%;">
+          ${`<option value="">-- ไม่มีสาย --</option>`+S.shops.map(s=>`<option value="${s.id}" ${s.id===emp.route_id?'selected':''}>${s.name}</option>`).join('')}
+        </select>
+      </td>
+      <td style="padding:6px 4px;">
+        <select onchange="_allEmpField('${emp.id}','position',this.value)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--font);width:100%;">
+          <option value="">--</option>${['คนขับรถ','เด็กติดรถ','ออฟฟิสทั่วไป','ผู้จัดการ','ผู้จัดการใหญ่'].map(p=>`<option value="${p}" ${emp.position===p?'selected':''}>${p}</option>`).join('')}
+        </select>
+      </td>
+      <td style="padding:6px 4px;">
+        <select onchange="_allEmpField('${emp.id}','payment_type',this.value)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--font);width:100%;">
+          ${['เงินสดW','โอนจ่ายW','โอนจ่ายM','รายเดือน'].map(p=>`<option value="${p}" ${(emp.payment_type||'เงินสดW')===p?'selected':''}>${p}</option>`).join('')}
+        </select>
+      </td>
+      <td style="padding:6px 4px;text-align:right;font-family:var(--mono);font-size:12px;white-space:nowrap;">
+        <input type="number" value="${emp.daily_rate||0}" onchange="_allEmpField('${emp.id}','daily_rate',+this.value)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--mono);width:80px;text-align:right;">
+      </td>
+      <td style="padding:6px 8px;text-align:center;">
+        <button onclick="openEmpDetail('${emp.id}')" style="background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;">👤</button>
+      </td>
+    </tr>`;
+  }).join('');
+  OM('📋 ประวัติพนักงานทั้งหมด',
+    `<div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr style="border-bottom:2px solid var(--border);background:var(--bg3);">
+            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;white-space:nowrap;">ชื่อ</th>
+            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:100px;">สาย</th>
+            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:110px;">ตำแหน่ง</th>
+            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:100px;">การจ่าย</th>
+            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:right;white-space:nowrap;">ค่าแรง/วัน</th>
+            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:center;"></th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <div style="margin-top:10px;font-size:11px;color:var(--text3);">เปลี่ยนค่าแล้วบันทึกอัตโนมัติ · กด 👤 เพื่อดูโปรไฟล์และรูปภาพ</div>`,
+    `<button class="btn btn-x" onclick="CMask()">ปิด</button>`
+  );
+}
+async function _allEmpField(empId,field,val){
+  const emp=PR.employees.find(e=>e.id===empId);if(!emp)return;
+  emp[field]=val;
+  try{await sbUpsert('employees',[emp]);toast('บันทึกแล้ว ✓');}
+  catch(e){toast('บันทึกไม่สำเร็จ');}
+}
 function openEditEmployee(empId){
   const emp=PR.employees.find(e=>e.id===empId);if(!emp)return;
   CM();
