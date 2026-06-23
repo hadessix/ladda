@@ -610,6 +610,67 @@ function curTabFlags(){
   const sh=S.shops.find(x=>x.id===S.view.id);return sh?.tab_flags||{count:true,income:true,expense:true,exchange:true,payowner:false};
 }
 
+let _sbGear=null;
+function _sbGearToggle(id,e){e.stopPropagation();_sbGear=(_sbGear===id)?null:id;renderSidebar();}
+const _sbBtn=(onclick,icon,bg,br,col)=>`<button onclick="${onclick}" style="background:${bg};border:1px solid ${br};color:${col};border-radius:4px;padding:1px 6px;font-size:11px;cursor:pointer;">${icon}</button>`;
+
+// ── sidebar drag-to-reorder ──
+let _sbDragId=null,_sbDragGrpId=null,_sbDragGhost=null,_sbDragOver=null,_sbDragMoved=false,_sbDragStartX=0,_sbDragStartY=0,_sbDragSrc=null,_sbDragOffX=0,_sbDragOffY=0;
+function _sbDragStart(e,routeId,groupId){
+  e.stopPropagation(); e.preventDefault();
+  const t=e.touches?e.touches[0]:e;
+  _sbDragId=routeId; _sbDragGrpId=groupId; _sbDragMoved=false; _sbDragGhost=null;
+  _sbDragSrc=document.querySelector(`[data-member-id="${routeId}"][data-member-grp="${groupId}"]`);
+  _sbDragStartX=t.clientX; _sbDragStartY=t.clientY;
+  if(_sbDragSrc){const r=_sbDragSrc.getBoundingClientRect();_sbDragOffX=t.clientX-r.left;_sbDragOffY=t.clientY-r.top;}
+}
+function _sbDragMove(e){
+  if(!_sbDragId)return;
+  const t=e.touches?e.touches[0]:e;
+  const dx=t.clientX-_sbDragStartX,dy=t.clientY-_sbDragStartY;
+  if(!_sbDragMoved&&Math.sqrt(dx*dx+dy*dy)<6)return;
+  if(!_sbDragMoved&&_sbDragSrc){
+    _sbDragMoved=true;
+    const r=_sbDragSrc.getBoundingClientRect();
+    _sbDragGhost=_sbDragSrc.cloneNode(true);
+    Object.assign(_sbDragGhost.style,{position:'fixed',zIndex:'9999',pointerEvents:'none',width:r.width+'px',height:r.height+'px',opacity:'0.85',left:(t.clientX-_sbDragOffX)+'px',top:(t.clientY-_sbDragOffY)+'px',boxShadow:'0 4px 16px #0009',border:'1px solid var(--amber)',borderRadius:'6px',background:'var(--bg3)'});
+    document.body.appendChild(_sbDragGhost);
+  }
+  if(_sbDragGhost){_sbDragGhost.style.left=(t.clientX-_sbDragOffX)+'px';_sbDragGhost.style.top=(t.clientY-_sbDragOffY)+'px';}
+  if(_sbDragGhost)_sbDragGhost.style.display='none';
+  const el=document.elementFromPoint(t.clientX,t.clientY);
+  if(_sbDragGhost)_sbDragGhost.style.display='';
+  const over=el?.closest('[data-member-id]');
+  if(_sbDragOver&&_sbDragOver!==over)_sbDragOver.style.outline='';
+  _sbDragOver=over&&over.dataset.memberGrp===_sbDragGrpId&&over.dataset.memberId!==_sbDragId?over:null;
+  if(_sbDragOver)_sbDragOver.style.outline='2px solid var(--amber)';
+  if(e.cancelable)e.preventDefault();
+}
+async function _sbDragEnd(){
+  if(!_sbDragId)return;
+  const rid=_sbDragId,gid=_sbDragGrpId,moved=_sbDragMoved,over=_sbDragOver;
+  if(_sbDragGhost){_sbDragGhost.remove();_sbDragGhost=null;}
+  if(_sbDragOver){_sbDragOver.style.outline='';_sbDragOver=null;}
+  _sbDragId=null;_sbDragGrpId=null;_sbDragMoved=false;_sbDragSrc=null;
+  if(moved&&over){
+    const toId=over.dataset.memberId;
+    const members=[...(S.groupMembers[gid]||[])];
+    const fi=members.indexOf(rid),ti=members.indexOf(toId);
+    if(fi!==-1&&ti!==-1&&fi!==ti){
+      members.splice(fi,1);members.splice(ti,0,rid);
+      await sbUpsert('group_members',members.map((r,i)=>({group_id:gid,route_id:r,sort_order:i})));
+      S.groupMembers[gid]=members;
+      _sbGear=null;
+      renderSidebar();
+      toast('เรียงลำดับสำเร็จ ✓');
+    }
+  }
+}
+document.addEventListener('mousemove',e=>{if(_sbDragId)_sbDragMove(e);});
+document.addEventListener('mouseup',async()=>{if(_sbDragId)await _sbDragEnd();});
+document.addEventListener('touchmove',e=>{if(_sbDragId)_sbDragMove(e);},{passive:false});
+document.addEventListener('touchend',async()=>{if(_sbDragId)await _sbDragEnd();});
+
 function renderSidebar(){
   const sb=document.getElementById('sidebar');
   const adm=isAdmin();
@@ -621,27 +682,29 @@ function renderSidebar(){
     S.groups.forEach(g=>{
       const members=S.groupMembers[g.id]||[];
       const isGrpActive=S.view.type==='group'&&S.view.id===g.id;
+      const gGear=`g:${g.id}`, gOpen=_sbGear===gGear;
       html+=`<div class="grp-box">
         <div class="grp-hd${isGrpActive?' active':''}" onclick="setView('group','${g.id}')">
           <span style="font-size:13px;">${g.is_owner?'⭐':g.tab_flags?.auto_collect?'⚡':'📁'}</span>
           <span class="grp-name">${g.name}</span>
           <span class="grp-amt">${fmt(groupTot(g.id))}</span>
-          ${adm?`<span onclick="event.stopPropagation()" style="display:flex;gap:3px;margin-left:4px;">
-            <button onclick="editGroup('${g.id}')" style="background:var(--bdim);border:1px solid var(--bbr);color:var(--blue);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;">✏️</button>
-            <button onclick="deleteGroup('${g.id}')" style="background:var(--rdim);border:1px solid var(--rbr);color:var(--red);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;">🗑</button>
+          ${adm?`<span onclick="event.stopPropagation()" style="display:flex;gap:3px;margin-left:4px;align-items:center;">
+            ${gOpen?_sbBtn(`editGroup('${g.id}')`,`✏️`,`var(--bdim)`,`var(--bbr)`,`var(--blue)`)+_sbBtn(`deleteGroup('${g.id}')`,`🗑`,`var(--rdim)`,`var(--rbr)`,`var(--red)`):''}
+            <button onclick="_sbGearToggle('${gGear}',event)" style="background:${gOpen?'var(--bg3)':'transparent'};border:1px solid ${gOpen?'var(--border)':'transparent'};color:var(--text3);border-radius:4px;padding:1px 5px;font-size:11px;cursor:pointer;">⚙️</button>
           </span>`:''}
         </div>
         <div class="grp-members">`;
       members.forEach(rid=>{
         const sh=S.shops.find(s=>s.id===rid);if(!sh)return;
         const isActive=S.view.type==='shop'&&S.view.id===rid;
-        html+=`<div class="grp-member${isActive?' active':''}" onclick="setView('shop','${rid}')">
+        const mGear=`m:${g.id}:${rid}`, mOpen=_sbGear===mGear;
+        html+=`<div class="grp-member${isActive?' active':''}" data-member-id="${rid}" data-member-grp="${g.id}" onclick="setView('shop','${rid}')">
           <span style="width:7px;height:7px;border-radius:50%;background:${sh.color};display:inline-block;flex-shrink:0;"></span>
           <span class="sn">${sh.name}</span>
           <span class="sa">${fmt(shopTot(sh.id))}</span>
-          ${adm?`<span onclick="event.stopPropagation()" style="display:flex;gap:3px;">
-            <button onclick="editShop('${sh.id}')" style="background:var(--bdim);border:1px solid var(--bbr);color:var(--blue);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;">✏️</button>
-            <button onclick="deleteShop('${sh.id}')" style="background:var(--rdim);border:1px solid var(--rbr);color:var(--red);border-radius:4px;padding:1px 5px;font-size:10px;cursor:pointer;">🗑</button>
+          ${adm?`<span onclick="event.stopPropagation()" style="display:flex;gap:3px;align-items:center;">
+            ${mOpen?_sbBtn(`editShop('${sh.id}')`,`✏️`,`var(--bdim)`,`var(--bbr)`,`var(--blue)`)+_sbBtn(`deleteShop('${sh.id}')`,`🗑`,`var(--rdim)`,`var(--rbr)`,`var(--red)`)+`<span onmousedown="_sbDragStart(event,'${rid}','${g.id}')" ontouchstart="_sbDragStart(event,'${rid}','${g.id}')" style="cursor:grab;color:var(--text3);font-size:13px;padding:0 3px;line-height:1;user-select:none;">⠿</span>`:''}
+            <button onclick="_sbGearToggle('${mGear}',event)" style="background:${mOpen?'var(--bg3)':'transparent'};border:1px solid ${mOpen?'var(--border)':'transparent'};color:var(--text3);border-radius:4px;padding:1px 5px;font-size:11px;cursor:pointer;">⚙️</button>
           </span>`:''}
         </div>`;
       });
@@ -655,12 +718,13 @@ function renderSidebar(){
     html+=`<div class="${S.groups.length>0?'ssec-ungrouped':'ssec'}">ร้านค้า / สาย</div>`;
     ungrouped.forEach(sh=>{
       const isActive=S.view.type==='shop'&&S.view.id===sh.id;
+      const rGear=`r:${sh.id}`, rOpen=_sbGear===rGear;
       html+=`<div class="si${isActive?' active':''}" onclick="setView('shop','${sh.id}')">
         <span style="width:8px;height:8px;border-radius:50%;background:${sh.color};display:inline-block;flex-shrink:0;"></span>
         <span class="sn">${sh.name}</span><span class="sa">${fmt(shopTot(sh.id))}</span>
-        ${adm?`<span class="shop-actions" onclick="event.stopPropagation()">
-          <button onclick="editShop('${sh.id}')" style="background:var(--bdim);border:1px solid var(--bbr);color:var(--blue);border-radius:4px;padding:1px 6px;font-size:11px;cursor:pointer;">✏️</button>
-          <button onclick="deleteShop('${sh.id}')" style="background:var(--rdim);border:1px solid var(--rbr);color:var(--red);border-radius:4px;padding:1px 6px;font-size:11px;cursor:pointer;">🗑</button>
+        ${adm?`<span class="shop-actions" onclick="event.stopPropagation()" style="display:flex;gap:3px;align-items:center;">
+          ${rOpen?_sbBtn(`editShop('${sh.id}')`,`✏️`,`var(--bdim)`,`var(--bbr)`,`var(--blue)`)+_sbBtn(`deleteShop('${sh.id}')`,`🗑`,`var(--rdim)`,`var(--rbr)`,`var(--red)`):''}
+          <button onclick="_sbGearToggle('${rGear}',event)" style="background:${rOpen?'var(--bg3)':'transparent'};border:1px solid ${rOpen?'var(--border)':'transparent'};color:var(--text3);border-radius:4px;padding:1px 5px;font-size:11px;cursor:pointer;">⚙️</button>
         </span>`:''}
       </div>`;
     });
