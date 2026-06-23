@@ -2990,23 +2990,75 @@ async function saveEmployee(editId){
   }catch(e){toast('บันทึกไม่สำเร็จ: '+e.message);}
 }
 
-async function uploadEmpPhoto(empId, input){
-  const file=input.files[0]; if(!file) return;
-  toast('กำลังอัปโหลด...');
+async function _uploadToCloudinary(file, publicId){
   const fd=new FormData();
   fd.append('file',file);
   fd.append('upload_preset','ladda_employees');
-  fd.append('public_id',`emp_${empId}`);
+  fd.append('public_id',publicId);
+  const res=await fetch('https://api.cloudinary.com/v1_1/dai58zx93/image/upload',{method:'POST',body:fd});
+  const data=await res.json();
+  if(!data.secure_url) throw new Error('upload failed');
+  return data.secure_url;
+}
+
+async function uploadEmpPhoto(empId, input){
+  const file=input.files[0]; if(!file) return;
+  toast('กำลังอัปโหลด...');
   try{
-    const res=await fetch('https://api.cloudinary.com/v1_1/dai58zx93/image/upload',{method:'POST',body:fd});
-    const data=await res.json();
-    if(!data.secure_url) throw new Error('upload failed');
-    await sbUpsert('employees',[{id:empId,photo_url:data.secure_url}]);
+    const url=await _uploadToCloudinary(file,`emp_${empId}`);
+    await sbUpsert('employees',[{id:empId,photo_url:url}]);
     const emp=PR.employees.find(e=>e.id===empId);
-    if(emp) emp.photo_url=data.secure_url;
+    if(emp) emp.photo_url=url;
     toast('อัปโหลดรูปสำเร็จ ✓');
     CM(); setTimeout(()=>openEmpDetail(empId),50);
   } catch(e){ toast('อัปโหลดไม่สำเร็จ: '+e.message); }
+}
+
+async function uploadPermitPhoto(empId, input){
+  const file=input.files[0]; if(!file) return;
+  toast('กำลังอัปโหลด...');
+  try{
+    const emp=PR.employees.find(e=>e.id===empId); if(!emp) return;
+    const photos=Array.isArray(emp.permit_photos)?[...emp.permit_photos]:[];
+    if(photos.length>=4){ toast('อัปโหลดได้สูงสุด 4 รูป'); return; }
+    const url=await _uploadToCloudinary(file,`emp_${empId}_permit_${Date.now()}`);
+    photos.push(url);
+    await sbUpsert('employees',[{id:empId,permit_photos:photos}]);
+    emp.permit_photos=photos;
+    toast('อัปโหลดใบอนุญาตสำเร็จ ✓');
+    CM(); setTimeout(()=>openEmpDetail(empId),50);
+  } catch(e){ toast('อัปโหลดไม่สำเร็จ: '+e.message); }
+}
+
+async function delPermitPhoto(empId, idx){
+  if(!confirm('ลบรูปใบอนุญาตนี้?')) return;
+  const emp=PR.employees.find(e=>e.id===empId); if(!emp) return;
+  const photos=Array.isArray(emp.permit_photos)?[...emp.permit_photos]:[];
+  photos.splice(idx,1);
+  await sbUpsert('employees',[{id:empId,permit_photos:photos}]);
+  emp.permit_photos=photos;
+  CM(); setTimeout(()=>openEmpDetail(empId),50);
+}
+
+async function uploadLicensePhoto(empId, input){
+  const file=input.files[0]; if(!file) return;
+  toast('กำลังอัปโหลด...');
+  try{
+    const url=await _uploadToCloudinary(file,`emp_${empId}_license`);
+    await sbUpsert('employees',[{id:empId,license_photo:url}]);
+    const emp=PR.employees.find(e=>e.id===empId);
+    if(emp) emp.license_photo=url;
+    toast('อัปโหลดใบขับขี่สำเร็จ ✓');
+    CM(); setTimeout(()=>openEmpDetail(empId),50);
+  } catch(e){ toast('อัปโหลดไม่สำเร็จ: '+e.message); }
+}
+
+async function delLicensePhoto(empId){
+  if(!confirm('ลบรูปใบขับขี่นี้?')) return;
+  await sbUpsert('employees',[{id:empId,license_photo:null}]);
+  const emp=PR.employees.find(e=>e.id===empId);
+  if(emp) emp.license_photo=null;
+  CM(); setTimeout(()=>openEmpDetail(empId),50);
 }
 
 function openEmpDetail(empId){
@@ -3029,14 +3081,47 @@ function openEmpDetail(empId){
         <div style="height:4px;background:var(--bg3);border-radius:2px;margin-top:6px;"><div style="height:100%;width:${pct}%;background:${l.status==='active'?'var(--amber)':'var(--green)'};border-radius:2px;transition:.3s;"></div></div>
       </div>`;
     }).join('');
-  const photoHtml=`<div style="text-align:center;margin-bottom:16px;">
-    ${emp.photo_url
-      ?`<img src="${emp.photo_url}" style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:2px solid var(--border);margin-bottom:8px;">`
-      :`<div style="width:90px;height:90px;border-radius:50%;background:var(--bg3);border:2px solid var(--border);display:inline-flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:8px;">👤</div>`}
-    <br><label style="font-size:12px;color:var(--text3);cursor:pointer;padding:3px 10px;border:1px dashed var(--border2);border-radius:6px;">
-      📷 ${emp.photo_url?'เปลี่ยนรูป':'อัปโหลดรูป'}
-      <input type="file" accept="image/*" style="display:none;" onchange="uploadEmpPhoto('${emp.id}',this)">
-    </label>
+  const permitPhotos=Array.isArray(emp.permit_photos)?emp.permit_photos:[];
+  const canAddPermit=permitPhotos.length<4;
+  const photoHtml=`<div style="margin-bottom:16px;">
+    <div style="text-align:center;margin-bottom:14px;">
+      ${emp.photo_url
+        ?`<img src="${emp.photo_url}" style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:2px solid var(--border);margin-bottom:8px;">`
+        :`<div style="width:90px;height:90px;border-radius:50%;background:var(--bg3);border:2px solid var(--border);display:inline-flex;align-items:center;justify-content:center;font-size:32px;margin-bottom:8px;">👤</div>`}
+      <br><label style="font-size:12px;color:var(--text3);cursor:pointer;padding:3px 10px;border:1px dashed var(--border2);border-radius:6px;">
+        📷 ${emp.photo_url?'เปลี่ยนรูป':'อัปโหลดรูป'}
+        <input type="file" accept="image/*" style="display:none;" onchange="uploadEmpPhoto('${emp.id}',this)">
+      </label>
+    </div>
+    ${emp.nationality&&emp.nationality!=='ไทย'?`
+    <div style="margin-bottom:12px;">
+      <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:8px;">📄 ใบอนุญาตทำงาน (${permitPhotos.length}/4)</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;">
+        ${permitPhotos.map((url,i)=>`
+          <div style="position:relative;">
+            <img src="${url}" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer;" onclick="window.open('${url}','_blank')">
+            <button onclick="delPermitPhoto('${emp.id}',${i})" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:var(--red);border:none;color:#fff;font-size:11px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;">×</button>
+          </div>`).join('')}
+        ${canAddPermit?`<label style="width:72px;height:72px;border:1px dashed var(--border2);border-radius:6px;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:var(--text3);font-size:11px;gap:4px;">
+          <span style="font-size:22px;">+</span>เพิ่มรูป
+          <input type="file" accept="image/*" style="display:none;" onchange="uploadPermitPhoto('${emp.id}',this)">
+        </label>`:''}
+      </div>
+    </div>`:''}
+    <div>
+      <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:8px;">🪪 ใบขับขี่</div>
+      <div style="display:flex;gap:8px;align-items:flex-start;">
+        ${emp.license_photo
+          ?`<div style="position:relative;">
+              <img src="${emp.license_photo}" style="width:72px;height:72px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer;" onclick="window.open('${emp.license_photo}','_blank')">
+              <button onclick="delLicensePhoto('${emp.id}')" style="position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:var(--red);border:none;color:#fff;font-size:11px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;">×</button>
+            </div>`:''}
+        <label style="width:72px;height:72px;border:1px dashed var(--border2);border-radius:6px;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;color:var(--text3);font-size:11px;gap:4px;">
+          <span style="font-size:22px;">${emp.license_photo?'🔄':'+'}</span>${emp.license_photo?'เปลี่ยน':'อัปโหลด'}
+          <input type="file" accept="image/*" style="display:none;" onchange="uploadLicensePhoto('${emp.id}',this)">
+        </label>
+      </div>
+    </div>
   </div>`;
   OM(`👤 ${emp.name}`,
     photoHtml+
