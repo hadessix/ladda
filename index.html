@@ -2339,8 +2339,12 @@ function _prShareCurrent(){
 async function loadPayroll(){
   try{
     if(isHR()){
-      // hr โหลดแค่ employees (ไม่มีข้อมูลเงิน)
-      const emps=await sbGet('employees','order=created_at');
+      // hr โหลด employees + routes (ต้องการ S.shops เพื่อจัดกลุ่ม)
+      const[emps,routes]=await Promise.all([
+        sbGet('employees','order=created_at'),
+        sbGet('routes','order=sort_order')
+      ]);
+      S.shops=routes;
       PR.employees=emps;PR.loans=[];PR.periods=[];PR.entries=[];PR.deductions=[];PR._loaded=true;
     } else {
       const[emps,salaries,loans,periods,entries,deds]=await Promise.all([
