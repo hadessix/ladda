@@ -1009,8 +1009,7 @@ function renderEntry(e){
     <div class="ehd" onclick="toggleE('${e.id}')">
       <span class="badge ${bclass[e.type]}">${labels[e.type]}</span>
       <span class="edt">${ds}</span>
-      ${e.type==='count'&&e.ca?`<span style="font-size:11px;color:var(--text3);margin-left:2px;">${(d=>String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'))(new Date(new Date(e.ca).getTime()+7*3600000))}</span>`:''}
-      <span class="ett">${e.title||''}</span>
+      <span class="ett">${e.title||''}${e.type==='count'&&e.ca?` <span style="font-size:11px;color:var(--text3);font-weight:400;">(${(d=>d.getDate()+' · '+String(d.getHours()).padStart(2,'0')+'.'+String(d.getMinutes()).padStart(2,'0'))(new Date(new Date(e.ca).toLocaleString('en-US',{timeZone:'Asia/Bangkok'})))})</span>`:''}</span>
       <span class="eam ${aclass[e.type]}">${sign[e.type]}${fmt(Math.abs(amt))}</span>
       ${e.type==='count'?`<button class="delbtn" style="background:var(--blue);border-color:var(--bbr);color:#fff;margin-right:4px;" onclick="event.stopPropagation();openEditCount('${e.id}')">แก้ไข</button>`:''}
       <button class="delbtn" onclick="delE(event,'${e.id}')" style="${isAdmin()?'':'display:none'}">ลบ</button>
