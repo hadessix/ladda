@@ -3013,15 +3013,19 @@ function _empDragCleanup(){
   if(_dragZone){_dragZone.style.background='';_dragZone=null;}
   _dragEmpId=null;_dragMoved=false;_dragSrc=null;
 }
+let _dragOffX=0,_dragOffY=0;
 function _empCreateGhost(x,y){
   if(!_dragSrc)return;
   const rect=_dragSrc.getBoundingClientRect();
+  // offset = ตำแหน่งนิ้ว/เมาส์ภายใน chip ตอน touchstart/mousedown
+  _dragOffX=x-rect.left;
+  _dragOffY=y-rect.top;
   _dragGhost=_dragSrc.cloneNode(true);
   Object.assign(_dragGhost.style,{
     position:'fixed',zIndex:'9999',pointerEvents:'none',
-    width:rect.width+'px',opacity:'0.9',
-    left:(x-rect.width/2)+'px',top:(y-50)+'px',
-    transform:'scale(1.1)',boxShadow:'0 6px 20px #0009',
+    width:rect.width+'px',height:rect.height+'px',opacity:'0.9',
+    left:(x-_dragOffX)+'px',top:(y-_dragOffY)+'px',
+    transform:'scale(1.05)',boxShadow:'0 6px 20px #0009',
     background:'var(--bg3)',border:'2px solid var(--amber)',borderRadius:'8px'
   });
   document.body.appendChild(_dragGhost);
@@ -3056,8 +3060,8 @@ document.addEventListener('touchmove',e=>{
   if(!_dragMoved&&Math.sqrt(dx*dx+dy*dy)<10)return;
   if(!_dragMoved){_dragMoved=true;_empCreateGhost(t.clientX,t.clientY);}
   if(!_dragGhost)return;
-  _dragGhost.style.left=(t.clientX-parseInt(_dragGhost.style.width)/2)+'px';
-  _dragGhost.style.top=(t.clientY-50)+'px';
+  _dragGhost.style.left=(t.clientX-_dragOffX)+'px';
+  _dragGhost.style.top=(t.clientY-_dragOffY)+'px';
   _empUpdateZone(t.clientX,t.clientY);
   e.preventDefault();
 },{passive:false});
@@ -3083,8 +3087,8 @@ document.addEventListener('mousemove',e=>{
   if(!_dragMoved&&Math.sqrt(dx*dx+dy*dy)<6)return;
   if(!_dragMoved){_dragMoved=true;_empCreateGhost(e.clientX,e.clientY);}
   if(!_dragGhost)return;
-  _dragGhost.style.left=(e.clientX-parseInt(_dragGhost.style.width)/2)+'px';
-  _dragGhost.style.top=(e.clientY-50)+'px';
+  _dragGhost.style.left=(e.clientX-_dragOffX)+'px';
+  _dragGhost.style.top=(e.clientY-_dragOffY)+'px';
   _empUpdateZone(e.clientX,e.clientY);
 });
 document.addEventListener('mouseup',async e=>{
