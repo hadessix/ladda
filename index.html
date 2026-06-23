@@ -2946,7 +2946,7 @@ function renderPrEmployees(){
     <div style="font-size:16px;font-weight:600;">พนักงาน (${active.length} คน)${unassigned>0?` <span style="font-size:12px;color:var(--amber);background:var(--adim);border:1px solid var(--abr);padding:1px 7px;border-radius:10px;">${unassigned} ยังไม่มีสาย</span>`:''}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn ${_prAssignMode?'btn-a':'btn-b'}" onclick="_prAssignMode=!_prAssignMode;renderPayroll();">${_prAssignMode?'✅ เสร็จแล้ว':'⚡ กำหนดสาย'}</button>
-      <button class="btn btn-b" onclick="openAllEmployees()">📋 ดูทั้งหมด</button>
+      <button class="btn btn-b" onclick="openAllEmployees()">📋 ประวัติพนักงาน</button>
       <button class="btn btn-b" onclick="openAddEmployee()">+ เพิ่มพนักงาน</button>
     </div>
   </div>`;
