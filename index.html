@@ -2684,7 +2684,14 @@ async function sharePeriod(periodId){
   const hasLines2=(byRoute2F1.length+Object.keys(byRoute2Bur).length)>0;
 
   // ── เลือกว่าจะส่งชุดไหน ──
-  async function _doShare(text,title){
+  window._sp1=lines1.join('\n');
+  window._sp2=lines2.join('\n');
+  window._spTitle1=`งวด ${slotLbl} ${mLbl} (เฮียรวย)`;
+  window._spTitle2=`งวด ${slotLbl} ${mLbl} (บูรชัย)`;
+  window._doShare=async function(key){
+    const text=key===1?window._sp1:window._sp2;
+    const title=key===1?window._spTitle1:window._spTitle2;
+    CM();
     if(navigator.share){
       try{await navigator.share({title,text});return;}catch(e){if(e.name==='AbortError')return;}
     }
@@ -2694,17 +2701,14 @@ async function sharePeriod(periodId){
       document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
       toast('คัดลอกแล้ว ✓');
     }
-  }
-  const title1=`งวด ${slotLbl} ${mLbl} (เฮียรวย)`;
-  const title2=`งวด ${slotLbl} ${mLbl} (บูรชัย)`;
+  };
   OM(`📤 ส่งงวด ${slotLbl} ${mLbl}`,
     `<div style="display:flex;flex-direction:column;gap:12px;padding:8px 0;">
-      <button onclick="CMask(true);_doShare(${JSON.stringify(lines1.join('\n'))},${JSON.stringify(title1)})" class="btn btn-g" style="font-size:15px;padding:14px;">💼 ส่งให้เฮียรวย</button>
-      ${hasLines2?`<button onclick="CMask(true);_doShare(${JSON.stringify(lines2.join('\n'))},${JSON.stringify(title2)})" class="btn btn-b" style="font-size:15px;padding:14px;">🏢 ส่งให้บูรชัย</button>`:''}
+      <button onclick="_doShare(1)" class="btn btn-g" style="font-size:15px;padding:14px;">💼 ส่งให้เฮียรวย</button>
+      ${hasLines2?`<button onclick="_doShare(2)" class="btn btn-b" style="font-size:15px;padding:14px;">🏢 ส่งให้บูรชัย</button>`:''}
     </div>`,
-    `<button class="btn btn-x" onclick="CMask()">ยกเลิก</button>`
+    `<button class="btn btn-x" onclick="CM()">ยกเลิก</button>`
   );
-  window._doShare=_doShare;
 }
 
 async function shareEmployeeList(){
