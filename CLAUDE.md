@@ -21,24 +21,27 @@ git add index.html && git commit -m "msg" && git push
 wrangler pages deploy . --project-name=ladda --commit-dirty=true
 ```
 
+**IMPORTANT**: Always deploy immediately after every index.html edit — no need to ask first.
+
 No local dev server needed — open `index.html` directly in a browser to test.
 
 ## Architecture
 
 Everything lives in `index.html` in this order:
 1. **`<style>`** — all CSS (CSS variables in `:root`, dark theme)
-2. **`<body>`** — overview screen (`#overview-screen`) + login screen (`#login-screen`) + app shell (`#app`)
+2. **`<body>`** — overview screen (`#overview-screen`) + login screen (`#login-screen`) + app shell (`#app`) + payroll screen (`#payroll-screen`)
 3. **`<script>`** — all JavaScript, structured as:
    - Constants & utilities (`BT`, `bv`, `cpk`, `fmt`, `uid`, `today`)
    - Worker API helpers (`_wToken`, `_wFetch`, `sbGet`, `sbUpsert`, `sbDelete`)
    - Field mappers (`entryToRow`, `rowToEntry`)
-   - Global state (`S`, `AUTH`)
+   - Global state (`S`, `AUTH`, `PR`)
    - Data loading (`loadAll`)
    - Auth (`authInit`, `sha256`, `pinCheck`, `showApp`, `logout`, `isAdmin`)
    - Render functions (`render`, `renderSidebar`, `renderContent`, `renderShopContent`, `renderGroupContent`)
    - Overview page (`showOverview`, `backToMain`, `renderOverview`, `renderOvTabs`, `toggleOvVisible`, `setOvYear`, `setOvMonth`)
    - Feature logic (count, income, expense, exchange, payowner)
    - Modal helpers (`OM`, `CM`, `CMask`, `toast`)
+   - Payroll system (`showPayroll`, `loadPayroll`, `renderPayroll`, `renderPrPeriods`, `renderPrEmployees`, ...)
 
 ## Global State
 
@@ -114,6 +117,12 @@ group_members (
 ```
 
 RLS is disabled; anon key has full CRUD on all tables (accessed only via Worker).
+
+> **New tables**: ต้อง GRANT + disable RLS ทุกครั้ง เพราะ Supabase SQL editor ไม่ auto-grant anon role
+> ```sql
+> grant all on table <table> to anon, authenticated, service_role;
+> alter table <table> disable row level security;
+> ```
 
 ### Entry types
 
@@ -198,6 +207,9 @@ RLS is disabled; anon key has full CRUD on all tables (accessed only via Worker)
   - If a stale open session exists from old data, it shows "สรุปรอบค้าง" + "ยกเลิก" buttons only
   - **No auto-collect** on count save (removed to prevent orphaned exout entries on delete)
 - **Sidebar icon**: `⭐` = is_owner group, `⚡` = auto_collect group, `📁` = normal group
+- **Sidebar gear (`_sbGear`)**: admin-only; `_sbGearToggle(id, e)` toggles gear for a group; when active shows ✏️🗑 buttons + draggable member chips; `_sbGear=null` after any reorder
+- **Sidebar drag-to-reorder members**: `_sbDragStart/End` — saves new sort_order via `sbUpsert('group_members', members.map((r,i)=>({group_id,route_id:r,sort_order:i})))`; only works when `_sbGear` is active for that group
+- **`sbUpsert` requires full object**: sending a partial object (e.g., `{id, photo_url}` only) causes NOT NULL constraint on `name`. Always spread the full record: `{...emp, ...patch}`
 
 ## Function Reference
 
@@ -255,6 +267,8 @@ RLS is disabled; anon key has full CRUD on all tables (accessed only via Worker)
 | `tfChips/getTf/toggleTf` | tab_flags chip UI |
 | `toggleGrpCard(id)` | ขยาย/ยุบ card ใน group view |
 | `OM/CM/CMask/toast` | modal open/close/confirm-close, notification |
+| `_sbGearToggle(id,e)` | toggle sidebar gear สำหรับกลุ่ม (admin only) |
+| `_sbDragStart/_sbDragEnd` | drag-to-reorder สมาชิกในกลุ่ม (sidebar, admin+gear active) |
 
 ## Security
 
@@ -273,11 +287,11 @@ RLS is disabled; anon key has full CRUD on all tables (accessed only via Worker)
 
 ## Payroll System (`PR` state)
 
-admin-only หน้าเงินเดือน — merged to main, deployed to production
+admin-only หน้าเงินเดือน — deployed to production
 
 ### การเข้าถึง
 - ปุ่ม **💼 เงินเดือน** ใน header (แสดงเฉพาะ admin)
-- `showPayroll()` → ซ่อน `#app` + แสดง `#payroll-screen`
+- `showPayroll()` → ซ่อน `#app` + แสดง `#payroll-screen`; header แสดง "🪙 นับเงิน" (กลับ) + 👑 badge ทางขวา
 - `backFromPayroll()` → กลับ main app
 
 ### Global State
@@ -296,24 +310,45 @@ PR = {
 
 ### Payroll Tables (Supabase)
 ```sql
-employees         -- โปรไฟล์พนักงาน (ติดตามตัวคน ไม่ใช่สาย)
+employees (
+  id           text PRIMARY KEY,
+  name         text NOT NULL,
+  route_id     text,
+  department   text,
+  position     text,
+  daily_rate   numeric,
+  nationality  text,
+  phone_fee    numeric,
+  room_fee     numeric,
+  status       text DEFAULT 'active',
+  payment_type text DEFAULT 'เงินสดW',   -- เงินสดW | โอนจ่ายW | โอนจ่ายM | รายเดือน
+  photo_url    text,
+  permit_photos jsonb,   -- array of up to 4 URLs (work permit, non-Thai only)
+  license_photo text,    -- driver's license URL
+  notes        text
+)
 employee_loans    -- บัตร(ใบอนุญาต)/ยืม ที่ผ่อนอยู่
 payroll_periods   -- งวด 10 วัน (3 งวด/เดือน)
 payroll_entries   -- สลิปต่อคนต่องวด
 payroll_deductions -- รายการหักแต่ละรายการในสลิป
 ```
 
-> **สำคัญ**: ต้อง GRANT + disable RLS ให้ทุก table ใหม่ เพราะ Supabase SQL editor ไม่ auto-grant anon role
-> ```sql
-> grant all on table employees to anon, authenticated, service_role;
-> -- (ทำซ้ำสำหรับทุก table)
-> alter table employees disable row level security;
-> -- (ทำซ้ำสำหรับทุก table)
-> ```
+### Cloudinary (รูปพนักงาน)
+- Cloud name: `dai58zx93`, upload preset: `ladda_employees` (unsigned), folder: `ladda/employees`
+- `_uploadToCloudinary(file, publicId)` → returns `secure_url`
+- `_empPhotoUpsert(empId, patch)` → spreads full `emp` object before upsert (avoids NOT NULL on name)
+- `uploadEmpPhoto(empId, input)` → profile photo → `employees.photo_url`
+- `uploadPermitPhoto(empId, input)` → appends to `employees.permit_photos[]` (max 4)
+- `uploadLicensePhoto(empId, input)` → `employees.license_photo`
+- `delPermitPhoto(empId, idx)` / `delLicensePhoto(empId)` → remove photo + update DB
 
 ### Period Keys
 - รูปแบบ: `"YYYY-MM-A"` (BE year, calendar month)
 - A = 1–10 จ่าย 11, B = 11–20 จ่าย 21, C = 21–31 จ่าย 1 ของเดือนถัดไป
+
+### Year/Month Picker (งวดจ่าย)
+- Grid ปี: แสดงเฉพาะปีที่ ≤ ปีปัจจุบัน (BE); derive จาก `PR.periods` + ปีปัจจุบัน
+- Grid เดือน: แถวเดียว; แสดงเฉพาะเดือนที่มีงวดใน `PR.periods` สำหรับปีนั้น + เดือนปัจจุบัน (ถ้าปีนั้น = ปีนี้); เดือนที่ยังไม่ถึงหรือก่อนเริ่มใช้แอปไม่แสดง
 
 ### สูตรคำนวณ net_pay
 ```
@@ -341,6 +376,7 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 |---|---|
 | `showPayroll()` | เปิดหน้าเงินเดือน + โหลดข้อมูล |
 | `loadPayroll()` | โหลด 5 tables พร้อมกัน; sets `PR._loaded=true` |
+| `renderPayroll()` | inject HTML เข้า `#pr-body` (ต้องเรียก ไม่ใช่ `renderPrEmployees()`) |
 | `setPrTab(tab)` | เปลี่ยน tab periods/employees |
 | `generatePeriod(beYM,slot)` | สร้างงวด + entries + deductions; guard `PR._loaded`; ถ้ามี stale period (ไม่มี entries) จะลบแล้วสร้างใหม่ |
 | `openPeriod(periodId)` | modal สลิปทุกคน จัดกลุ่มเป็น card ตามสาย; แยก col หัก: ห้องพัก / ค่าบัตร / อื่นๆ; แสดง daily_rate/วัน |
@@ -348,16 +384,30 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 | `openPrEntryDetail(id,periodId)` | modal แก้ละเอียดต่อคน |
 | `openAddDed(entryId,periodId)` | เพิ่มรายการหัก (จาก loan หรือ manual) |
 | `markPeriodPaid(periodId)` | จ่ายแล้ว + update loans |
-| `renderPrEmployees()` | tab พนักงาน (แยก active/inactive, grouped by route/dept); กรองตาม `_prSettings.hideManager/hideTopManager` |
-| `quickAssignRoute(empId,routeId)` | กำหนด route_id ให้พนักงานแบบ inline (ไม่ต้องเปิด modal) |
+| `renderPrEmployees()` | **returns HTML string** — tab พนักงาน; drag-to-reassign chips; grouped by route/dept; กรองตาม `_prSettings` |
+| `quickAssignRoute(empId,routeId)` | กำหนด route_id ให้พนักงาน (inline, ไม่ต้องเปิด modal) |
 | `prMoveRoute(routeId,dir)` | สลับ sort_order ของ route ขึ้น/ลง → upsert routes |
-| `openAddEmployee()` | modal เพิ่มพนักงาน (ชื่อ/สาย/แผนก/ตำแหน่ง/ค่าแรง/ค่าโทร/ค่าห้อง) |
+| `openAddEmployee()` | modal เพิ่มพนักงาน (ชื่อ/สาย/แผนก/ตำแหน่ง/ค่าแรง/ค่าโทร/ค่าห้อง/payment_type) |
 | `openEditEmployee(empId)` | modal แก้ไขพนักงาน |
-| `saveEmployee(editId)` | บันทึกพนักงาน (editId=null → เพิ่มใหม่); fields รวม `position` |
-| `openEmpDetail(empId)` | โปรไฟล์พนักงาน + ประวัติ loan |
+| `saveEmployee(editId)` | บันทึกพนักงาน (editId=null → เพิ่มใหม่); fields รวม `position`, `payment_type` |
+| `openEmpDetail(empId)` | โปรไฟล์พนักงาน + รูปภาพ + ประวัติ loan + payment_type |
 | `setEmpStatus(empId,status)` | active/resigned/blacklisted |
 | `openAddLoan(empId)` | เพิ่ม loan/บัตร |
 | `saveLoan(empId)` | บันทึก loan |
+| `sharePeriod(periodId)` | แชร์/คัดลอกข้อความสรุปงวด แบ่ง 2 ชุด (ดูด้านล่าง) |
+| `shareEmployeeList()` | แชร์รายชื่อพนักงาน |
+
+### sharePeriod — 2-group split
+- **ชุดที่ 1**: เงินสดW ทุกสาย; F1 มียอดแยก subtotal ต่างหาก
+- **ชุดที่ 2**: พนักงานในกลุ่มที่มีชื่อ "บูรชัย" (`S.groups.find(g=>g.name.includes('บูรชัย'))`) ที่มี payment_type = เงินสดW หรือ โอนจ่ายM; แสดง `[โอนจ่ายM]` ต่อท้ายบรรทัดที่ไม่ใช่เงินสดW
+- F1 route หา via `S.shops.find(s=>s.name==='F1')`
+
+### Drag-to-Reassign Employee (หน้าพนักงาน)
+- Touch: `ontouchstart="_empTouchStart(event,empId)"` → ghost สร้างหลัง 10px movement → `touchend` ใช้ `_dragZone` ที่ save ระหว่าง `touchmove` (ไม่ใช่ `elementFromPoint` ใน touchend)
+- Mouse: `onmousedown="_empMouseStart(event,empId)"` → `mousemove/mouseup` บน `document`
+- Ghost offset: คำนวณจาก grab point ภายใน chip (`_dragOffX/Y`) ไม่ใช่จากมุมบนซ้าย
+- Drop zone: `data-drop-route="${rt.id}"` (empty string = ไม่มีสาย)
+- `_empDrop(empId,zone)` → `quickAssignRoute` → **`renderPayroll()`** (ไม่ใช่ `renderPrEmployees()`)
 
 ### Payroll gotchas
 - **uid collision**: `uid()` ใช้ `crypto.randomUUID()` — อย่าเปลี่ยนกลับเป็น Date.now+random; การสร้าง 42 entries พร้อมกันใน `.map()` จะ collision แน่นอนถ้าใช้ timestamp-based id
@@ -365,6 +415,7 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - **generatePeriod guard**: เช็ค `PR._loaded` ก่อนทำงาน; ถ้า render หน้า payroll ก่อน loadPayroll เสร็จ PR.employees จะว่างเปล่า
 - **_openPeriodId**: เก็บ periodId ที่ modal เปิดอยู่; tray toggle ใช้ re-open modal หลังเปลี่ยน settings; ต้อง check `PR.tab==='periods'` ก่อน ไม่งั้นจะเด้งไปงวดจ่ายตอนอยู่ tab พนักงาน
 - **_prSettings** (localStorage `pr_settings`): `{ hideRates, hideManager, hideTopManager }` — hideManager/hideTopManager กรองพนักงานตาม `emp.position` ทั้งหน้าพนักงานและ openPeriod modal
+- **renderPayroll() vs renderPrEmployees()**: `renderPrEmployees()` คืน HTML string เท่านั้น; ต้องเรียก `renderPayroll()` เพื่อ inject เข้า DOM จริง
 
 ### Employee fields
 | field | type | หมายเหตุ |
@@ -378,6 +429,11 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 | `phone_fee` | numeric | ค่าโทรต่องวด |
 | `room_fee` | numeric | ค่าห้องต่องวด |
 | `status` | text | active/resigned/blacklisted |
+| `payment_type` | text | เงินสดW / โอนจ่ายW / โอนจ่ายM / รายเดือน (default: เงินสดW) |
+| `photo_url` | text | Cloudinary URL รูปโปรไฟล์ |
+| `permit_photos` | jsonb | array URL ใบอนุญาตทำงาน (max 4, non-Thai only) |
+| `license_photo` | text | Cloudinary URL ใบขับขี่ |
+| `notes` | text | หมายเหตุ |
 
 ### Payroll FAB (floating buttons)
 - `#pr-fab-group`: `position:fixed; top:80px; right:24px` — แสดงเมื่อ `showPayroll()`, ซ่อนเมื่อ `backFromPayroll()`
@@ -385,14 +441,15 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - ⚙️ `togglePrTray()`: เปิด/ปิด bottom tray settings
 
 ### งานที่ยังต้องทำ (Payroll)
-- [x] นำเข้าข้อมูลพนักงาน 42 คน + 21 permit loans (เดือน6.69.xlsx)
-- [ ] กำหนดสายให้พนักงานทุกคน (ใช้ ⚡ กำหนดสาย ในหน้าพนักงาน)
-- [ ] กำหนดตำแหน่งงานให้พนักงาน (admin ทำเอง)
+- [x] นำเข้าข้อมูลพนักงาน 42 คน + 21 permit loans
+- [x] รูปพนักงาน + ใบอนุญาตทำงาน + ใบขับขี่ (Cloudinary)
+- [x] Drag-to-reassign พนักงานระหว่างสาย (touch + mouse)
+- [x] payment_type field + แสดงในโปรไฟล์ + แยกใน sharePeriod
+- [ ] กำหนดสายให้พนักงานทุกคน (admin ทำเอง)
+- [ ] กำหนดตำแหน่งงาน + payment_type ให้พนักงาน (admin ทำเอง)
 - [ ] อัปเดตยอดค้างบัตรใบอนุญาต + วันหมดอายุ (admin ทำเอง)
-- [ ] รูปพนักงาน + รูปใบอนุญาตทำงาน — ใช้ **Cloudinary** (25GB free); เก็บแค่ URL ใน `employees.photo_url`
 - [ ] ดอกเบี้ยเงินยืม (5–10%)
 - [ ] เชื่อมระบบเช็คเวลาเข้างาน (feature #2)
-- [ ] โปรไฟล์พนักงาน (feature #3)
 
 ## Roadmap
 
@@ -405,20 +462,21 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - [x] Count บันทึกตรง (saveCountDirect) ไม่มี session step
 - [x] Exchange pair แสดงเป็น row เดียว (renderExchangePair)
 - [x] Payroll system — employees, loans, periods, auto-calculation
-- [x] Payroll merged to main + deployed to production
 - [x] openPeriod redesign — grouped by route card, split deduction columns, daily_rate display
-- [x] Employee quick-assign route mode (`_prAssignMode`)
+- [x] Employee quick-assign route mode (drag-to-reassign, touch+mouse)
 - [x] Route reorder (↑↓) via `prMoveRoute()`
 - [x] Payroll settings tray (gear FAB) — hideRates, hideManager, hideTopManager
-- [x] Share button (📤 FAB) — context-aware: period or employee list; respects hide settings
-- [x] Employee position field (คนขับรถ/เด็กติดรถ/ออฟฟิสทั่วไป/ผู้จัดการ/ผู้จัดการใหญ่)
-- [x] No-route group in period modal labeled "ออฟฟิส"
-- [x] Loan edit button always visible (ไม่ซ่อนเมื่อ completed)
-- [ ] กำหนดสายพนักงาน + ตำแหน่ง + อัปเดตยอดบัตรค้าง (admin ทำเอง)
-- [ ] รูปพนักงาน + รูปบัตร via Cloudinary (feature #3)
+- [x] Share button (📤 FAB) — context-aware: 2-group period split or employee list
+- [x] Employee position field
+- [x] Employee photo upload via Cloudinary (profile + permit ×4 + license)
+- [x] payment_type field (เงินสดW/โอนจ่ายW/โอนจ่ายM/รายเดือน)
+- [x] sharePeriod split: ชุด1=เงินสดW ทุกสาย (F1 แยก), ชุด2=บูรชัย+F1 (เงินสดW+โอนจ่ายM)
+- [x] Sidebar gear (⚙️) — admin toggle ✏️🗑 + drag-to-reorder members
+- [x] Payroll year/month grid picker (เฉพาะปี/เดือนที่ผ่านมาและมีข้อมูล)
+- [ ] กำหนดสาย + ตำแหน่ง + payment_type + ยอดบัตรค้าง (admin ทำเอง)
+- [ ] ดอกเบี้ยเงินยืม (5–10%)
 - [ ] ระบบเช็คเวลาเข้างาน (feature #2)
-- [ ] โปรไฟล์พนักงาน (feature #3)
-- [ ] รูปใบอนุญาตทำงาน (Supabase Storage)
+- [ ] โปรไฟล์พนักงานเต็มรูปแบบ (feature #3)
 - [ ] Supabase RLS per authenticated user
 - [ ] PWA — manifest + service worker
 - [ ] Export รายงาน (PDF / Excel)
