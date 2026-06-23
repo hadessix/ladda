@@ -522,7 +522,7 @@ function entryToRow(e,route_id,month_key){
 }
 function rowToEntry(r){
   return{id:r.id,type:r.type,title:r.title,note:r.note,df:r.date_from,dt:r.date_to,
-    amount:r.amount,total:r.total,bills:r.bills,subs:r.subs,oid:r.other_route_id};
+    amount:r.amount,total:r.total,bills:r.bills,subs:r.subs,oid:r.other_route_id,ca:r.created_at};
 }
 
 // ─── state ───
@@ -1009,9 +1009,10 @@ function renderEntry(e){
     <div class="ehd" onclick="toggleE('${e.id}')">
       <span class="badge ${bclass[e.type]}">${labels[e.type]}</span>
       <span class="edt">${ds}</span>
+      ${e.type==='count'&&e.ca?`<span style="font-size:11px;color:var(--text3);margin-left:2px;">${new Date(e.ca).toLocaleTimeString('th-TH',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'})}</span>`:''}
       <span class="ett">${e.title||''}</span>
       <span class="eam ${aclass[e.type]}">${sign[e.type]}${fmt(Math.abs(amt))}</span>
-      ${e.type==='count'?`<button class="delbtn" style="background:var(--blue);margin-right:4px;" onclick="event.stopPropagation();openEditCount('${e.id}')">แก้ไข</button>`:''}
+      ${e.type==='count'?`<button class="delbtn" style="background:var(--blue);border-color:var(--bbr);color:#fff;margin-right:4px;" onclick="event.stopPropagation();openEditCount('${e.id}')">แก้ไข</button>`:''}
       <button class="delbtn" onclick="delE(event,'${e.id}')" style="${isAdmin()?'':'display:none'}">ลบ</button>
     </div>
     <div class="ebody" id="eb-${e.id}">${body}</div>
