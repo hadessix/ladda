@@ -2499,7 +2499,7 @@ function openPeriod(periodId){
     const items=byRoute[rid];
     const rt=S.shops.find(s=>s.id===rid);
     const rtColor=rt?.color||'#888';
-    const rtName=rt?rt.name:'ออฟฟิส';
+    const rtName=rt?rt.name:'ออฟฟิศ';
     const rtTotal=items.reduce((s,{e,emp})=>{
       const deds=PR.deductions.filter(d=>d.entry_id===e.id);
       return s+(emp.daily_rate||0)*(e.days_worked||0)+(e.bonus||0)-deds.reduce((a,d)=>a+d.amount,0)-(e.advance||0);
@@ -3073,8 +3073,8 @@ function renderPrEmployees(){
   return html;
 }
 
-function _deptOpts(sel=''){const opts=['ออฟฟิส','บัญชี','คลังสินค้า','ขนส่ง','อื่นๆ'];return opts.map(d=>`<option value="${d}" ${d===sel?'selected':''}>${d}</option>`).join('');}
-function _posOpts(sel=''){const opts=['คนขับรถ','เด็กติดรถ','ออฟฟิสทั่วไป','ผู้จัดการ','ผู้จัดการใหญ่'];return opts.map(p=>`<option value="${p}" ${p===sel?'selected':''}>${p}</option>`).join('');}
+function _deptOpts(sel=''){const opts=['ออฟฟิศ','บัญชี','คลังสินค้า','ขนส่ง','อื่นๆ'];return opts.map(d=>`<option value="${d}" ${d===sel?'selected':''}>${d}</option>`).join('');}
+function _posOpts(sel=''){const opts=['คนขับรถ','เด็กติดรถ','ออฟฟิศทั่วไป','ผู้จัดการ','ผู้จัดการใหญ่'];return opts.map(p=>`<option value="${p}" ${p===sel?'selected':''}>${p}</option>`).join('');}
 function _payTypeOpts(sel='เงินสดW'){const opts=['เงินสดW','โอนจ่ายW','โอนจ่ายM','รายเดือน'];return opts.map(o=>`<option value="${o}" ${o===sel?'selected':''}>${o}</option>`).join('');}
 function openAddEmployee(){
   const routeOpts=S.shops.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
@@ -3486,7 +3486,7 @@ function openAllEmployees(){
       </td>
       <td style="padding:6px 4px;">
         <select onchange="_allEmpField('${emp.id}','position',this.value)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--font);width:100%;">
-          <option value="">--</option>${['คนขับรถ','เด็กติดรถ','ออฟฟิสทั่วไป','ผู้จัดการ','ผู้จัดการใหญ่'].map(p=>`<option value="${p}" ${emp.position===p?'selected':''}>${p}</option>`).join('')}
+          <option value="">--</option>${['คนขับรถ','เด็กติดรถ','ออฟฟิศทั่วไป','ผู้จัดการ','ผู้จัดการใหญ่'].map(p=>`<option value="${p}" ${emp.position===p?'selected':''}>${p}</option>`).join('')}
         </select>
       </td>
       <td style="padding:6px 4px;">
