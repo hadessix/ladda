@@ -2670,16 +2670,29 @@ async function sharePeriod(periodId){
   lines2.push('─'.repeat(32));
   lines2.push(`รวม ${cnt2} คน  ฿${fmtN(tot2)}`);
 
-  const hasLines2=(byRoute2F1.length+Object.keys(byRoute2Bur).length)>0;
+  const hasLines2=Object.keys(byRoute2Bur).length>0;
+
+  // ── ชุดที่ 3: สรุปสั้น ส่งน้องลัดดา ──
+  const ownerGrp=S.groups.find(g=>g.is_owner);
+  const ownerName=ownerGrp?ownerGrp.name:'เฮียรวย';
+  const lines3=[
+    `💼 งวด ${slotLbl} ${mLbl}`,
+    '─'.repeat(24),
+    `${ownerName}  ฿${fmtN(tot1Main)}`,
+    `F1  ฿${fmtN(tot1F1)}`,
+    `${burachaiGrp?burachaiGrp.name:'บูรชัย'}  ฿${fmtN(tot2)}`,
+  ];
 
   // ── เลือกว่าจะส่งชุดไหน ──
   window._sp1=lines1.join('\n');
   window._sp2=lines2.join('\n');
+  window._sp3=lines3.join('\n');
   window._spTitle1=`งวด ${slotLbl} ${mLbl} (เฮียรวย)`;
   window._spTitle2=`งวด ${slotLbl} ${mLbl} (บูรชัย)`;
+  window._spTitle3=`งวด ${slotLbl} ${mLbl} (สรุป)`;
   window._doShare=async function(key){
-    const text=key===1?window._sp1:window._sp2;
-    const title=key===1?window._spTitle1:window._spTitle2;
+    const text=key===1?window._sp1:key===2?window._sp2:window._sp3;
+    const title=key===1?window._spTitle1:key===2?window._spTitle2:window._spTitle3;
     CM();
     if(navigator.share){
       try{await navigator.share({title,text});return;}catch(e){if(e.name==='AbortError')return;}
@@ -2695,6 +2708,7 @@ async function sharePeriod(periodId){
     `<div style="display:flex;flex-direction:column;gap:12px;padding:8px 0;">
       <button onclick="_doShare(1)" class="btn btn-g" style="font-size:15px;padding:14px;">💼 ส่งให้เฮียรวย</button>
       ${hasLines2?`<button onclick="_doShare(2)" class="btn btn-b" style="font-size:15px;padding:14px;">🏢 ส่งให้บูรชัย</button>`:''}
+      <button onclick="_doShare(3)" class="btn btn-b" style="font-size:15px;padding:14px;">🪙 ส่งให้น้องลัดดา</button>
     </div>`,
     `<button class="btn btn-x" onclick="CM()">ยกเลิก</button>`
   );
