@@ -2363,14 +2363,15 @@ function renderPrPeriods(){
       <div>${yr}</div><div style="font-size:10px;color:var(--text3);">${yr-543}</div>
     </div>`;
   }).join('');
-  const maxMo=(y===nowY)?nowMo:12; // ปีปัจจุบัน → ถึงเดือนนี้เท่านั้น
-  const monthCells=Array.from({length:12},(_,i)=>{
-    const mn=i+1;
+  // เดือนที่มีข้อมูลในปีนั้น + เดือนปัจจุบัน (ถ้าเป็นปีปัจจุบัน)
+  const validMos=new Set(PR.periods.filter(p=>p.period_key.startsWith(`${y}-`)).map(p=>Number(p.period_key.split('-')[1])));
+  if(y===nowY) validMos.add(nowMo);
+  const validMoArr=[...validMos].sort((a,b)=>a-b);
+  const monthCells=validMoArr.map(mn=>{
     const mk=`${y}-${String(mn).padStart(2,'0')}`;
     const sel=mo===mn;
-    const disabled=mn>maxMo;
     const hasPeriod=PR.periods.some(p=>p.period_key.startsWith(mk+'-'));
-    return`<div ${disabled?'':` onclick="prSetMonth(${mn})"`} style="${btnBase}${disabled?disabledStyle:'cursor:pointer;'}border:1px solid ${sel?'var(--amber)':'var(--border)'};background:${sel?'var(--adim)':'var(--bg2)'};color:${sel?'var(--amber)':disabled?'var(--text3)':'var(--text)'};font-weight:${sel?'600':'400'};position:relative;">
+    return`<div onclick="prSetMonth(${mn})" style="${btnBase}cursor:pointer;border:1px solid ${sel?'var(--amber)':'var(--border)'};background:${sel?'var(--adim)':'var(--bg2)'};color:${sel?'var(--amber)':'var(--text)'};font-weight:${sel?'600':'400'};position:relative;min-width:44px;">
       ${mn}${hasPeriod?`<span style="position:absolute;top:3px;right:4px;width:5px;height:5px;border-radius:50%;background:${sel?'var(--amber)':'var(--green)'}"></span>`:''}
     </div>`;
   }).join('');
@@ -2378,7 +2379,7 @@ function renderPrPeriods(){
   const slots=[{k:'A',lbl:'1–10'},{k:'B',lbl:'11–20'},{k:'C',lbl:'21–31'}];
   let html=`<div style="margin-bottom:16px;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;">
     <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:4px;margin-bottom:8px;">${yearCells}</div>
-    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:4px;">${monthCells}</div>
+    <div style="display:flex;gap:4px;">${monthCells}</div>
   </div>
   <div class="pr-period-grid">`;
   slots.forEach(({k,lbl})=>{
