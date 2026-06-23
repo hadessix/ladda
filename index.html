@@ -2339,12 +2339,17 @@ function _prShareCurrent(){
 async function loadPayroll(){
   try{
     if(isHR()){
-      // hr โหลด employees + routes (ต้องการ S.shops เพื่อจัดกลุ่ม)
-      const[emps,routes]=await Promise.all([
+      // hr โหลด employees + routes + groups + group_members (เพื่อเรียงลำดับให้เหมือน admin)
+      const[emps,routes,groups,gMembers]=await Promise.all([
         sbGet('employees','order=created_at'),
-        sbGet('routes','order=sort_order')
+        sbGet('routes','order=sort_order'),
+        sbGet('groups','order=sort_order'),
+        sbGet('group_members','order=sort_order')
       ]);
       S.shops=routes;
+      S.groups=groups;
+      S.groupMembers={};
+      gMembers.forEach(m=>{if(!S.groupMembers[m.group_id])S.groupMembers[m.group_id]=[];S.groupMembers[m.group_id].push(m.route_id);});
       PR.employees=emps;PR.loans=[];PR.periods=[];PR.entries=[];PR.deductions=[];PR._loaded=true;
     } else {
       const[emps,salaries,loans,periods,entries,deds]=await Promise.all([
@@ -2977,7 +2982,6 @@ function renderPrEmployees(){
       ${!isHR()?`<button class="btn ${_prAssignMode?'btn-a':'btn-b'}" onclick="_prAssignMode=!_prAssignMode;renderPayroll();">${_prAssignMode?'✅ เสร็จแล้ว':'⚡ กำหนดสาย'}</button>`:''}
       ${!isHR()?`<button class="btn btn-b" onclick="openAllEmployees()">📋 ประวัติพนักงาน</button>`:''}
       <button class="btn btn-b" onclick="openAddEmployee()">+ เพิ่มพนักงาน</button>
-      ${isHR()?`<button class="btn btn-x" onclick="logout()">ออกจากระบบ</button>`:''}
     </div>
   </div>`;
   if(_prAssignMode){
