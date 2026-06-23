@@ -440,11 +440,20 @@ async function pinCheck(){
 function showApp(){
   document.getElementById('login-screen').style.display='none';
   if(AUTH.role==='viewer'){
-    document.getElementById('app').style.display='none'; // viewer ห้ามเข้า main app
+    document.getElementById('app').style.display='none';
     const badge=document.getElementById('ov-badge');
     if(badge){badge.textContent='👁️ ผู้เข้าชม';badge.className='role-badge role-viewer';}
     document.getElementById('overview-screen').style.display='flex';
     loadAll().then(()=>renderOverview());
+    return;
+  }
+  if(AUTH.role==='hr'){
+    document.getElementById('app').style.display='none';
+    document.getElementById('payroll-screen').style.display='flex';
+    const fab=document.getElementById('pr-fab-group');if(fab){fab.style.display='none';}
+    PR.tab='employees';
+    if(!PR._loaded){loadPayroll().then(()=>renderPayroll());}
+    else renderPayroll();
     return;
   }
   document.getElementById('app').style.display='flex'; // admin/user เท่านั้น
@@ -475,6 +484,7 @@ function logout(){
   const inp=document.getElementById('pin-inp');if(inp){inp.value='';inp.focus();}
 }
 function isAdmin(){return AUTH.role==='admin';}
+function isHR(){return AUTH.role==='hr';}
 
 // ─── constants ───
 const BT=[1000,500,100,50,20,'coin'];
@@ -2308,6 +2318,7 @@ function showPayroll(){
   else renderPayroll();
 }
 function backFromPayroll(){
+  if(isHR()){logout();return;}
   closePrTray();
   document.getElementById('payroll-screen').style.display='none';
   document.getElementById('pr-fab-group').style.display='none';
@@ -2323,15 +2334,25 @@ function _prShareCurrent(){
 }
 async function loadPayroll(){
   try{
-    const[emps,loans,periods,entries,deds]=await Promise.all([
-      sbGet('employees','order=created_at'),
-      sbGet('employee_loans','order=created_at'),
-      sbGet('payroll_periods','order=period_key'),
-      sbGet('payroll_entries','order=created_at'),
-      sbGet('payroll_deductions','order=created_at'),
-    ]);
-    PR.employees=emps;PR.loans=loans;PR.periods=periods;PR.entries=entries;PR.deductions=deds;PR._loaded=true;
-  }catch(e){toast('โหลดข้อมูลเงินเดือนไม่สำเร็จ: '+e.message);}
+    if(isHR()){
+      // hr โหลดแค่ employees (ไม่มีข้อมูลเงิน)
+      const emps=await sbGet('employees','order=created_at');
+      PR.employees=emps;PR.loans=[];PR.periods=[];PR.entries=[];PR.deductions=[];PR._loaded=true;
+    } else {
+      const[emps,salaries,loans,periods,entries,deds]=await Promise.all([
+        sbGet('employees','order=created_at'),
+        sbGet('employees_salary','select=*'),
+        sbGet('employee_loans','order=created_at'),
+        sbGet('payroll_periods','order=period_key'),
+        sbGet('payroll_entries','order=created_at'),
+        sbGet('payroll_deductions','order=created_at'),
+      ]);
+      // merge salary ลงใน employee objects
+      const salMap={};salaries.forEach(s=>salMap[s.employee_id]=s);
+      emps.forEach(e=>{const s=salMap[e.id]||{};e.daily_rate=s.daily_rate??e.daily_rate;e.payment_type=s.payment_type??e.payment_type;e.phone_fee=s.phone_fee??e.phone_fee;e.room_fee=s.room_fee??e.room_fee;});
+      PR.employees=emps;PR.loans=loans;PR.periods=periods;PR.entries=entries;PR.deductions=deds;PR._loaded=true;
+    }
+  }catch(e){toast('โหลดข้อมูลไม่สำเร็จ: '+e.message);}
 }
 function setPrTab(tab){
   PR.tab=tab;
@@ -2945,9 +2966,10 @@ function renderPrEmployees(){
   let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:8px;flex-wrap:wrap;">
     <div style="font-size:16px;font-weight:600;">พนักงาน (${active.length} คน)${unassigned>0?` <span style="font-size:12px;color:var(--amber);background:var(--adim);border:1px solid var(--abr);padding:1px 7px;border-radius:10px;">${unassigned} ยังไม่มีสาย</span>`:''}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn ${_prAssignMode?'btn-a':'btn-b'}" onclick="_prAssignMode=!_prAssignMode;renderPayroll();">${_prAssignMode?'✅ เสร็จแล้ว':'⚡ กำหนดสาย'}</button>
-      <button class="btn btn-b" onclick="openAllEmployees()">📋 ประวัติพนักงาน</button>
+      ${!isHR()?`<button class="btn ${_prAssignMode?'btn-a':'btn-b'}" onclick="_prAssignMode=!_prAssignMode;renderPayroll();">${_prAssignMode?'✅ เสร็จแล้ว':'⚡ กำหนดสาย'}</button>`:''}
+      ${!isHR()?`<button class="btn btn-b" onclick="openAllEmployees()">📋 ประวัติพนักงาน</button>`:''}
       <button class="btn btn-b" onclick="openAddEmployee()">+ เพิ่มพนักงาน</button>
+      ${isHR()?`<button class="btn btn-x" onclick="logout()">ออกจากระบบ</button>`:''}
     </div>
   </div>`;
   if(_prAssignMode){
@@ -2974,7 +2996,7 @@ function renderPrEmployees(){
       const loans=PR.loans.filter(l=>l.employee_id===emp.id&&l.status==='active');
       return`<div data-emp-id="${emp.id}" onclick="openEmpDetail('${emp.id}')" ontouchstart="_empTouchStart(event,'${emp.id}')" onmousedown="_empMouseStart(event,'${emp.id}')" style="display:inline-flex;flex-direction:column;gap:1px;padding:6px 10px;background:var(--bg2);border:1px solid var(--border);border-radius:7px;cursor:grab;min-width:80px;transition:background .15s;user-select:none;-webkit-user-select:none;" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='var(--bg2)'">
         <div style="font-size:13px;font-weight:500;white-space:nowrap;">${emp.name}${loans.length>0?`<span style="font-size:10px;color:var(--amber);margin-left:3px;">●</span>`:''}</div>
-        ${_prSettings.hideRates?'':` <div style="font-size:11px;color:var(--text3);font-family:var(--mono);">${fmt(emp.daily_rate||0)}</div>`}
+        ${(_prSettings.hideRates||isHR())?'':` <div style="font-size:11px;color:var(--text3);font-family:var(--mono);">${fmt(emp.daily_rate||0)}</div>`}
       </div>`;
     }).join('');
   }
@@ -3078,18 +3100,7 @@ function _posOpts(sel=''){const opts=['คนขับรถ','เด็กต�
 function _payTypeOpts(sel='เงินสดW'){const opts=['เงินสดW','โอนจ่ายW','โอนจ่ายM','รายเดือน'];return opts.map(o=>`<option value="${o}" ${o===sel?'selected':''}>${o}</option>`).join('');}
 function openAddEmployee(){
   const routeOpts=S.shops.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-  OM('เพิ่มพนักงาน',
-    `<div style="display:grid;gap:10px;">
-      <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ชื่อ *</div>
-        <input id="ae-name" placeholder="ชื่อพนักงาน" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-        <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">สาย</div>
-          <select id="ae-route" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
-            <option value="">-- ไม่มีสาย --</option>${routeOpts}</select></div>
-        <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">แผนก <span style="color:var(--text3);font-size:11px;">(ถ้าไม่มีสาย)</span></div>
-          <select id="ae-dept" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
-            <option value="">-- ไม่ระบุ --</option>${_deptOpts()}</select></div>
-      </div>
+  const salaryFields=isHR()?'':`
       <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ตำแหน่งงาน</div>
         <select id="ae-pos" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
           <option value="">-- ไม่ระบุ --</option>${_posOpts()}</select></div>
@@ -3108,7 +3119,26 @@ function openAddEmployee(){
       </div>
       <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ประเภทการจ่าย</div>
         <select id="ae-paytype" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
-          ${_payTypeOpts()}</select></div>
+          ${_payTypeOpts()}</select></div>`;
+  const deptField=isHR()?'':`
+        <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">แผนก <span style="color:var(--text3);font-size:11px;">(ถ้าไม่มีสาย)</span></div>
+          <select id="ae-dept" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
+            <option value="">-- ไม่ระบุ --</option>${_deptOpts()}</select></div>`;
+  const natFieldHR=isHR()?`<div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">สัญชาติ</div>
+      <select id="ae-nat" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
+        <option value="ไทย">ไทย</option><option value="เมียนมา">เมียนมา</option><option value="กัมพูชา">กัมพูชา</option><option value="ลาว">ลาว</option></select></div>`:'';
+  OM('เพิ่มพนักงาน',
+    `<div style="display:grid;gap:10px;">
+      <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ชื่อ *</div>
+        <input id="ae-name" placeholder="ชื่อพนักงาน" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">สาย</div>
+          <select id="ae-route" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
+            <option value="">-- ไม่มีสาย --</option>${routeOpts}</select></div>
+        ${deptField}
+      </div>
+      ${natFieldHR}
+      ${salaryFields}
       <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">หมายเหตุ</div>
         <input id="ae-notes" placeholder="..." style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
     </div>`,
@@ -3288,22 +3318,39 @@ async function quickAssignRoute(empId,routeId){
 async function saveEmployee(editId){
   const name=(document.getElementById('ae-name')?.value||'').trim();
   if(!name){toast('กรุณากรอกชื่อ');return;}
+  const empId=editId||uid();
   const emp={
-    id:editId||uid(),name,
+    id:empId,name,
     route_id:document.getElementById('ae-route')?.value||null,
-    daily_rate:parseFloat(document.getElementById('ae-rate')?.value)||0,
     nationality:document.getElementById('ae-nat')?.value||'ไทย',
-    phone_fee:parseFloat(document.getElementById('ae-phone')?.value)||0,
-    room_fee:parseFloat(document.getElementById('ae-room')?.value)||0,
     notes:document.getElementById('ae-notes')?.value||null,
-    department:document.getElementById('ae-dept')?.value||null,
-    position:document.getElementById('ae-pos')?.value||null,
-    payment_type:document.getElementById('ae-paytype')?.value||'เงินสดW',
     status:'active'
   };
+  // salary fields — admin เท่านั้น
+  if(!isHR()){
+    emp.daily_rate=parseFloat(document.getElementById('ae-rate')?.value)||0;
+    emp.phone_fee=parseFloat(document.getElementById('ae-phone')?.value)||0;
+    emp.room_fee=parseFloat(document.getElementById('ae-room')?.value)||0;
+    emp.department=document.getElementById('ae-dept')?.value||null;
+    emp.position=document.getElementById('ae-pos')?.value||null;
+    emp.payment_type=document.getElementById('ae-paytype')?.value||'เงินสดW';
+  } else {
+    // HR: คงค่าเดิมไว้ถ้าแก้ไข หรือใส่ default ถ้าเพิ่มใหม่
+    const existing=PR.employees.find(e=>e.id===empId);
+    emp.daily_rate=existing?.daily_rate??360;
+    emp.phone_fee=existing?.phone_fee??0;
+    emp.room_fee=existing?.room_fee??0;
+    emp.department=existing?.department||null;
+    emp.position=existing?.position||null;
+    emp.payment_type=existing?.payment_type||'เงินสดW';
+  }
   try{
     await sbUpsert('employees',[emp]);
-    if(editId){const i=PR.employees.findIndex(e=>e.id===editId);if(i>=0)PR.employees[i]=emp;}
+    // บันทึก salary แยก table (admin เท่านั้น)
+    if(!isHR()){
+      await sbUpsert('employees_salary',[{employee_id:empId,daily_rate:emp.daily_rate,payment_type:emp.payment_type,phone_fee:emp.phone_fee,room_fee:emp.room_fee}]);
+    }
+    if(editId){const i=PR.employees.findIndex(e=>e.id===editId);if(i>=0)PR.employees[i]={...PR.employees[i],...emp};}
     else PR.employees.push(emp);
     CM();toast(`บันทึก ${name} แล้ว ✓`);renderPayroll();
   }catch(e){toast('บันทึกไม่สำเร็จ: '+e.message);}
@@ -3440,30 +3487,40 @@ function openEmpDetail(empId){
       </div>
     </div>
   </div>`;
-  OM(`👤 ${emp.name}`,
-    photoHtml+
-    `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
-      <div class="sc"><div class="lb">สาย</div><div class="vl" style="font-size:14px;">${rt?rt.name:'—'}</div></div>
-      <div class="sc"><div class="lb">ตำแหน่ง</div><div class="vl" style="font-size:14px;">${emp.position||'—'}</div></div>
-      <div class="sc"><div class="lb">แผนก</div><div class="vl" style="font-size:14px;">${emp.department||'—'}</div></div>
-      <div class="sc"><div class="lb">ค่าแรง/วัน</div><div class="vl">${fmt(emp.daily_rate||0)}</div></div>
-      <div class="sc"><div class="lb">สัญชาติ</div><div class="vl" style="font-size:14px;">${emp.nationality||'—'}</div></div>
-      <div class="sc"><div class="lb">สถานะ</div><div class="vl" style="font-size:14px;color:${isBL?'var(--red)':isActive?'var(--green)':'var(--text3)'};">${isBL?'🚫 ห้ามรับ':isActive?'✅ ทำงานอยู่':'❌ ออกแล้ว'}</div></div>
-      <div class="sc"><div class="lb">ค่าโทร/งวด</div><div class="vl">${fmt(emp.phone_fee||0)}</div></div>
-      <div class="sc"><div class="lb">ค่าห้อง/งวด</div><div class="vl">${fmt(emp.room_fee||0)}</div></div>
-      <div class="sc" style="grid-column:1/-1;"><div class="lb">ประเภทการจ่าย</div><div class="vl" style="font-size:14px;">${emp.payment_type||'เงินสดW'}</div></div>
-    </div>
-    ${emp.notes?`<div style="font-size:13px;color:var(--text2);margin-bottom:14px;padding:8px 12px;background:var(--bg3);border-radius:6px;">📝 ${emp.notes}</div>`:''}
+  const infoGrid=isHR()
+    ?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
+        <div class="sc"><div class="lb">สาย</div><div class="vl" style="font-size:14px;">${rt?rt.name:'—'}</div></div>
+        <div class="sc"><div class="lb">สัญชาติ</div><div class="vl" style="font-size:14px;">${emp.nationality||'—'}</div></div>
+        <div class="sc"><div class="lb">สถานะ</div><div class="vl" style="font-size:14px;color:${isBL?'var(--red)':isActive?'var(--green)':'var(--text3)'};">${isBL?'🚫 ห้ามรับ':isActive?'✅ ทำงานอยู่':'❌ ออกแล้ว'}</div></div>
+      </div>`
+    :`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
+        <div class="sc"><div class="lb">สาย</div><div class="vl" style="font-size:14px;">${rt?rt.name:'—'}</div></div>
+        <div class="sc"><div class="lb">ตำแหน่ง</div><div class="vl" style="font-size:14px;">${emp.position||'—'}</div></div>
+        <div class="sc"><div class="lb">แผนก</div><div class="vl" style="font-size:14px;">${emp.department||'—'}</div></div>
+        <div class="sc"><div class="lb">ค่าแรง/วัน</div><div class="vl">${fmt(emp.daily_rate||0)}</div></div>
+        <div class="sc"><div class="lb">สัญชาติ</div><div class="vl" style="font-size:14px;">${emp.nationality||'—'}</div></div>
+        <div class="sc"><div class="lb">สถานะ</div><div class="vl" style="font-size:14px;color:${isBL?'var(--red)':isActive?'var(--green)':'var(--text3)'};">${isBL?'🚫 ห้ามรับ':isActive?'✅ ทำงานอยู่':'❌ ออกแล้ว'}</div></div>
+        <div class="sc"><div class="lb">ค่าโทร/งวด</div><div class="vl">${fmt(emp.phone_fee||0)}</div></div>
+        <div class="sc"><div class="lb">ค่าห้อง/งวด</div><div class="vl">${fmt(emp.room_fee||0)}</div></div>
+        <div class="sc" style="grid-column:1/-1;"><div class="lb">ประเภทการจ่าย</div><div class="vl" style="font-size:14px;">${emp.payment_type||'เงินสดW'}</div></div>
+      </div>`;
+  const loanSection=isHR()?'':`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
       <div style="font-size:14px;font-weight:600;">รายการค้าง / ยืม (${loans.length})</div>
       ${isActive?`<button onclick="openAddLoan('${empId}')" style="font-size:12px;padding:3px 10px;background:transparent;border:1px dashed var(--border2);color:var(--text3);border-radius:6px;cursor:pointer;">+ เพิ่ม</button>`:''}
     </div>
-    <div>${loanHtml}</div>`,
+    <div>${loanHtml}</div>`;
+  const statusBtns=isHR()?'':`
+      ${isActive?`<button onclick="setEmpStatus('${empId}','resigned')" style="padding:8px 14px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);color:var(--text2);cursor:pointer;font-size:14px;font-family:var(--font);">ออกจากงาน</button>`:''}
+      ${!isBL?`<button onclick="setEmpStatus('${empId}','blacklisted')" style="padding:8px 14px;border-radius:8px;background:var(--rdim);border:1px solid var(--rbr);color:var(--red);cursor:pointer;font-size:14px;font-family:var(--font);">🚫 ห้ามรับ</button>`:`<button onclick="setEmpStatus('${empId}','active')" style="padding:8px 14px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);color:var(--text2);cursor:pointer;font-size:14px;font-family:var(--font);">ยกเลิก blacklist</button>`}`;
+  OM(`👤 ${emp.name}`,
+    photoHtml+infoGrid+
+    `${emp.notes?`<div style="font-size:13px;color:var(--text2);margin-bottom:14px;padding:8px 12px;background:var(--bg3);border-radius:6px;">📝 ${emp.notes}</div>`:''}
+    ${loanSection}`,
     `<div style="display:flex;gap:6px;flex-wrap:wrap;">
       <button class="btn btn-x" onclick="CMask()">ปิด</button>
       ${isActive?`<button class="btn btn-b" onclick="openEditEmployee('${empId}')">✏️ แก้ไข</button>`:''}
-      ${isActive?`<button onclick="setEmpStatus('${empId}','resigned')" style="padding:8px 14px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);color:var(--text2);cursor:pointer;font-size:14px;font-family:var(--font);">ออกจากงาน</button>`:''}
-      ${!isBL?`<button onclick="setEmpStatus('${empId}','blacklisted')" style="padding:8px 14px;border-radius:8px;background:var(--rdim);border:1px solid var(--rbr);color:var(--red);cursor:pointer;font-size:14px;font-family:var(--font);">🚫 ห้ามรับ</button>`:`<button onclick="setEmpStatus('${empId}','active')" style="padding:8px 14px;border-radius:8px;background:var(--bg3);border:1px solid var(--border);color:var(--text2);cursor:pointer;font-size:14px;font-family:var(--font);">ยกเลิก blacklist</button>`}
+      ${statusBtns}
     </div>`
   );
 }

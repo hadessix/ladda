@@ -5,7 +5,11 @@
 //   SUPABASE_ANON_KEY – supabase anon key
 //   HASH_USER        – SHA-256 of user PIN
 //   HASH_ADMIN       – SHA-256 of admin PIN
+//   HASH_HR          – SHA-256 of hr PIN
 //   JWT_SECRET       – random 32-byte hex secret for signing tokens
+
+// tables ที่ hr เข้าไม่ได้
+const HR_BLOCKED_TABLES = ['employees_salary', 'payroll_periods', 'payroll_entries', 'payroll_deductions', 'employee_loans'];
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -82,6 +86,7 @@ export default {
       if (hash === env.HASH_ADMIN) role = 'admin';
       else if (hash === env.HASH_USER) role = 'user';
       else if (hash === env.HASH_VIEWER) role = 'viewer';
+      else if (hash === env.HASH_HR) role = 'hr';
       if (!role) return jsonRes({ error: 'invalid' }, 401);
 
       const token = await makeToken(role, env.JWT_SECRET);
@@ -96,6 +101,11 @@ export default {
       if (!payload) return jsonRes({ error: 'unauthorized' }, 401);
 
       const sbPath = url.pathname.slice('/api/'.length);
+      // hr ห้ามเข้า table ที่มีข้อมูลเงิน
+      const tableName = sbPath.split('?')[0];
+      if (payload.role === 'hr' && HR_BLOCKED_TABLES.includes(tableName)) {
+        return jsonRes({ error: 'forbidden' }, 403);
+      }
       const sbUrl = `${env.SUPABASE_URL}/rest/v1/${sbPath}${url.search}`;
 
       const fwdHeaders = new Headers();
