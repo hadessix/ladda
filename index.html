@@ -2653,19 +2653,9 @@ async function sharePeriod(periodId){
     if(isF1){byRoute2F1.push({e,emp});}
     else{const k=emp.route_id||'__none__';if(!byRoute2Bur[k])byRoute2Bur[k]=[];byRoute2Bur[k].push({e,emp});}
   });
-  let lines2=[``,`${'─'.repeat(32)}`,`💼 ${burachaiGrp?burachaiGrp.name:'บูรชัย'}+F1 — งวด ${slotLbl} ${mLbl}`,'─'.repeat(32),''];
-  let tot2=0,cnt2=0,tot2F1=0,cnt2F1=0;
-  // F1 ก่อน (ด้านบน)
-  if(byRoute2F1.length){
-    lines2.push(`📍 F1`);
-    byRoute2F1.forEach(({e,emp})=>{
-      const{line,net}=_entryLine(e,emp);
-      lines2.push(line);
-      tot2F1+=net;cnt2F1++;
-    });
-    lines2.push('');
-  }
-  // บูรชัย
+  let lines2=[``,`${'─'.repeat(32)}`,`💼 ${burachaiGrp?burachaiGrp.name:'บูรชัย'} — งวด ${slotLbl} ${mLbl}`,'─'.repeat(32),''];
+  let tot2=0,cnt2=0;
+  // บูรชัย เท่านั้น (ไม่รวม F1)
   Object.keys(byRoute2Bur).forEach(rid=>{
     const rt=S.shops.find(s=>s.id===rid);
     lines2.push(`📍 ${rt?rt.name:'ไม่มีสาย'}`);
@@ -2678,8 +2668,7 @@ async function sharePeriod(periodId){
     lines2.push('');
   });
   lines2.push('─'.repeat(32));
-  if(byRoute2F1.length)lines2.push(`รวม F1  ฿${fmtN(tot2F1)}`);
-  lines2.push(`รวม ${cnt2} คน  ฿${fmtN(tot2)}`);  // ไม่นับ F1
+  lines2.push(`รวม ${cnt2} คน  ฿${fmtN(tot2)}`);
 
   const hasLines2=(byRoute2F1.length+Object.keys(byRoute2Bur).length)>0;
 
