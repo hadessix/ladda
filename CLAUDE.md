@@ -509,6 +509,7 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 
 ## Roadmap
 
+### ✅ เสร็จแล้ว
 - [x] SHA-256 PIN hashing + Cloudflare Worker proxy
 - [x] Viewer role + Overview page
 - [x] Modal fullscreen + confirm-before-close (CMask)
@@ -530,11 +531,29 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - [x] Payroll year/month grid picker (เฉพาะปี/เดือนที่ผ่านมาและมีข้อมูล)
 - [x] HR role — employees_salary isolation, Worker 403, UI strip salary/loan/period
 - [x] ประวัติพนักงาน bulk-edit modal
-- [ ] กำหนดสาย + ตำแหน่ง + payment_type + ยอดบัตรค้าง (admin ทำเอง)
-- [ ] ดอกเบี้ยเงินยืม (5–10%)
-- [ ] ระบบเช็คเวลาเข้างาน (feature #2)
-- [ ] โปรไฟล์พนักงานเต็มรูปแบบ (feature #3)
-- [ ] Supabase RLS per authenticated user
-- [ ] PWA — manifest + service worker
+
+### 🔲 งานที่ admin ต้องทำเองในแอป (ไม่ใช่งานโค้ด)
+- [ ] กำหนดสาย + ตำแหน่ง + payment_type ให้พนักงานทุกคน
+- [ ] อัปเดตยอดค้างบัตรใบอนุญาต + วันหมดอายุ
+
+### 🔥 ต้องทำต่อ (เรียงตามความเร่งด่วน)
+
+**1. Cross-system กระทบยอดกับระบบน้ำแข็ง** ← เร่งด่วนที่สุด
+- ดึงข้อมูลจาก API ระบบน้ำแข็ง (รอ URL + spec จากทีมนั้น)
+- แสดงยอดรายวันของทุกสาย เทียบกับยอดนับเงินรอบสุดท้ายใน น้องลัดดา
+- ไฮไลต์ถ้ายอดสองฝั่งไม่ตรงกัน
+- (TBD) ส่งสรุปกลับไปให้ระบบน้ำแข็ง
+
+**2. ระบบเช็คเวลาเข้างาน (NFC)**
+- พนักงานเอามือถือแตะสติ๊กเกอร์ NFC ที่ติดไว้จุดเข้างาน
+- บันทึกเวลาเข้า-ออก ต่อคนต่อวัน
+- เชื่อมกับ payroll (คำนวณ days_worked อัตโนมัติ)
+
+**3. ดอกเบี้ยเงินยืม (5–10%)**
+- ต่อยอดจากระบบ loan ที่มีอยู่แล้ว
+
+### ⏳ ทำได้แต่ไม่เร่ง
+- [ ] โปรไฟล์พนักงานเต็มรูปแบบ
 - [ ] Export รายงาน (PDF / Excel)
-- [ ] Cross-system integration กับระบบน้ำแข็ง
+- [ ] PWA — manifest + service worker (ติดตั้งลงมือถือได้)
+- [ ] Supabase RLS per authenticated user
