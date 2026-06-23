@@ -2584,52 +2584,97 @@ async function sharePeriod(periodId){
   const mLbl=prMonthLbl(`${y}-${mo}`);
   const ents=PR.entries.filter(e=>e.period_id===periodId);
   const hr=_prSettings.hideRates;
-  // group by route (same as openPeriod)
-  const byRoute={};
+  const fmtN=n=>String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+
+  // หากลุ่มบูรชัย (ชื่อกลุ่มที่มี "บูรชัย")
+  const burachaiGrp=S.groups.find(g=>g.name.includes('บูรชัย'));
+  const burachaiMemberIds=new Set(burachaiGrp?S.groupMembers[burachaiGrp.id]||[]:[]);
+  const f1Route=S.shops.find(s=>s.name==='F1');
+  const f1Id=f1Route?.id;
+
+  function _calcNet(e,emp){
+    const deds=PR.deductions.filter(d=>d.entry_id===e.id);
+    const totalDed=deds.reduce((s,d)=>s+d.amount,0);
+    const base=(emp.daily_rate||0)*(e.days_worked||0);
+    return{net:base+(e.bonus||0)-totalDed-(e.advance||0),base,totalDed};
+  }
+  function _entryLine(e,emp){
+    const{net,base,totalDed}=_calcNet(e,emp);
+    let parts=[`  ${emp.name}`];
+    parts.push(`${e.days_worked}วัน`);
+    if(!hr)parts.push(`฿${fmtN(base)}`);
+    if(totalDed>0)parts.push(`หัก ${fmtN(totalDed)}`);
+    if(e.bonus>0)parts.push(`+โบนัส ${fmtN(e.bonus)}`);
+    parts.push(`→ ฿${fmtN(net)}`);
+    return{line:parts.join('  '),net};
+  }
+
+  // ── ชุดที่ 1: เงินสดW ทุกสาย (F1 แยกยอด) ──
+  const byRoute1={};
   ents.forEach(e=>{
     const emp=PR.employees.find(x=>x.id===e.employee_id);if(!emp)return;
+    if(emp.payment_type&&emp.payment_type!=='เงินสดW')return; // เฉพาะเงินสดW
     const k=emp.route_id||'__none__';
-    if(!byRoute[k])byRoute[k]=[];byRoute[k].push({e,emp});
+    if(!byRoute1[k])byRoute1[k]=[];byRoute1[k].push({e,emp});
   });
-  const sortedKeys=Object.keys(byRoute).sort((a,b)=>{
+  const sortedRoutes=Object.keys(byRoute1).sort((a,b)=>{
     if(a==='__none__')return 1;if(b==='__none__')return -1;
-    const ra=S.shops.find(s=>s.id===a);const rb=S.shops.find(s=>s.id===b);
-    return (ra?.sort_order||0)-(rb?.sort_order||0);
+    return (S.shops.find(s=>s.id===a)?.sort_order||0)-(S.shops.find(s=>s.id===b)?.sort_order||0);
   });
-  const pad=(s,n)=>String(s).padEnd(n,' ');
-  const fmtN=(n)=>String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,',');
-  let lines=[`💼 งวด ${slotLbl} ${mLbl}`,'─'.repeat(30)];
-  let grandNet=0;
-  sortedKeys.forEach(rid=>{
-    const items=byRoute[rid];
+  let lines1=[`💼 งวด ${slotLbl} ${mLbl}`,'─'.repeat(32),''];
+  let tot1Main=0,tot1F1=0,cnt1=0;
+  sortedRoutes.forEach(rid=>{
     const rt=S.shops.find(s=>s.id===rid);
-    lines.push(``);
-    lines.push(`📍 ${rt?rt.name:'ไม่มีสาย'}`);
-    items.forEach(({e,emp})=>{
-      const deds=PR.deductions.filter(d=>d.entry_id===e.id);
-      const totalDed=deds.reduce((s,d)=>s+d.amount,0);
-      const base=(emp.daily_rate||0)*(e.days_worked||0);
-      const net=base+(e.bonus||0)-totalDed-(e.advance||0);
-      grandNet+=net;
-      let parts=[`  ${pad(emp.name,10)}`, `${e.days_worked}วัน`];
-      if(!hr) parts.push(`฿${fmtN(base)}`);
-      if(totalDed>0) parts.push(`หัก ${fmtN(totalDed)}`);
-      if(e.bonus>0) parts.push(`+โบนัส ${fmtN(e.bonus)}`);
-      parts.push(`→ ฿${fmtN(net)}`);
-      lines.push(parts.join('  '));
+    lines1.push(`📍 ${rt?rt.name:'ไม่มีสาย'}`);
+    byRoute1[rid].forEach(({e,emp})=>{
+      const{line,net}=_entryLine(e,emp);
+      lines1.push(line);
+      if(rid===f1Id)tot1F1+=net;else tot1Main+=net;
+      cnt1++;
     });
+    lines1.push('');
   });
-  lines.push('');lines.push('─'.repeat(30));
-  lines.push(`รวม ${ents.length} คน  สุทธิ ฿${fmtN(grandNet)}`);
-  const text=lines.join('\n');
+  lines1.push('─'.repeat(32));
+  lines1.push(`รวมทุกสาย (ยกเว้น F1)  ฿${fmtN(tot1Main)}`);
+  if(f1Id&&byRoute1[f1Id])lines1.push(`รวม F1  ฿${fmtN(tot1F1)}`);
+  lines1.push(`รวมทั้งหมด ${cnt1} คน  ฿${fmtN(tot1Main+tot1F1)}`);
+
+  // ── ชุดที่ 2: กลุ่มบูรชัย (เงินสดW + โอนจ่ายM) ──
+  const cashTransferTypes=new Set(['เงินสดW','โอนจ่ายM']);
+  const byRoute2={};
+  ents.forEach(e=>{
+    const emp=PR.employees.find(x=>x.id===e.employee_id);if(!emp)return;
+    if(!burachaiMemberIds.has(emp.route_id))return;
+    const pt=emp.payment_type||'เงินสดW';
+    if(!cashTransferTypes.has(pt))return;
+    const k=emp.route_id||'__none__';
+    if(!byRoute2[k])byRoute2[k]=[];byRoute2[k].push({e,emp});
+  });
+  let lines2=[``,`${'─'.repeat(32)}`,`💼 ${burachaiGrp?burachaiGrp.name:'บูรชัย'} — งวด ${slotLbl} ${mLbl}`,'─'.repeat(32),''];
+  let tot2=0,cnt2=0;
+  Object.keys(byRoute2).forEach(rid=>{
+    const rt=S.shops.find(s=>s.id===rid);
+    lines2.push(`📍 ${rt?rt.name:'ไม่มีสาย'}`);
+    byRoute2[rid].forEach(({e,emp})=>{
+      const{line,net}=_entryLine(e,emp);
+      const pt=emp.payment_type||'เงินสดW';
+      lines2.push(line+(pt!=='เงินสดW'?` [${pt}]`:''));
+      tot2+=net;cnt2++;
+    });
+    lines2.push('');
+  });
+  lines2.push('─'.repeat(32));
+  lines2.push(`รวม ${cnt2} คน  ฿${fmtN(tot2)}`);
+
+  const text=[...lines1,...(Object.keys(byRoute2).length?lines2:[])].join('\n');
   if(navigator.share){
     try{await navigator.share({title:`งวด ${slotLbl} ${mLbl}`,text});return;}catch(e){if(e.name==='AbortError')return;}
   }
-  try{await navigator.clipboard.writeText(text);toast('คัดลอกข้อมูลแล้ว — วางใน Line/Chat ได้เลย ✓');}
+  try{await navigator.clipboard.writeText(text);toast('คัดลอกแล้ว ✓');}
   catch{
     const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';
     document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);
-    toast('คัดลอกข้อมูลแล้ว ✓');
+    toast('คัดลอกแล้ว ✓');
   }
 }
 
@@ -2993,6 +3038,7 @@ function renderPrEmployees(){
 
 function _deptOpts(sel=''){const opts=['ออฟฟิส','บัญชี','คลังสินค้า','ขนส่ง','อื่นๆ'];return opts.map(d=>`<option value="${d}" ${d===sel?'selected':''}>${d}</option>`).join('');}
 function _posOpts(sel=''){const opts=['คนขับรถ','เด็กติดรถ','ออฟฟิสทั่วไป','ผู้จัดการ','ผู้จัดการใหญ่'];return opts.map(p=>`<option value="${p}" ${p===sel?'selected':''}>${p}</option>`).join('');}
+function _payTypeOpts(sel='เงินสดW'){const opts=['เงินสดW','โอนจ่ายW','โอนจ่ายM','รายเดือน'];return opts.map(o=>`<option value="${o}" ${o===sel?'selected':''}>${o}</option>`).join('');}
 function openAddEmployee(){
   const routeOpts=S.shops.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
   OM('เพิ่มพนักงาน',
@@ -3023,6 +3069,9 @@ function openAddEmployee(){
         <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ค่าห้อง/งวด</div>
           <input id="ae-room" type="number" placeholder="0" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--mono);"></div>
       </div>
+      <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ประเภทการจ่าย</div>
+        <select id="ae-paytype" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
+          ${_payTypeOpts()}</select></div>
       <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">หมายเหตุ</div>
         <input id="ae-notes" placeholder="..." style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
     </div>`,
@@ -3212,6 +3261,7 @@ async function saveEmployee(editId){
     notes:document.getElementById('ae-notes')?.value||null,
     department:document.getElementById('ae-dept')?.value||null,
     position:document.getElementById('ae-pos')?.value||null,
+    payment_type:document.getElementById('ae-paytype')?.value||'เงินสดW',
     status:'active'
   };
   try{
@@ -3364,6 +3414,7 @@ function openEmpDetail(empId){
       <div class="sc"><div class="lb">สถานะ</div><div class="vl" style="font-size:14px;color:${isBL?'var(--red)':isActive?'var(--green)':'var(--text3)'};">${isBL?'🚫 ห้ามรับ':isActive?'✅ ทำงานอยู่':'❌ ออกแล้ว'}</div></div>
       <div class="sc"><div class="lb">ค่าโทร/งวด</div><div class="vl">${fmt(emp.phone_fee||0)}</div></div>
       <div class="sc"><div class="lb">ค่าห้อง/งวด</div><div class="vl">${fmt(emp.room_fee||0)}</div></div>
+      <div class="sc" style="grid-column:1/-1;"><div class="lb">ประเภทการจ่าย</div><div class="vl" style="font-size:14px;">${emp.payment_type||'เงินสดW'}</div></div>
     </div>
     ${emp.notes?`<div style="font-size:13px;color:var(--text2);margin-bottom:14px;padding:8px 12px;background:var(--bg3);border-radius:6px;">📝 ${emp.notes}</div>`:''}
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
@@ -3416,6 +3467,9 @@ function openEditEmployee(empId){
           <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ค่าห้อง/งวด</div>
             <input id="ae-room" type="number" value="${emp.room_fee||0}" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--mono);"></div>
         </div>
+        <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ประเภทการจ่าย</div>
+          <select id="ae-paytype" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
+            ${_payTypeOpts(emp.payment_type||'เงินสดW')}</select></div>
         <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">หมายเหตุ</div>
           <input id="ae-notes" value="${emp.notes||''}" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
       </div>`,
