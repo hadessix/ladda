@@ -328,12 +328,12 @@ main{display:flex;flex:1;overflow:hidden;}
 <div id="payroll-screen">
   <div class="pr-hdr">
     <div class="pr-logo">💼 ระบบเงินเดือน</div>
-    <div style="display:flex;align-items:center;gap:8px;">
+    <div style="display:flex;align-items:center;gap:8px;" id="pr-header-right">
       <button class="pr-xbtn" onclick="backFromPayroll()">🪙 นับเงิน</button>
       <span class="role-badge role-admin">👑 ผู้ดูแล</span>
     </div>
   </div>
-  <div class="pr-tabs">
+  <div class="pr-tabs" id="pr-tabs-bar">
     <button class="pr-tab active" id="pr-tab-periods" onclick="setPrTab('periods')">📅 งวดจ่าย</button>
     <button class="pr-tab" id="pr-tab-employees" onclick="setPrTab('employees')">👥 พนักงาน</button>
   </div>
@@ -451,6 +451,10 @@ function showApp(){
     document.getElementById('app').style.display='none';
     document.getElementById('payroll-screen').style.display='flex';
     const fab=document.getElementById('pr-fab-group');if(fab){fab.style.display='none';}
+    // ซ่อน tab งวดจ่าย + ปุ่มนับเงิน, เปลี่ยน badge เป็น HR
+    const tabsBar=document.getElementById('pr-tabs-bar');if(tabsBar)tabsBar.style.display='none';
+    const hdrRight=document.getElementById('pr-header-right');
+    if(hdrRight)hdrRight.innerHTML=`<span class="role-badge role-user" style="cursor:default;">👤 HR</span><button onclick="logout()" class="role-badge" style="background:var(--rdim);border-color:var(--rbr);color:var(--red);cursor:pointer;">ออกจากระบบ</button>`;
     PR.tab='employees';
     if(!PR._loaded){loadPayroll().then(()=>renderPayroll());}
     else renderPayroll();
@@ -3600,18 +3604,10 @@ function openEditEmployee(empId){
   CM();
   setTimeout(()=>{
     const routeOpts=S.shops.map(s=>`<option value="${s.id}" ${s.id===emp.route_id?'selected':''}>${s.name}</option>`).join('');
-    OM('แก้ไขพนักงาน',
-      `<div style="display:grid;gap:10px;">
-        <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ชื่อ *</div>
-          <input id="ae-name" value="${emp.name}" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">สาย</div>
-            <select id="ae-route" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
-              <option value="">-- ไม่มีสาย --</option>${routeOpts}</select></div>
-          <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">แผนก <span style="color:var(--text3);font-size:11px;">(ถ้าไม่มีสาย)</span></div>
-            <select id="ae-dept" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
-              <option value="">-- ไม่ระบุ --</option>${_deptOpts(emp.department||'')}</select></div>
-        </div>
+    const salaryFieldsEdit=isHR()?'':`
+        <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">แผนก <span style="color:var(--text3);font-size:11px;">(ถ้าไม่มีสาย)</span></div>
+          <select id="ae-dept" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
+            <option value="">-- ไม่ระบุ --</option>${_deptOpts(emp.department||'')}</select></div>
         <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ตำแหน่งงาน</div>
           <select id="ae-pos" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
             <option value="">-- ไม่ระบุ --</option>${_posOpts(emp.position||'')}</select></div>
@@ -3633,7 +3629,24 @@ function openEditEmployee(empId){
         </div>
         <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ประเภทการจ่าย</div>
           <select id="ae-paytype" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
-            ${_payTypeOpts(emp.payment_type||'เงินสดW')}</select></div>
+            ${_payTypeOpts(emp.payment_type||'เงินสดW')}</select></div>`;
+    const natFieldHREdit=isHR()?`<div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">สัญชาติ</div>
+      <select id="ae-nat" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
+        <option value="ไทย" ${emp.nationality==='ไทย'?'selected':''}>ไทย</option>
+        <option value="เมียนมา" ${emp.nationality==='เมียนมา'?'selected':''}>เมียนมา</option>
+        <option value="กัมพูชา" ${emp.nationality==='กัมพูชา'?'selected':''}>กัมพูชา</option>
+        <option value="ลาว" ${emp.nationality==='ลาว'?'selected':''}>ลาว</option></select></div>`:'';
+    OM('แก้ไขพนักงาน',
+      `<div style="display:grid;gap:10px;">
+        <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ชื่อ *</div>
+          <input id="ae-name" value="${emp.name}" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">สาย</div>
+            <select id="ae-route" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
+              <option value="">-- ไม่มีสาย --</option>${routeOpts}</select></div>
+          ${salaryFieldsEdit}
+        </div>
+        ${natFieldHREdit}
         <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">หมายเหตุ</div>
           <input id="ae-notes" value="${emp.notes||''}" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
       </div>`,
