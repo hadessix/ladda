@@ -3709,12 +3709,13 @@ function openAllEmployees(){
 async function _allEmpField(empId,field,val){
   const emp=PR.employees.find(e=>e.id===empId);if(!emp)return;
   emp[field]=val;
-  const salaryFields=['daily_rate','phone_fee','room_fee','department','position','payment_type'];
+  const salaryFields=['daily_rate','phone_fee','room_fee','payment_type'];
+  const empOnlyFields=['department','position'];
   try{
     if(salaryFields.includes(field)){
-      await sbUpsert('employees_salary',[{employee_id:empId,daily_rate:emp.daily_rate??360,phone_fee:emp.phone_fee??0,room_fee:emp.room_fee??0,department:emp.department||null,position:emp.position||null,payment_type:emp.payment_type||'เงินสดW'}]);
+      await sbUpsert('employees_salary',[{employee_id:empId,daily_rate:emp.daily_rate??360,phone_fee:emp.phone_fee??0,room_fee:emp.room_fee??0,payment_type:emp.payment_type||'เงินสดW'}]);
     } else {
-      const{daily_rate,phone_fee,room_fee,department,position,payment_type,...empData}=emp;
+      const{daily_rate,phone_fee,room_fee,payment_type,...empData}=emp;
       await sbUpsert('employees',[empData]);
     }
     toast('บันทึกแล้ว ✓');
