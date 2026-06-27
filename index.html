@@ -3782,7 +3782,7 @@ function openAllEmployees(){
         <td style="padding:4px;">${sel(emp.id,'position',emp.position,[{v:'',l:'--'},'คนขับรถ','เด็กติดรถ','ออฟฟิศทั่วไป','ผู้จัดการ','ผู้จัดการใหญ่'])}</td>
         <td style="padding:4px;">${sel(emp.id,'nationality',emp.nationality||'ไทย',['ไทย','เมียนมา','กัมพูชา','ลาว'])}</td>
         <td style="padding:4px;">${inp(emp.id,'tel',emp.tel,'tel')}</td>
-        <td style="padding:4px;">${inp(emp.id,'permit_expiry',emp.permit_expiry,'date','font-family:var(--font);')}</td>
+        <td style="padding:4px;">${(emp.nationality||'ไทย')==='ไทย'?`<span style="color:var(--text3);font-size:12px;padding:4px 8px;display:inline-block;">—</span>`:inp(emp.id,'permit_expiry',emp.permit_expiry,'date','font-family:var(--font);')}</td>
         ${hr?'':`<td style="padding:4px;">${sel(emp.id,'payment_type',emp.payment_type||'เงินสดW',['เงินสดW','โอนจ่ายW','โอนจ่ายM','รายเดือน'])}</td>`}
         ${hr?'':`<td style="padding:4px;"><input type="number" value="${emp.daily_rate||0}" onchange="_allEmpField('${emp.id}','daily_rate',+this.value)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--mono);width:80px;text-align:right;"></td>`}
         ${hr?'':`<td style="padding:4px;">${inp(emp.id,'start_date',emp.start_date,'date','font-family:var(--font);')}</td>`}
@@ -3804,7 +3804,7 @@ function openAllEmployees(){
         <td style="padding:4px;">${sel(emp.id,'position',emp.position,[{v:'',l:'--'},'คนขับรถ','เด็กติดรถ','ออฟฟิศทั่วไป','ผู้จัดการ','ผู้จัดการใหญ่'])}</td>
         <td style="padding:4px;">${sel(emp.id,'nationality',emp.nationality||'ไทย',['ไทย','เมียนมา','กัมพูชา','ลาว'])}</td>
         <td style="padding:4px;">${inp(emp.id,'tel',emp.tel,'tel')}</td>
-        <td style="padding:4px;">${inp(emp.id,'permit_expiry',emp.permit_expiry,'date','font-family:var(--font);')}</td>
+        <td style="padding:4px;">${(emp.nationality||'ไทย')==='ไทย'?`<span style="color:var(--text3);font-size:12px;padding:4px 8px;display:inline-block;">—</span>`:inp(emp.id,'permit_expiry',emp.permit_expiry,'date','font-family:var(--font);')}</td>
         ${hr?'':`<td style="padding:4px;">${sel(emp.id,'payment_type',emp.payment_type||'เงินสดW',['เงินสดW','โอนจ่ายW','โอนจ่ายM','รายเดือน'])}</td>`}
         ${hr?'':`<td style="padding:4px;"><input type="number" value="${emp.daily_rate||0}" onchange="_allEmpField('${emp.id}','daily_rate',+this.value)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--mono);width:80px;text-align:right;"></td>`}
         ${hr?'':`<td style="padding:4px;">${inp(emp.id,'start_date',emp.start_date,'date','font-family:var(--font);')}</td>`}
