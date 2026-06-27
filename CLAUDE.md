@@ -468,6 +468,9 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - **_prSettings** (localStorage `pr_settings`): `{ hideRates, hideManager, hideTopManager }` — hideManager/hideTopManager กรองพนักงานตาม `emp.position` ทั้งหน้าพนักงานและ openPeriod modal
 - **renderPayroll() vs renderPrEmployees()**: `renderPrEmployees()` คืน HTML string เท่านั้น; ต้องเรียก `renderPayroll()` เพื่อ inject เข้า DOM จริง
 - **HR loadPayroll**: โหลด employees + routes + groups + group_members เพื่อให้การเรียงสายตรงกับ admin view
+- **openPeriod table columns**: ใช้ `table-layout:fixed` + `<colgroup>` กำหนด width แต่ละคอลัมน์คงที่ — ป้องกัน column shift เมื่อมีรายการหักหลายชิ้น; ช่อง "อื่นๆ" แสดงยอดรวมตัวเลขเดียว + `title` tooltip รายละเอียด
+- **โอนจ่ายM/รายเดือน filter**: `_monthlyTypes=['โอนจ่ายM','รายเดือน']` — พนักงานกลุ่มนี้ไม่แสดงและไม่สร้าง entries ในงวด A (1-10) และ B (11-20); แสดงเฉพาะงวด C (21-31)
+- **openPeriod header split totals**: `id="pr-hdr-grand/main/f1/bur"` — ยอดรวม/เฮียรวย/F1/บูรชัย; อัปเดต real-time พร้อมกับ net pay ใน `prUpdateEntry()`
 
 ### Employee fields
 | field | table | type | หมายเหตุ |
@@ -538,6 +541,9 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - [x] openPeriod route sidebar layout + เรียงตาม group order
 - [x] manual deduction with per_period — auto-creates loan หักต่อเนื่องงวดถัดไป
 - [x] prUpdateEntry อัปเดต net pay ใน DOM ทันที (ไม่ต้อง F5)
+- [x] openPeriod header split totals (เฮียรวย/F1/บูรชัย) อัปเดต real-time
+- [x] โอนจ่ายM/รายเดือน ซ่อนในงวด A+B แสดงเฉพาะงวด C
+- [x] openPeriod table-layout:fixed — columns ไม่ขยับเมื่อเพิ่มรายการหัก
 
 ### 🔲 งานที่ admin ต้องทำเองในแอป (ไม่ใช่งานโค้ด)
 - [ ] กำหนดสาย + ตำแหน่ง + payment_type ให้พนักงานทุกคน
