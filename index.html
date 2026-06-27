@@ -2474,7 +2474,9 @@ async function generatePeriod(beYM,slot){
   try{
     await sbUpsert('payroll_periods',[periodRow]);
     PR.periods.push(periodRow);
-    const activeEmps=PR.employees.filter(e=>e.status==='active');
+    // โอนจ่ายM และ รายเดือน ขึ้นเฉพาะงวด C (21-31) เท่านั้น
+    const monthlyTypes=['โอนจ่ายM','รายเดือน'];
+    const activeEmps=PR.employees.filter(e=>e.status==='active'&&(slot==='C'||!monthlyTypes.includes(e.payment_type)));
     const defDays=slot==='C'?toDay-20:10;
     if(activeEmps.length===0){toast(`สร้างงวด ${pk} แล้ว (ไม่มีพนักงาน)`);renderPayroll();return;}
     const entryRows=activeEmps.map(emp=>({id:uid(),period_id:pid,employee_id:emp.id,route_id:emp.route_id,days_worked:defDays,bonus:0,advance:0,net_pay:0,notes:null}));
@@ -2509,10 +2511,12 @@ function openPeriod(periodId){
   const mLbl=prMonthLbl(`${y}-${mo}`);
   const isPaid=period.status==='paid';
   const _hiddenPos=new Set([...(_prSettings.hideManager?['ผู้จัดการ']:[]),...(_prSettings.hideTopManager?['ผู้จัดการใหญ่']:[])]);
+  const _monthlyTypes=['โอนจ่ายM','รายเดือน'];
   const ents=PR.entries.filter(e=>{
     const emp=PR.employees.find(x=>x.id===e.employee_id);
     if(!emp)return true;
     if(_hiddenPos.has(emp.position))return false;
+    if(slot!=='C'&&_monthlyTypes.includes(emp.payment_type))return false;
     return e.period_id===periodId;
   });
   // group by route, preserve route sort_order
