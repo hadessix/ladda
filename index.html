@@ -3367,6 +3367,12 @@ function openAddEmployee(){
         <input id="ae-tel" type="tel" placeholder="08x-xxx-xxxx" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--mono);"></div>
       <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">วันหมดอายุบัตร</div>
         <input id="ae-permit-expiry" type="date" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">อายุวีซ่า</div>
+          <input id="ae-visa-expiry" type="date" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
+        <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">อายุพาสปอร์ต</div>
+          <input id="ae-passport-expiry" type="date" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
+      </div>
       <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">หมายเหตุ</div>
         <input id="ae-notes" placeholder="..." style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
     </div>`,
@@ -3554,6 +3560,8 @@ async function saveEmployee(editId){
     notes:document.getElementById('ae-notes')?.value||null,
     tel:document.getElementById('ae-tel')?.value||null,
     permit_expiry:document.getElementById('ae-permit-expiry')?.value||null,
+    visa_expiry:document.getElementById('ae-visa-expiry')?.value||null,
+    passport_expiry:document.getElementById('ae-passport-expiry')?.value||null,
     status:'active'
   };
   // salary fields — admin เท่านั้น
@@ -3730,6 +3738,8 @@ function openEmpDetail(empId){
         <div class="sc"><div class="lb">สัญชาติ</div><div class="vl" style="font-size:14px;">${emp.nationality||'—'}</div></div>
         <div class="sc"><div class="lb">สถานะ</div><div class="vl" style="font-size:14px;color:${isBL?'var(--red)':isActive?'var(--green)':'var(--text3)'};">${isBL?'🚫 ห้ามรับ':isActive?'✅ ทำงานอยู่':'❌ ออกแล้ว'}</div></div>
         <div class="sc" style="grid-column:1/-1;"><div class="lb">วันหมดอายุบัตร</div><div class="vl" style="font-size:14px;">${emp.permit_expiry||'—'}</div></div>
+        <div class="sc"><div class="lb">อายุวีซ่า</div><div class="vl" style="font-size:14px;">${emp.visa_expiry||'—'}</div></div>
+        <div class="sc"><div class="lb">อายุพาสปอร์ต</div><div class="vl" style="font-size:14px;">${emp.passport_expiry||'—'}</div></div>
         <div class="sc" style="grid-column:1/-1;"><div class="lb">เบอร์โทรศัพท์</div><div class="vl" style="font-size:14px;">${emp.tel?`<a href="tel:${emp.tel}" style="color:var(--text);">${emp.tel}</a>`:'—'}</div></div>
       </div>`
     :`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
@@ -3743,6 +3753,8 @@ function openEmpDetail(empId){
         <div class="sc"><div class="lb">ค่าห้อง/งวด</div><div class="vl">${fmt(emp.room_fee||0)}</div></div>
         <div class="sc"><div class="lb">วันที่เริ่มงาน</div><div class="vl" style="font-size:14px;">${emp.start_date||'—'}</div></div>
         <div class="sc"><div class="lb">วันหมดอายุบัตร</div><div class="vl" style="font-size:14px;">${emp.permit_expiry||'—'}</div></div>
+        <div class="sc"><div class="lb">อายุวีซ่า</div><div class="vl" style="font-size:14px;">${emp.visa_expiry||'—'}</div></div>
+        <div class="sc"><div class="lb">อายุพาสปอร์ต</div><div class="vl" style="font-size:14px;">${emp.passport_expiry||'—'}</div></div>
         <div class="sc" style="grid-column:1/-1;"><div class="lb">ประเภทการจ่าย</div><div class="vl" style="font-size:14px;">${emp.payment_type||'เงินสดW'}</div></div>
         <div class="sc" style="grid-column:1/-1;"><div class="lb">เบอร์โทรศัพท์</div><div class="vl" style="font-size:14px;">${emp.tel?`<a href="tel:${emp.tel}" style="color:var(--text);">${emp.tel}</a>`:'—'}</div></div>
       </div>`;
@@ -3821,6 +3833,8 @@ function openAllEmployees(){
         <td style="padding:4px;">${sel(emp.id,'nationality',emp.nationality||'ไทย',['ไทย','เมียนมา','กัมพูชา','ลาว'])}</td>
         <td style="padding:4px;">${inp(emp.id,'tel',emp.tel,'tel')}</td>
         <td style="padding:4px;">${(emp.nationality||'ไทย')==='ไทย'?`<span style="color:var(--text3);font-size:12px;padding:4px 8px;display:inline-block;">—</span>`:inp(emp.id,'permit_expiry',emp.permit_expiry,'date','font-family:var(--font);')}</td>
+        <td style="padding:4px;">${(emp.nationality||'ไทย')==='ไทย'?`<span style="color:var(--text3);font-size:12px;padding:4px 8px;display:inline-block;">—</span>`:inp(emp.id,'visa_expiry',emp.visa_expiry,'date','font-family:var(--font);')}</td>
+        <td style="padding:4px;">${(emp.nationality||'ไทย')==='ไทย'?`<span style="color:var(--text3);font-size:12px;padding:4px 8px;display:inline-block;">—</span>`:inp(emp.id,'passport_expiry',emp.passport_expiry,'date','font-family:var(--font);')}</td>
         ${hr?'':`<td style="padding:4px;">${sel(emp.id,'payment_type',emp.payment_type||'เงินสดW',['เงินสดW','โอนจ่ายW','โอนจ่ายM','รายเดือน'])}</td>`}
         ${hr?'':`<td style="padding:4px;"><input type="number" value="${emp.daily_rate||0}" onchange="_allEmpField('${emp.id}','daily_rate',+this.value)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--mono);width:80px;text-align:right;"></td>`}
         ${hr?'':`<td style="padding:4px;">${inp(emp.id,'start_date',emp.start_date,'date','font-family:var(--font);')}</td>`}
@@ -3843,6 +3857,8 @@ function openAllEmployees(){
         <td style="padding:4px;">${sel(emp.id,'nationality',emp.nationality||'ไทย',['ไทย','เมียนมา','กัมพูชา','ลาว'])}</td>
         <td style="padding:4px;">${inp(emp.id,'tel',emp.tel,'tel')}</td>
         <td style="padding:4px;">${(emp.nationality||'ไทย')==='ไทย'?`<span style="color:var(--text3);font-size:12px;padding:4px 8px;display:inline-block;">—</span>`:inp(emp.id,'permit_expiry',emp.permit_expiry,'date','font-family:var(--font);')}</td>
+        <td style="padding:4px;">${(emp.nationality||'ไทย')==='ไทย'?`<span style="color:var(--text3);font-size:12px;padding:4px 8px;display:inline-block;">—</span>`:inp(emp.id,'visa_expiry',emp.visa_expiry,'date','font-family:var(--font);')}</td>
+        <td style="padding:4px;">${(emp.nationality||'ไทย')==='ไทย'?`<span style="color:var(--text3);font-size:12px;padding:4px 8px;display:inline-block;">—</span>`:inp(emp.id,'passport_expiry',emp.passport_expiry,'date','font-family:var(--font);')}</td>
         ${hr?'':`<td style="padding:4px;">${sel(emp.id,'payment_type',emp.payment_type||'เงินสดW',['เงินสดW','โอนจ่ายW','โอนจ่ายM','รายเดือน'])}</td>`}
         ${hr?'':`<td style="padding:4px;"><input type="number" value="${emp.daily_rate||0}" onchange="_allEmpField('${emp.id}','daily_rate',+this.value)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--mono);width:80px;text-align:right;"></td>`}
         ${hr?'':`<td style="padding:4px;">${inp(emp.id,'start_date',emp.start_date,'date','font-family:var(--font);')}</td>`}
@@ -3859,7 +3875,7 @@ function openAllEmployees(){
       <table style="width:100%;border-collapse:collapse;">
         <thead style="position:sticky;top:0;z-index:1;">
           <tr style="border-bottom:2px solid var(--border);background:var(--bg3);">
-            ${th('สาย')}${th('ชื่อ')}${th('ตำแหน่ง','min-width:110px;')}${th('สัญชาติ','min-width:80px;')}${th('เบอร์โทร','min-width:110px;')}${th('วันหมดอายุบัตร','min-width:120px;')}
+            ${th('สาย')}${th('ชื่อ')}${th('ตำแหน่ง','min-width:110px;')}${th('สัญชาติ','min-width:80px;')}${th('เบอร์โทร','min-width:110px;')}${th('วันหมดอายุบัตร','min-width:120px;')}${th('อายุวีซ่า','min-width:120px;')}${th('อายุพาสปอร์ต','min-width:120px;')}
             ${hr?'':`${th('การจ่าย','min-width:100px;')}${th('ค่าแรง/วัน','text-align:right;')}${th('วันเริ่มงาน','min-width:110px;')}`}
             <th></th>
           </tr>
@@ -3999,6 +4015,12 @@ function openEditEmployee(empId){
           <input id="ae-tel" type="tel" value="${emp.tel||''}" placeholder="08x-xxx-xxxx" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--mono);"></div>
         <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">วันหมดอายุบัตร</div>
           <input id="ae-permit-expiry" type="date" value="${emp.permit_expiry||''}" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">อายุวีซ่า</div>
+            <input id="ae-visa-expiry" type="date" value="${emp.visa_expiry||''}" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
+          <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">อายุพาสปอร์ต</div>
+            <input id="ae-passport-expiry" type="date" value="${emp.passport_expiry||''}" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
+        </div>
         <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">หมายเหตุ</div>
           <input id="ae-notes" value="${emp.notes||''}" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
       </div>`,
