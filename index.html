@@ -3756,43 +3756,64 @@ function openAllEmployees(){
       </td>
     </tr>`;
   };
+  // เรียงสายตาม sort_order (กลุ่มก่อน → standalone)
   const groupedIds=new Set(Object.values(S.groupMembers).flat());
   const sortedGroups=[...S.groups].sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
   const allRoutesSorted=[...S.shops].sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
-  const sectionHdr=(label,color)=>
-    `<tr><td colspan="99" style="padding:6px 10px;background:var(--bg3);font-size:12px;font-weight:700;color:${color||'var(--text2)'};border-bottom:1px solid var(--border);">${label}</td></tr>`;
-  const routeHdr=(rt)=>
-    `<tr><td colspan="99" style="padding:4px 10px 4px 20px;background:${rt.color}18;font-size:11px;font-weight:600;color:var(--text3);border-bottom:1px solid var(--border);">
-      <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${rt.color};margin-right:5px;"></span>${rt.name}
-    </td></tr>`;
-  let rows='';
-  let rowIdx=0;
-  // กลุ่ม
+  const orderedRoutes=[];
   sortedGroups.forEach(grp=>{
     const members=(S.groupMembers[grp.id]||[]).map(id=>S.shops.find(s=>s.id===id)).filter(Boolean).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
-    const grpEmps=members.flatMap(rt=>active.filter(e=>e.route_id===rt.id));
-    if(grpEmps.length===0)return;
-    rows+=sectionHdr(`${grp.is_owner?'⭐':'📁'} ${grp.name}`,'var(--text)');
-    members.forEach(rt=>{
-      const emps=active.filter(e=>e.route_id===rt.id);
-      if(!emps.length)return;
-      rows+=routeHdr(rt);
-      emps.forEach(e=>{rows+=empRow(e,rowIdx++);});
-    });
+    members.forEach(rt=>orderedRoutes.push(rt));
   });
-  // สายไม่มีกลุ่ม
-  const standaloneRts=allRoutesSorted.filter(r=>!groupedIds.has(r.id));
-  standaloneRts.forEach(rt=>{
+  allRoutesSorted.filter(r=>!groupedIds.has(r.id)).forEach(rt=>orderedRoutes.push(rt));
+
+  let rows='';
+  let rowIdx=0;
+  orderedRoutes.forEach(rt=>{
     const emps=active.filter(e=>e.route_id===rt.id);
     if(!emps.length)return;
-    rows+=routeHdr(rt);
-    emps.forEach(e=>{rows+=empRow(e,rowIdx++);});
+    emps.forEach((emp,ei)=>{
+      const bg=rowIdx%2===0?'background:var(--bg2);':'background:var(--bg3);';
+      rows+=`<tr style="border-bottom:1px solid var(--border);${bg}">`;
+      if(ei===0){
+        rows+=`<td rowspan="${emps.length}" style="padding:6px 10px;font-size:12px;font-weight:700;text-align:center;vertical-align:middle;background:${rt.color}22;border-right:3px solid ${rt.color};white-space:nowrap;border-bottom:2px solid var(--border);">${rt.name}</td>`;
+      }
+      rows+=`<td style="padding:6px 8px;font-size:13px;font-weight:500;white-space:nowrap;">${emp.name}</td>
+        <td style="padding:4px;">${sel(emp.id,'position',emp.position,[{v:'',l:'--'},'คนขับรถ','เด็กติดรถ','ออฟฟิศทั่วไป','ผู้จัดการ','ผู้จัดการใหญ่'])}</td>
+        <td style="padding:4px;">${sel(emp.id,'nationality',emp.nationality||'ไทย',['ไทย','เมียนมา','กัมพูชา','ลาว'])}</td>
+        <td style="padding:4px;">${inp(emp.id,'tel',emp.tel,'tel')}</td>
+        <td style="padding:4px;">${inp(emp.id,'permit_expiry',emp.permit_expiry,'date','font-family:var(--font);')}</td>
+        ${hr?'':`<td style="padding:4px;">${sel(emp.id,'payment_type',emp.payment_type||'เงินสดW',['เงินสดW','โอนจ่ายW','โอนจ่ายM','รายเดือน'])}</td>`}
+        ${hr?'':`<td style="padding:4px;"><input type="number" value="${emp.daily_rate||0}" onchange="_allEmpField('${emp.id}','daily_rate',+this.value)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--mono);width:80px;text-align:right;"></td>`}
+        ${hr?'':`<td style="padding:4px;">${inp(emp.id,'start_date',emp.start_date,'date','font-family:var(--font);')}</td>`}
+        <td style="padding:6px 8px;text-align:center;">
+          <button onclick="openEmpDetail('${emp.id}')" style="background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;">👤</button>
+        </td>
+      </tr>`;
+      rowIdx++;
+    });
   });
   // ยังไม่มีสาย
   const noRoute=active.filter(e=>!e.route_id);
   if(noRoute.length){
-    rows+=sectionHdr('— ยังไม่มีสาย —','var(--text3)');
-    noRoute.forEach(e=>{rows+=empRow(e,rowIdx++);});
+    rows+=`<tr><td colspan="99" style="padding:5px 10px;background:var(--bg3);font-size:11px;color:var(--text3);border-bottom:1px solid var(--border);">— ยังไม่มีสาย —</td></tr>`;
+    noRoute.forEach(emp=>{
+      const bg=rowIdx%2===0?'background:var(--bg2);':'background:var(--bg3);';
+      rows+=`<tr style="border-bottom:1px solid var(--border);${bg}">
+        <td style="padding:6px 8px;font-size:13px;font-weight:500;white-space:nowrap;color:var(--text3);">— ${emp.name}</td>
+        <td style="padding:4px;">${sel(emp.id,'position',emp.position,[{v:'',l:'--'},'คนขับรถ','เด็กติดรถ','ออฟฟิศทั่วไป','ผู้จัดการ','ผู้จัดการใหญ่'])}</td>
+        <td style="padding:4px;">${sel(emp.id,'nationality',emp.nationality||'ไทย',['ไทย','เมียนมา','กัมพูชา','ลาว'])}</td>
+        <td style="padding:4px;">${inp(emp.id,'tel',emp.tel,'tel')}</td>
+        <td style="padding:4px;">${inp(emp.id,'permit_expiry',emp.permit_expiry,'date','font-family:var(--font);')}</td>
+        ${hr?'':`<td style="padding:4px;">${sel(emp.id,'payment_type',emp.payment_type||'เงินสดW',['เงินสดW','โอนจ่ายW','โอนจ่ายM','รายเดือน'])}</td>`}
+        ${hr?'':`<td style="padding:4px;"><input type="number" value="${emp.daily_rate||0}" onchange="_allEmpField('${emp.id}','daily_rate',+this.value)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--mono);width:80px;text-align:right;"></td>`}
+        ${hr?'':`<td style="padding:4px;">${inp(emp.id,'start_date',emp.start_date,'date','font-family:var(--font);')}</td>`}
+        <td style="padding:6px 8px;text-align:center;">
+          <button onclick="openEmpDetail('${emp.id}')" style="background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;">👤</button>
+        </td>
+      </tr>`;
+      rowIdx++;
+    });
   }
   const th=(t,extra='')=>`<th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;white-space:nowrap;${extra}">${t}</th>`;
   OM('📋 ประวัติพนักงานทั้งหมด',
@@ -3800,7 +3821,7 @@ function openAllEmployees(){
       <table style="width:100%;border-collapse:collapse;">
         <thead style="position:sticky;top:0;z-index:1;">
           <tr style="border-bottom:2px solid var(--border);background:var(--bg3);">
-            ${th('ชื่อ')}${th('ตำแหน่ง','min-width:110px;')}${th('สัญชาติ','min-width:80px;')}${th('เบอร์โทร','min-width:110px;')}${th('วันหมดอายุบัตร','min-width:120px;')}
+            ${th('สาย')}${th('ชื่อ')}${th('ตำแหน่ง','min-width:110px;')}${th('สัญชาติ','min-width:80px;')}${th('เบอร์โทร','min-width:110px;')}${th('วันหมดอายุบัตร','min-width:120px;')}
             ${hr?'':`${th('การจ่าย','min-width:100px;')}${th('ค่าแรง/วัน','text-align:right;')}${th('วันเริ่มงาน','min-width:110px;')}`}
             <th></th>
           </tr>
