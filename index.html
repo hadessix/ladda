@@ -2608,9 +2608,32 @@ function openPeriod(periodId){
     const deds=PR.deductions.filter(d=>d.entry_id===e.id);
     return s+(emp.daily_rate||0)*(e.days_worked||0)+(e.bonus||0)-deds.reduce((a,d)=>a+d.amount,0)-(e.advance||0);
   },0);
+  // คำนวณยอดแบบเดียวกับ sharePeriod ชุดที่ 3 (น้องลัดดา)
+  const _f1Id=S.shops.find(s=>s.name==='F1')?.id;
+  const _burGrp=S.groups.find(g=>g.name.includes('บูรชัย'));
+  const _burIds=new Set(_burGrp?S.groupMembers[_burGrp.id]||[]:[]);
+  const _ownerName=(S.groups.find(g=>g.is_owner)?.name)||'เฮียรวย';
+  let _tot1Main=0,_tot1F1=0,_tot2=0;
+  ents.forEach(e=>{
+    const emp=PR.employees.find(x=>x.id===e.employee_id);if(!emp)return;
+    const deds=PR.deductions.filter(d=>d.entry_id===e.id);
+    const net=(emp.daily_rate||0)*(e.days_worked||0)+(e.bonus||0)-deds.reduce((a,d)=>a+d.amount,0)-(e.advance||0);
+    const pt=emp.payment_type||'เงินสดW';
+    const inBur=_burIds.has(emp.route_id);
+    if(emp.route_id===_f1Id&&pt==='เงินสดW')_tot1F1+=net;
+    else if(inBur&&(pt==='เงินสดW'||pt==='โอนจ่ายM'))_tot2+=net;
+    else if(pt==='เงินสดW')_tot1Main+=net;
+  });
   OM(`งวด ${slotLbl} ${mLbl}`,
-    `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
-      <div style="font-size:13px;color:var(--text2);">${ents.length} คน · <span style="font-family:var(--mono);color:var(--green);font-size:16px;font-weight:600;">${fmt(grandTotal)}</span></div>
+    `<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
+        <span style="font-size:13px;color:var(--text2);">${ents.length} คน</span>
+        <span style="font-family:var(--mono);color:var(--green);font-size:16px;font-weight:600;">${fmt(grandTotal)}</span>
+        <span style="font-size:11px;color:var(--text3);">|</span>
+        <span style="font-size:12px;color:var(--text2);">${_ownerName} <span style="font-family:var(--mono);color:var(--green);font-weight:600;">${fmt(_tot1Main)}</span></span>
+        ${_f1Id?`<span style="font-size:12px;color:var(--text2);">F1 <span style="font-family:var(--mono);color:var(--green);font-weight:600;">${fmt(_tot1F1)}</span></span>`:''}
+        ${_burGrp?`<span style="font-size:12px;color:var(--text2);">${_burGrp.name} <span style="font-family:var(--mono);color:var(--green);font-weight:600;">${fmt(_tot2)}</span></span>`:''}
+      </div>
       ${isPaid?`<span style="font-size:12px;color:var(--green);background:var(--gdim);border:1px solid var(--gbr);padding:3px 10px;border-radius:4px;">✅ จ่ายแล้ว</span>`:`<span style="font-size:12px;color:var(--amber);background:var(--adim);border:1px solid var(--abr);padding:3px 10px;border-radius:4px;">⏳ รอจ่าย</span>`}
     </div>
     <div style="overflow-x:auto;">${blocks}</div>`,
