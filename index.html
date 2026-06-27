@@ -2432,17 +2432,33 @@ function renderPrPeriods(){
         if(k!=='C'){const emp=PR.employees.find(x=>x.id===e.employee_id);if(emp&&_monthlyTypes.includes(emp.payment_type))return false;}
         return true;
       });
-      const total=ents.reduce((s,e)=>{
+      const _f1Id=S.shops.find(s=>s.name==='F1')?.id;
+      const _burGrp=S.groups.find(g=>g.name.includes('บูรชัย'));
+      const _burIds=new Set(_burGrp?S.groupMembers[_burGrp.id]||[]:[]);
+      const _ownerName=(S.groups.find(g=>g.is_owner)?.name)||'เฮียรวย';
+      let total=0,cMain=0,cF1=0,cBur=0;
+      ents.forEach(e=>{
         const emp=PR.employees.find(x=>x.id===e.employee_id);
         const deds=PR.deductions.filter(d=>d.entry_id===e.id);
         const net=(emp?.daily_rate||0)*(e.days_worked||0)+(e.bonus||0)-deds.reduce((a,d)=>a+d.amount,0)-(e.advance||0);
-        return s+net;
-      },0);
+        total+=net;
+        if(!emp)return;
+        const pt=emp.payment_type||'เงินสดW';
+        const inBur=_burIds.has(emp.route_id);
+        if(emp.route_id===_f1Id&&pt==='เงินสดW')cF1+=net;
+        else if(inBur&&(pt==='เงินสดW'||pt==='โอนจ่ายM'))cBur+=net;
+        else if(pt==='เงินสดW')cMain+=net;
+      });
       const isPaid=period.status==='paid';
       html+=`<div class="pr-period-card ${isPaid?'paid':'draft'}" onclick="openPeriod('${period.id}')">
         <div class="pr-period-title">${lbl}</div>
         <div class="pr-period-sub">${prMonthLbl(m)}</div>
         <div style="margin:8px 0;font-family:var(--mono);font-size:16px;color:${isPaid?'var(--green)':'var(--amber)'};">${fmt(total)}</div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:6px;line-height:1.8;">
+          <span>${_ownerName} <span style="font-family:var(--mono);color:var(--green);">${fmt(cMain)}</span></span>
+          ${_f1Id?`<span style="margin-left:8px;">F1 <span style="font-family:var(--mono);color:var(--green);">${fmt(cF1)}</span></span>`:''}
+          ${_burGrp?`<span style="margin-left:8px;">${_burGrp.name} <span style="font-family:var(--mono);color:var(--green);">${fmt(cBur)}</span></span>`:''}
+        </div>
         <div style="display:flex;align-items:center;gap:6px;">
           <span style="font-size:11px;color:var(--text3);">${ents.length} คน · ${isPaid?'✅ จ่ายแล้ว':'⏳ รอจ่าย'}</span>
           <button onclick="event.stopPropagation();sharePeriod('${period.id}')" style="margin-left:auto;background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:11px;">📤</button>
