@@ -2362,7 +2362,7 @@ async function loadPayroll(){
       ]);
       // merge salary ลงใน employee objects
       const salMap={};salaries.forEach(s=>salMap[s.employee_id]=s);
-      emps.forEach(e=>{const s=salMap[e.id]||{};e.daily_rate=s.daily_rate??e.daily_rate;e.payment_type=s.payment_type??e.payment_type;e.phone_fee=s.phone_fee??e.phone_fee;e.room_fee=s.room_fee??e.room_fee;});
+      emps.forEach(e=>{const s=salMap[e.id]||{};e.daily_rate=s.daily_rate??e.daily_rate;e.payment_type=s.payment_type??e.payment_type;e.phone_fee=s.phone_fee??e.phone_fee;e.room_fee=s.room_fee??e.room_fee;e.department=s.department??e.department;e.position=s.position??e.position;});
       PR.employees=emps;PR.loans=loans;PR.periods=periods;PR.entries=entries;PR.deductions=deds;PR._loaded=true;
     }
   }catch(e){toast('โหลดข้อมูลไม่สำเร็จ: '+e.message);}
@@ -3712,9 +3712,10 @@ async function _allEmpField(empId,field,val){
   const salaryFields=['daily_rate','phone_fee','room_fee','department','position','payment_type'];
   try{
     if(salaryFields.includes(field)){
-      await sbUpsert('employees_salary',[{employee_id:empId,daily_rate:emp.daily_rate||360,phone_fee:emp.phone_fee||0,room_fee:emp.room_fee||0,department:emp.department||null,position:emp.position||null,payment_type:emp.payment_type||'เงินสดW'}]);
+      await sbUpsert('employees_salary',[{employee_id:empId,daily_rate:emp.daily_rate??360,phone_fee:emp.phone_fee??0,room_fee:emp.room_fee??0,department:emp.department||null,position:emp.position||null,payment_type:emp.payment_type||'เงินสดW'}]);
     } else {
-      await sbUpsert('employees',[emp]);
+      const{daily_rate,phone_fee,room_fee,department,position,payment_type,...empData}=emp;
+      await sbUpsert('employees',[empData]);
     }
     toast('บันทึกแล้ว ✓');
   }catch(e){toast('บันทึกไม่สำเร็จ');}
