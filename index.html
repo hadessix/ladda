@@ -2562,7 +2562,12 @@ function openPeriod(periodId){
       const net=base+(e.bonus||0)-totalDed-(e.advance||0);
       const hr=_prSettings.hideRates;
       rows+=`<tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:7px 4px;text-align:center;">${isPaid?'':` <button onclick="openPrEntryDetail('${e.id}','${periodId}')" style="background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:2px 7px;cursor:pointer;font-size:12px;">⚙</button>`}</td>
+        <td style="padding:7px 8px;">
+          <div style="font-size:14px;font-weight:500;">${emp.name}</div>
+          ${hr?'':` <div style="font-size:11px;color:var(--text3);font-family:var(--mono);">${fmt(emp.daily_rate||0)}/วัน</div>`}
+          ${e.bonus>0?`<div style="font-size:11px;color:var(--green);">+โบนัส ${fmt(e.bonus)}</div>`:''}
+          ${e.advance>0?`<div style="font-size:11px;color:var(--amber);">เบิก ${fmt(e.advance)}</div>`:''}
+        </td>
         <td style="padding:7px 8px;text-align:center;white-space:nowrap;">
           ${isPaid?`<span style="font-family:var(--mono);font-size:15px;">${e.days_worked}</span>`:`<input type="number" min="0" max="31" value="${e.days_worked||0}" style="width:48px;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:3px 4px;font-size:14px;font-family:var(--mono);text-align:center;" onchange="prUpdateEntry('${e.id}','days_worked',this.value)">`}
         </td>
@@ -2571,12 +2576,7 @@ function openPeriod(periodId){
         <td style="padding:7px 4px;text-align:right;font-family:var(--mono);font-size:13px;color:var(--text2);white-space:nowrap;">${permitDed>0?fmt(permitDed):'-'}</td>
         <td style="padding:7px 4px;text-align:right;font-family:var(--mono);font-size:13px;color:var(--text2);white-space:nowrap;" title="${deds.filter(d=>d.type!=='room'&&d.type!=='permit').map(d=>d.label+' '+fmt(d.amount)).join(', ')}">${otherDed>0?fmt(otherDed):'-'}</td>
         <td id="pr-net-${e.id}" style="padding:7px 6px;text-align:right;font-family:var(--mono);font-size:14px;font-weight:600;color:${net<0?'var(--red)':'var(--text)'};white-space:nowrap;">${fmt(net)}</td>
-        <td style="padding:7px 8px;">
-          <div style="font-size:14px;font-weight:500;">${emp.name}</div>
-          ${hr?'':` <div style="font-size:11px;color:var(--text3);font-family:var(--mono);">${fmt(emp.daily_rate||0)}/วัน</div>`}
-          ${e.bonus>0?`<div style="font-size:11px;color:var(--green);">+โบนัส ${fmt(e.bonus)}</div>`:''}
-          ${e.advance>0?`<div style="font-size:11px;color:var(--amber);">เบิก ${fmt(e.advance)}</div>`:''}
-        </td>
+        <td style="padding:7px 4px;text-align:center;">${isPaid?'':` <button onclick="openPrEntryDetail('${e.id}','${periodId}')" style="background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:2px 7px;cursor:pointer;font-size:12px;">⚙</button>`}</td>
       </tr>`;
     });
     blocks+=`<div style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden;display:flex;align-items:stretch;">
@@ -2587,26 +2587,26 @@ function openPeriod(periodId){
         <div style="font-size:11px;font-family:var(--mono);color:var(--green);margin-top:2px;">${fmt(rtTotal)}</div>
       </div>
       <div style="flex:1;overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;">
+        <table style="width:auto;border-collapse:collapse;">
           <colgroup>
-            <col style="width:42px;">
+            <col style="min-width:100px;">
             <col style="width:64px;">
             ${_prSettings.hideRates?'':'<col style="width:76px;">'}
             <col style="width:66px;">
             <col style="width:66px;">
             <col style="width:70px;">
             <col style="width:84px;">
-            <col>
+            <col style="width:42px;">
           </colgroup>
           <thead><tr style="background:var(--bg2);border-bottom:1px solid var(--border);">
-            <th style="padding:6px 4px;"></th>
+            <th style="padding:6px 8px;text-align:left;font-size:12px;color:var(--text3);font-weight:500;">ชื่อ</th>
             <th style="padding:6px 4px;text-align:center;font-size:12px;color:var(--text3);font-weight:500;">วัน</th>
             ${_prSettings.hideRates?'':` <th style="padding:6px 4px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">ค่าแรง</th>`}
             <th style="padding:6px 4px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">ห้อง</th>
             <th style="padding:6px 4px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">บัตร</th>
             <th style="padding:6px 4px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">อื่นๆ</th>
             <th style="padding:6px 6px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">สุทธิ</th>
-            <th style="padding:6px 8px;text-align:left;font-size:12px;color:var(--text3);font-weight:500;">ชื่อ</th>
+            <th style="padding:6px 4px;"></th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
