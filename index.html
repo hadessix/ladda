@@ -1108,7 +1108,11 @@ async function delE(ev,id){ev.stopPropagation();if(!confirm('ลบรายก�
 // ─── MODAL helpers ───
 function OM(title,body,foot){document.getElementById('mtitle').textContent=title;document.getElementById('mbody').innerHTML=body;document.getElementById('mfoot').innerHTML=foot;document.getElementById('overlay').style.display='flex';}
 function CM(){document.getElementById('overlay').style.display='none';}
-function CMask(){if(confirm('ต้องการยกเลิกใช่ไหม?\nข้อมูลที่กรอกไว้จะหายไป')){CM();window._returnToGroup=null;}}
+function CMask(){
+  const inPayroll=document.getElementById('payroll-screen')?.style.display!=='none';
+  if(inPayroll){CM();return;}
+  if(confirm('ต้องการยกเลิกใช่ไหม?\nข้อมูลที่กรอกไว้จะหายไป')){CM();window._returnToGroup=null;}
+}
 
 
 // bill input grid helpers
