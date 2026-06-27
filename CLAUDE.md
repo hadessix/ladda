@@ -358,7 +358,8 @@ employees (
   permit_photos jsonb,   -- array of up to 4 URLs (work permit, non-Thai only)
   license_photo text,    -- driver's license URL
   notes        text,
-  start_date   date      -- วันที่เริ่มงาน
+  start_date   date,     -- วันที่เริ่มงาน
+  permit_expiry date     -- วันหมดอายุบัตรใบอนุญาตทำงาน
 )
 
 employees_salary (
@@ -423,10 +424,11 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 | `renderPayroll()` | inject HTML เข้า `#pr-body` (ต้องเรียก ไม่ใช่ `renderPrEmployees()`) |
 | `setPrTab(tab)` | เปลี่ยน tab periods/employees |
 | `generatePeriod(beYM,slot)` | สร้างงวด + entries + deductions; guard `PR._loaded`; ถ้ามี stale period (ไม่มี entries) จะลบแล้วสร้างใหม่ |
-| `openPeriod(periodId)` | modal สลิปทุกคน จัดกลุ่มเป็น card ตามสาย; แยก col หัก: ห้องพัก / ค่าบัตร / อื่นๆ; แสดง daily_rate/วัน |
-| `prUpdateEntry(id,field,val)` | แก้ days/bonus/advance แล้ว save |
+| `openPeriod(periodId)` | modal สลิปทุกคน; ชื่อสายอยู่ด้านซ้าย (sidebar style); เรียงลำดับตาม group order เหมือนหน้าพนักงาน; แยก col หัก: ห้องพัก / ค่าบัตร / อื่นๆ |
+| `prUpdateEntry(id,field,val)` | แก้ days/bonus/advance แล้ว save; อัปเดต cell สุทธิใน DOM ทันที (id="pr-net-${entryId}") |
 | `openPrEntryDetail(id,periodId)` | modal แก้ละเอียดต่อคน |
-| `openAddDed(entryId,periodId)` | เพิ่มรายการหัก (จาก loan หรือ manual) |
+| `openAddDed(entryId,periodId)` | เพิ่มรายการหัก; manual deduction มีช่อง "ยอดรวม" + "หักวีคละ"; ถ้าหักวีคละ < ยอดรวม → สร้าง employee_loans อัตโนมัติ (งวดถัดไปหักต่อเองจนครบ) |
+| `saveAddDed(entryId,periodId)` | บันทึก manual deduction; ถ้ามี per_period → สร้าง loan type='other' ก่อน แล้วผูก deduction กับ loan นั้น |
 | `markPeriodPaid(periodId)` | จ่ายแล้ว + update loans |
 | `renderPrEmployees()` | **returns HTML string** — tab พนักงาน; drag-to-reassign chips; grouped by route/dept; กรองตาม `_prSettings`; salary chip ซ่อนถ้า isHR() |
 | `quickAssignRoute(empId,routeId)` | กำหนด route_id ให้พนักงาน (inline, ไม่ต้องเปิด modal) |
@@ -478,7 +480,8 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 | `permit_photos` | employees | jsonb | array URL ใบอนุญาตทำงาน (max 4, non-Thai only) |
 | `license_photo` | employees | text | Cloudinary URL ใบขับขี่ |
 | `notes` | employees | text | หมายเหตุ |
-| `start_date` | employees | date | วันที่เริ่มงาน |
+| `start_date` | employees | date | วันที่เริ่มงาน (HR กรอกได้ตอนเพิ่มใหม่เท่านั้น ดูในโปรไฟล์ไม่ได้) |
+| `permit_expiry` | employees | date | วันหมดอายุบัตร (ทั้ง admin และ HR กรอก/ดูได้) |
 | `daily_rate` | employees_salary | numeric | ค่าแรงต่อวัน (default 360) |
 | `phone_fee` | employees_salary | numeric | ค่าโทรต่องวด |
 | `room_fee` | employees_salary | numeric | ค่าห้องต่องวด |
@@ -531,6 +534,10 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - [x] Payroll year/month grid picker (เฉพาะปี/เดือนที่ผ่านมาและมีข้อมูล)
 - [x] HR role — employees_salary isolation, Worker 403, UI strip salary/loan/period
 - [x] ประวัติพนักงาน bulk-edit modal
+- [x] permit_expiry field (วันหมดอายุบัตร) — ทั้ง admin และ HR กรอก/ดูได้
+- [x] openPeriod route sidebar layout + เรียงตาม group order
+- [x] manual deduction with per_period — auto-creates loan หักต่อเนื่องงวดถัดไป
+- [x] prUpdateEntry อัปเดต net pay ใน DOM ทันที (ไม่ต้อง F5)
 
 ### 🔲 งานที่ admin ต้องทำเองในแอป (ไม่ใช่งานโค้ด)
 - [ ] กำหนดสาย + ตำแหน่ง + payment_type ให้พนักงานทุกคน
