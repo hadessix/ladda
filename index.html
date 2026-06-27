@@ -2571,12 +2571,12 @@ function openPeriod(periodId){
         <td style="padding:7px 8px;text-align:center;white-space:nowrap;">
           ${isPaid?`<span style="font-family:var(--mono);font-size:15px;">${e.days_worked}</span>`:`<input type="number" min="0" max="31" value="${e.days_worked||0}" style="width:48px;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:3px 4px;font-size:14px;font-family:var(--mono);text-align:center;" onchange="prUpdateEntry('${e.id}','days_worked',this.value)">`}
         </td>
-        ${hr?'':`<td style="padding:7px 8px;text-align:right;font-family:var(--mono);font-size:14px;color:var(--green);white-space:nowrap;">${fmt(base)}</td>`}
-        <td style="padding:7px 8px;text-align:right;font-family:var(--mono);font-size:13px;color:var(--text2);white-space:nowrap;">${roomDed>0?fmt(roomDed):'-'}</td>
-        <td style="padding:7px 8px;text-align:right;font-family:var(--mono);font-size:13px;color:var(--text2);white-space:nowrap;">${permitDed>0?fmt(permitDed):'-'}</td>
-        <td style="padding:7px 8px;text-align:right;font-size:12px;color:var(--text2);">${otherDed>0?`<div style="font-family:var(--mono);">${fmt(otherDed)}</div>${otherTags}`:'-'}</td>
-        <td id="pr-net-${e.id}" style="padding:7px 10px;text-align:right;font-family:var(--mono);font-size:15px;font-weight:600;color:${net<0?'var(--red)':'var(--text)'};white-space:nowrap;">${fmt(net)}</td>
-        <td style="padding:7px 8px;text-align:center;">${isPaid?'':` <button onclick="openPrEntryDetail('${e.id}','${periodId}')" style="background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:3px 10px;cursor:pointer;font-size:12px;">⚙</button>`}</td>
+        ${hr?'':`<td style="padding:7px 4px;text-align:right;font-family:var(--mono);font-size:13px;color:var(--green);white-space:nowrap;">${fmt(base)}</td>`}
+        <td style="padding:7px 4px;text-align:right;font-family:var(--mono);font-size:13px;color:var(--text2);white-space:nowrap;">${roomDed>0?fmt(roomDed):'-'}</td>
+        <td style="padding:7px 4px;text-align:right;font-family:var(--mono);font-size:13px;color:var(--text2);white-space:nowrap;">${permitDed>0?fmt(permitDed):'-'}</td>
+        <td style="padding:7px 4px;text-align:right;font-family:var(--mono);font-size:13px;color:var(--text2);white-space:nowrap;" title="${deds.filter(d=>d.type!=='room'&&d.type!=='permit').map(d=>d.label+' '+fmt(d.amount)).join(', ')}">${otherDed>0?fmt(otherDed):'-'}</td>
+        <td id="pr-net-${e.id}" style="padding:7px 6px;text-align:right;font-family:var(--mono);font-size:14px;font-weight:600;color:${net<0?'var(--red)':'var(--text)'};white-space:nowrap;">${fmt(net)}</td>
+        <td style="padding:7px 4px;text-align:center;">${isPaid?'':` <button onclick="openPrEntryDetail('${e.id}','${periodId}')" style="background:var(--bg3);border:1px solid var(--border);color:var(--text2);border-radius:4px;padding:2px 7px;cursor:pointer;font-size:12px;">⚙</button>`}</td>
       </tr>`;
     });
     blocks+=`<div style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden;display:flex;align-items:stretch;">
@@ -2587,16 +2587,26 @@ function openPeriod(periodId){
         <div style="font-size:11px;font-family:var(--mono);color:var(--green);margin-top:2px;">${fmt(rtTotal)}</div>
       </div>
       <div style="flex:1;overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;">
+        <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+          <colgroup>
+            <col style="min-width:90px;">
+            <col style="width:64px;">
+            ${_prSettings.hideRates?'':'<col style="width:76px;">'}
+            <col style="width:66px;">
+            <col style="width:66px;">
+            <col style="width:66px;">
+            <col style="width:80px;">
+            <col style="width:42px;">
+          </colgroup>
           <thead><tr style="background:var(--bg2);border-bottom:1px solid var(--border);">
-            <th style="padding:6px 8px;text-align:left;font-size:12px;color:var(--text3);font-weight:500;min-width:80px;">ชื่อ</th>
-            <th style="padding:6px 8px;text-align:center;font-size:12px;color:var(--text3);font-weight:500;">วัน</th>
-            ${_prSettings.hideRates?'':` <th style="padding:6px 8px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">ค่าแรง</th>`}
-            <th style="padding:6px 8px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">ห้องพัก</th>
-            <th style="padding:6px 8px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">ค่าบัตร</th>
-            <th style="padding:6px 8px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">อื่นๆ</th>
-            <th style="padding:6px 10px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">สุทธิ</th>
-            <th style="padding:6px 8px;"></th>
+            <th style="padding:6px 8px;text-align:left;font-size:12px;color:var(--text3);font-weight:500;">ชื่อ</th>
+            <th style="padding:6px 4px;text-align:center;font-size:12px;color:var(--text3);font-weight:500;">วัน</th>
+            ${_prSettings.hideRates?'':` <th style="padding:6px 4px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">ค่าแรง</th>`}
+            <th style="padding:6px 4px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">ห้อง</th>
+            <th style="padding:6px 4px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">บัตร</th>
+            <th style="padding:6px 4px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">อื่นๆ</th>
+            <th style="padding:6px 6px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">สุทธิ</th>
+            <th style="padding:6px 4px;"></th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
