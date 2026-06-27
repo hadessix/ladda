@@ -3150,7 +3150,7 @@ function renderPrEmployees(){
     <div style="font-size:16px;font-weight:600;">พนักงาน (${active.length} คน)${unassigned>0?` <span style="font-size:12px;color:var(--amber);background:var(--adim);border:1px solid var(--abr);padding:1px 7px;border-radius:10px;">${unassigned} ยังไม่มีสาย</span>`:''}</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       ${!isHR()?`<button class="btn ${_prAssignMode?'btn-a':'btn-b'}" onclick="_prAssignMode=!_prAssignMode;renderPayroll();">${_prAssignMode?'✅ เสร็จแล้ว':'⚡ กำหนดสาย'}</button>`:''}
-      ${!isHR()?`<button class="btn btn-b" onclick="openAllEmployees()">📋 ประวัติพนักงาน</button>`:''}
+      <button class="btn btn-b" onclick="openAllEmployees()">📋 ประวัติพนักงาน</button>
       <button class="btn btn-b" onclick="openAllVehicles()">🚐 ประวัติรถ</button>
       <button class="btn btn-b" onclick="openAddEmployee()">+ เพิ่มพนักงาน</button>
     </div>
@@ -3730,42 +3730,41 @@ function openEmpDetail(empId){
 }
 
 function openAllEmployees(){
+  const hr=isHR();
   const sorted=[...PR.employees].filter(e=>e.status==='active').sort((a,b)=>{
     const ra=S.shops.find(s=>s.id===a.route_id);const rb=S.shops.find(s=>s.id===b.route_id);
     const na=ra?ra.name:'zzz';const nb=rb?rb.name:'zzz';
     return na.localeCompare(nb,'th')||a.name.localeCompare(b.name,'th');
   });
-  const routeOpts=`<option value="">-- ไม่มีสาย --</option>`+S.shops.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  const inp=(empId,field,val,type='text',extra='')=>
+    `<input type="${type}" value="${val||''}" onchange="_allEmpField('${empId}','${field}',this.value${type==='number'?'*1':''})"
+      style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--mono);width:100%;${extra}">`;
+  const sel=(empId,field,val,opts)=>
+    `<select onchange="_allEmpField('${empId}','${field}',this.value)"
+      style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--font);width:100%;">
+      ${opts.map(o=>`<option value="${o.v||o}" ${(val||'')===(o.v||o)?'selected':''}>${o.l||o}</option>`).join('')}
+    </select>`;
   const rows=sorted.map((emp,i)=>{
-    const statusDot=emp.status==='active'?'🟢':'🔴';
-    return`<tr style="border-bottom:1px solid var(--border);${i%2===0?'':'background:var(--bg3)'};">
-      <td style="padding:6px 8px;font-size:13px;font-weight:500;white-space:nowrap;">${statusDot} ${emp.name}</td>
-      <td style="padding:6px 4px;">
-        <select onchange="quickAssignRoute('${emp.id}',this.value)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--font);width:100%;">
-          ${`<option value="">-- ไม่มีสาย --</option>`+S.shops.map(s=>`<option value="${s.id}" ${s.id===emp.route_id?'selected':''}>${s.name}</option>`).join('')}
+    const bg=i%2===0?'':'background:var(--bg3);';
+    return`<tr style="border-bottom:1px solid var(--border);${bg}">
+      <td style="padding:6px 8px;font-size:13px;font-weight:500;white-space:nowrap;">🟢 ${emp.name}</td>
+      <td style="padding:4px;">
+        <select onchange="quickAssignRoute('${emp.id}',this.value)"
+          style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--font);width:100%;">
+          <option value="">-- ไม่มีสาย --</option>${S.shops.map(s=>`<option value="${s.id}" ${s.id===emp.route_id?'selected':''}>${s.name}</option>`).join('')}
         </select>
       </td>
-      <td style="padding:6px 4px;">
-        <select onchange="_allEmpField('${emp.id}','position',this.value)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--font);width:100%;">
-          <option value="">--</option>${['คนขับรถ','เด็กติดรถ','ออฟฟิศทั่วไป','ผู้จัดการ','ผู้จัดการใหญ่'].map(p=>`<option value="${p}" ${emp.position===p?'selected':''}>${p}</option>`).join('')}
-        </select>
+      <td style="padding:4px;">
+        ${sel(emp.id,'position',emp.position,[{v:'',l:'--'},'คนขับรถ','เด็กติดรถ','ออฟฟิศทั่วไป','ผู้จัดการ','ผู้จัดการใหญ่'])}
       </td>
-      <td style="padding:6px 4px;">
-        <select onchange="_allEmpField('${emp.id}','nationality',this.value)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--font);width:100%;">
-          ${['ไทย','เมียนมา','กัมพูชา','ลาว'].map(n=>`<option value="${n}" ${(emp.nationality||'ไทย')===n?'selected':''}>${n}</option>`).join('')}
-        </select>
+      <td style="padding:4px;">
+        ${sel(emp.id,'nationality',emp.nationality||'ไทย',['ไทย','เมียนมา','กัมพูชา','ลาว'])}
       </td>
-      <td style="padding:6px 4px;">
-        <select onchange="_allEmpField('${emp.id}','payment_type',this.value)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--font);width:100%;">
-          ${['เงินสดW','โอนจ่ายW','โอนจ่ายM','รายเดือน'].map(p=>`<option value="${p}" ${(emp.payment_type||'เงินสดW')===p?'selected':''}>${p}</option>`).join('')}
-        </select>
-      </td>
-      <td style="padding:6px 4px;text-align:right;">
-        <input type="number" value="${emp.daily_rate||0}" onchange="_allEmpField('${emp.id}','daily_rate',+this.value)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--mono);width:80px;text-align:right;">
-      </td>
-      <td style="padding:6px 4px;">
-        <input type="date" value="${emp.start_date||''}" onchange="_allEmpField('${emp.id}','start_date',this.value||null)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--font);width:130px;">
-      </td>
+      <td style="padding:4px;">${inp(emp.id,'tel',emp.tel,'tel','font-family:var(--mono);')}</td>
+      <td style="padding:4px;">${inp(emp.id,'permit_expiry',emp.permit_expiry,'date','font-family:var(--font);')}</td>
+      ${hr?'':`<td style="padding:4px;">${sel(emp.id,'payment_type',emp.payment_type||'เงินสดW',['เงินสดW','โอนจ่ายW','โอนจ่ายM','รายเดือน'])}</td>`}
+      ${hr?'':`<td style="padding:4px;"><input type="number" value="${emp.daily_rate||0}" onchange="_allEmpField('${emp.id}','daily_rate',+this.value)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--mono);width:80px;text-align:right;"></td>`}
+      ${hr?'':`<td style="padding:4px;">${inp(emp.id,'start_date',emp.start_date,'date','font-family:var(--font);')}</td>`}
       <td style="padding:6px 8px;text-align:center;">
         <button onclick="openEmpDetail('${emp.id}')" style="background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;">👤</button>
       </td>
@@ -3779,10 +3778,12 @@ function openAllEmployees(){
             <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;white-space:nowrap;">ชื่อ</th>
             <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:100px;">สาย</th>
             <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:110px;">ตำแหน่ง</th>
-            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:90px;">สัญชาติ</th>
-            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:100px;">การจ่าย</th>
-            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:right;white-space:nowrap;">ค่าแรง/วัน</th>
-            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;white-space:nowrap;">วันเริ่มงาน</th>
+            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:80px;">สัญชาติ</th>
+            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:110px;">เบอร์โทร</th>
+            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:120px;">วันหมดอายุบัตร</th>
+            ${hr?'':`<th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:100px;">การจ่าย</th>`}
+            ${hr?'':`<th style="padding:8px;font-size:12px;color:var(--text3);text-align:right;white-space:nowrap;">ค่าแรง/วัน</th>`}
+            ${hr?'':`<th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;white-space:nowrap;">วันเริ่มงาน</th>`}
             <th style="padding:8px;font-size:12px;color:var(--text3);text-align:center;"></th>
           </tr>
         </thead>
