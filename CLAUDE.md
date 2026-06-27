@@ -468,9 +468,15 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - **_prSettings** (localStorage `pr_settings`): `{ hideRates, hideManager, hideTopManager }` — hideManager/hideTopManager กรองพนักงานตาม `emp.position` ทั้งหน้าพนักงานและ openPeriod modal
 - **renderPayroll() vs renderPrEmployees()**: `renderPrEmployees()` คืน HTML string เท่านั้น; ต้องเรียก `renderPayroll()` เพื่อ inject เข้า DOM จริง
 - **HR loadPayroll**: โหลด employees + routes + groups + group_members เพื่อให้การเรียงสายตรงกับ admin view
-- **openPeriod table columns**: ใช้ `table-layout:fixed` + `<colgroup>` กำหนด width แต่ละคอลัมน์คงที่ — ป้องกัน column shift เมื่อมีรายการหักหลายชิ้น; ช่อง "อื่นๆ" แสดงยอดรวมตัวเลขเดียว + `title` tooltip รายละเอียด
-- **โอนจ่ายM/รายเดือน filter**: `_monthlyTypes=['โอนจ่ายM','รายเดือน']` — พนักงานกลุ่มนี้ไม่แสดงและไม่สร้าง entries ในงวด A (1-10) และ B (11-20); แสดงเฉพาะงวด C (21-31)
+- **openPeriod table columns**: ใช้ `width:auto` + `<colgroup>` กำหนด width คอลัมน์ตัวเลข; ชื่อพนักงานอยู่ซ้าย ตัวเลขชิดตาม; ช่อง "อื่นๆ" แสดงยอดรวมตัวเดียว + `title` tooltip รายละเอียด
+- **openPeriod sticky column header**: header แถวเดียว `position:sticky;top:0` อยู่เหนือ route cards ทั้งหมด; ไม่มี thead ซ้ำใน แต่ละการ์ด
+- **โอนจ่ายM/รายเดือน filter**: `_monthlyTypes=['โอนจ่ายM','รายเดือน']` — พนักงานกลุ่มนี้ไม่แสดงและไม่สร้าง entries ในงวด A (1-10) และ B (11-20); แสดงเฉพาะงวด C (21-31); การ์ดงวดก็กรองออกเช่นกัน
 - **openPeriod header split totals**: `id="pr-hdr-grand/main/f1/bur"` — ยอดรวม/เฮียรวย/F1/บูรชัย; อัปเดต real-time พร้อมกับ net pay ใน `prUpdateEntry()`
+- **Period card split totals**: การ์ดงวดแสดง เฮียรวย/F1/บูรชัย เหมือนกับหัวหน้างวด; คำนวณสดจาก daily_rate×วัน+โบนัส−หัก−เบิก (ไม่ใช้ net_pay จาก DB)
+- **_allEmpField**: บันทึก salary fields (daily_rate/phone_fee/room_fee/payment_type) ไปที่ `employees_salary`; ฟิลด์อื่น (nationality/start_date ฯลฯ) บันทึกไปที่ `employees` โดย strip salary fields ออกก่อน
+- **employees_salary actual columns**: `employee_id, daily_rate, phone_fee, room_fee, payment_type` เท่านั้น — **ไม่มี** `department` และ `position` (อยู่ใน `employees` table)
+- **loadPayroll merge**: merge `department` และ `position` จาก employees_salary เข้า emp ด้วย (ปัจจุบัน column ไม่มีจริง — ดึงจาก employees แทน)
+- **CMask payroll exception**: ใน payroll screen ปิด modal ทันทีไม่มี confirm popup; หน้าอื่นยังมีตามเดิม
 
 ### Employee fields
 | field | table | type | หมายเหตุ |
@@ -542,8 +548,11 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - [x] manual deduction with per_period — auto-creates loan หักต่อเนื่องงวดถัดไป
 - [x] prUpdateEntry อัปเดต net pay ใน DOM ทันที (ไม่ต้อง F5)
 - [x] openPeriod header split totals (เฮียรวย/F1/บูรชัย) อัปเดต real-time
-- [x] โอนจ่ายM/รายเดือน ซ่อนในงวด A+B แสดงเฉพาะงวด C
-- [x] openPeriod table-layout:fixed — columns ไม่ขยับเมื่อเพิ่มรายการหัก
+- [x] โอนจ่ายM/รายเดือน ซ่อนในงวด A+B แสดงเฉพาะงวด C (การ์ดงวดก็กรองด้วย)
+- [x] openPeriod sticky column header แถวเดียว ไม่ซ้ำในแต่ละการ์ด
+- [x] Period card แสดง split totals เฮียรวย/F1/บูรชัย + คำนวณสดไม่ใช้ net_pay จาก DB
+- [x] _allEmpField บันทึกถูกตาราง (salary → employees_salary, อื่น → employees)
+- [x] CMask ในหน้า payroll ไม่มี confirm popup
 
 ### 🔲 งานที่ admin ต้องทำเองในแอป (ไม่ใช่งานโค้ด)
 - [ ] กำหนดสาย + ตำแหน่ง + payment_type ให้พนักงานทุกคน
