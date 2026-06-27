@@ -3139,6 +3139,8 @@ async function markPeriodPaid(periodId){
 
 // ── Employees tab ──
 let _prAssignMode=false;
+let _prEditGrp=null; // group id หรือ 'standalone' ที่เปิด edit mode อยู่
+function _prGearToggle(key){_prEditGrp=(_prEditGrp===key)?null:key;renderPayroll();}
 function renderPrEmployees(){
   const _hiddenPos=new Set([...(_prSettings.hideManager?['ผู้จัดการ']:[]),...(_prSettings.hideTopManager?['ผู้จัดการใหญ่']:[])]);
   const active=PR.employees.filter(e=>e.status==='active'&&!_hiddenPos.has(e.position));
@@ -3187,21 +3189,35 @@ function renderPrEmployees(){
       </div>`;
     }).join('');
   }
-  function _routeRow(rt, emps, allRoutes, isFirst){
+  function _routeRow(rt, emps, allRoutes, isFirst, editMode){
     if(!emps||emps.length===0)return'';
     const idx=allRoutes.findIndex(r=>r.id===rt.id);
-    const canUp=idx>0;const canDown=idx<allRoutes.length-1;
-    const btnUp=`<button onclick="prMoveRoute('${rt.id}',-1)" ${canUp?'':'disabled'} style="background:${canUp?'var(--bg3)':'var(--bg2)'};border:1px solid ${canUp?'var(--border)':'var(--border)'};color:${canUp?'var(--text2)':'var(--border)'};border-radius:4px;width:26px;height:22px;cursor:${canUp?'pointer':'default'};font-size:12px;line-height:1;opacity:${canUp?1:0.25};">↑</button>`;
-    const btnDn=`<button onclick="prMoveRoute('${rt.id}',1)" ${canDown?'':'disabled'} style="background:${canDown?'var(--bg3)':'var(--bg2)'};border:1px solid ${canDown?'var(--border)':'var(--border)'};color:${canDown?'var(--text2)':'var(--border)'};border-radius:4px;width:26px;height:22px;cursor:${canDown?'pointer':'default'};font-size:12px;line-height:1;opacity:${canDown?1:0.25};">↓</button>`;
+    const canUp=idx>0, canDown=idx<allRoutes.length-1;
+    const arrowBtns=editMode?`<div style="display:flex;gap:3px;margin-top:2px;">
+      <button onclick="prMoveRoute('${rt.id}',-1)" ${canUp?'':'disabled'} style="background:var(--bg3);border:1px solid var(--border);color:${canUp?'var(--text2)':'var(--border)'};border-radius:4px;width:26px;height:22px;cursor:${canUp?'pointer':'default'};font-size:12px;line-height:1;opacity:${canUp?1:0.3};">↑</button>
+      <button onclick="prMoveRoute('${rt.id}',1)" ${canDown?'':'disabled'} style="background:var(--bg3);border:1px solid var(--border);color:${canDown?'var(--text2)':'var(--border)'};border-radius:4px;width:26px;height:22px;cursor:${canDown?'pointer':'default'};font-size:12px;line-height:1;opacity:${canDown?1:0.3};">↓</button>
+    </div>`:'';
+    const chips=emps.map(emp=>{
+      const loans=PR.loans.filter(l=>l.employee_id===emp.id&&l.status==='active');
+      const dragAttrs=editMode
+        ?`ontouchstart="_empTouchStart(event,'${emp.id}')" onmousedown="_empMouseStart(event,'${emp.id}')" style="cursor:grab;"`
+        :`style="cursor:pointer;"`;
+      return`<div data-emp-id="${emp.id}" onclick="openEmpDetail('${emp.id}')" ${dragAttrs}
+        style="display:inline-flex;flex-direction:column;gap:1px;padding:6px 10px;background:var(--bg2);border:1px solid ${editMode?'var(--amber)':'var(--border)'};border-radius:7px;min-width:80px;transition:border .15s;user-select:none;-webkit-user-select:none;"
+        onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='var(--bg2)'">
+        <div style="font-size:13px;font-weight:500;white-space:nowrap;">${emp.name}${loans.length>0?`<span style="font-size:10px;color:var(--amber);margin-left:3px;">●</span>`:''}</div>
+        ${(_prSettings.hideRates||isHR())?'':` <div style="font-size:11px;color:var(--text3);font-family:var(--mono);">${fmt(emp.daily_rate||0)}</div>`}
+      </div>`;
+    }).join('');
     return`<div style="display:flex;align-items:stretch;${isFirst?'':'border-top:1px solid var(--border)'};">
       <div style="flex:0 0 90px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:3px;padding:8px 6px;background:${rt.color||'#555'}18;border-right:3px solid ${rt.color||'#555'};">
         <div style="width:7px;height:7px;border-radius:50%;background:${rt.color||'#555'};"></div>
         <div style="font-size:11px;font-weight:600;text-align:center;color:var(--text);line-height:1.3;">${rt.name}</div>
         <div style="font-size:10px;color:var(--text3);">${emps.length} คน</div>
-        <div style="display:flex;gap:3px;margin-top:2px;">${btnUp}${btnDn}</div>
-        <button onclick="openVehicle('${rt.id}')" title="ข้อมูลรถ" style="font-size:10px;padding:2px 6px;background:transparent;border:1px dashed var(--border2);color:var(--text3);border-radius:5px;cursor:pointer;line-height:1.4;">🚐</button>
+        ${arrowBtns}
+        <button onclick="openVehicle('${rt.id}')" title="ข้อมูลรถ" style="font-size:10px;padding:2px 6px;background:transparent;border:1px dashed var(--border2);color:var(--text3);border-radius:5px;cursor:pointer;line-height:1.4;margin-top:2px;">🚐</button>
       </div>
-      <div data-drop-route="${rt.id}" style="flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:8px 10px;transition:background .15s;">${_empChips(emps)}</div>
+      <div data-drop-route="${rt.id}" style="flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:8px 10px;transition:background .15s;">${chips}</div>
     </div>`;
   }
   // build ordered group sections
@@ -3223,21 +3239,29 @@ function renderPrEmployees(){
     const grpEmps=members.flatMap(r=>byRoute[r.id]||[]);
     if(grpEmps.length===0)return;
     const icon=grp.is_owner?'⭐':grp.tab_flags?.auto_collect?'⚡':'📁';
+    const gKey=grp.id, gEdit=_prEditGrp===gKey;
     let grpHtml=`<div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;">
       <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg3);border-bottom:1px solid var(--border);">
         <span style="font-size:13px;">${icon}</span>
         <span style="font-size:13px;font-weight:700;">${grp.name}</span>
         <span style="font-size:11px;color:var(--text3);">${grpEmps.length} คน</span>
+        <button onclick="_prGearToggle('${gKey}')" title="${gEdit?'ปิดแก้ไข':'แก้ไขสาย/ลาก'}" style="margin-left:auto;width:30px;height:30px;border-radius:50%;background:${gEdit?'var(--amber)':'var(--bg2)'};border:1px solid ${gEdit?'var(--amber)':'var(--border)'};font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s;transform:rotate(${gEdit?'45':'0'}deg);">⚙️</button>
       </div>`;
-    members.forEach((rt,i)=>{grpHtml+=_routeRow(rt,byRoute[rt.id]||[],members,i===0);});
+    members.forEach((rt,i)=>{grpHtml+=_routeRow(rt,byRoute[rt.id]||[],members,i===0,gEdit);});
     grpHtml+=`</div>`;
     html+=grpHtml;
   });
 
   // standalone routes
   if(standaloneRoutes.length>0){
-    html+=`<div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;">`;
-    standaloneRoutes.forEach((rt,i)=>{html+=_routeRow(rt,byRoute[rt.id]||[],standaloneRoutes,i===0);});
+    const sEdit=_prEditGrp==='standalone';
+    html+=`<div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;">
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg3);border-bottom:1px solid var(--border);">
+        <span style="font-size:13px;">🚐</span>
+        <span style="font-size:13px;font-weight:700;">สายอิสระ</span>
+        <button onclick="_prGearToggle('standalone')" title="${sEdit?'ปิดแก้ไข':'แก้ไขสาย/ลาก'}" style="margin-left:auto;width:30px;height:30px;border-radius:50%;background:${sEdit?'var(--amber)':'var(--bg2)'};border:1px solid ${sEdit?'var(--amber)':'var(--border)'};font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.15s;transform:rotate(${sEdit?'45':'0'}deg);">⚙️</button>
+      </div>`;
+    standaloneRoutes.forEach((rt,i)=>{html+=_routeRow(rt,byRoute[rt.id]||[],standaloneRoutes,i===0,sEdit);});
     html+=`</div>`;
   }
 
