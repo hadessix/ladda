@@ -3718,7 +3718,7 @@ async function _allEmpField(empId,field,val){
       await sbUpsert('employees',[empData]);
     }
     toast('บันทึกแล้ว ✓');
-  }catch(e){toast('บันทึกไม่สำเร็จ');}
+  }catch(e){toast('บันทึกไม่สำเร็จ: '+e.message);}
 }
 function openEditEmployee(empId){
   const emp=PR.employees.find(e=>e.id===empId);if(!emp)return;
