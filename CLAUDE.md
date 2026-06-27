@@ -71,6 +71,7 @@ routes (
   color       text NOT NULL DEFAULT '#22c55e',
   tab_flags   jsonb DEFAULT '{"count":true,"income":true,"expense":true,"exchange":true,"payowner":false,"auto_collect":false,"viewer_visible":false}',
   sort_order  int DEFAULT 0,
+  vehicle     jsonb,               -- { plate, chassis, insurance, ins_tel, ins_expiry, tax_expiry, prb_expiry, oil_date }
   created_at  timestamp DEFAULT now()
 )
 
@@ -179,8 +180,8 @@ RLS is disabled; anon key has full CRUD on all tables (accessed only via Worker)
 ### HR Role — รายละเอียด
 
 HR เข้าได้เฉพาะ payroll screen tab พนักงาน เท่านั้น:
-- **ทำได้**: เพิ่มพนักงานใหม่, แก้ชื่อ/สาย/สัญชาติ/หมายเหตุ, อัปโหลดรูป
-- **ทำไม่ได้**: เห็นค่าแรง, ค่าโทร, ค่าห้อง, แผนก, ตำแหน่ง, payment_type, loan, สถานะออกจากงาน, tab งวดจ่าย
+- **ทำได้**: เพิ่มพนักงานใหม่, แก้ชื่อ/สาย/สัญชาติ/หมายเหตุ/เบอร์โทร/วันหมดอายุบัตร, อัปโหลดรูป, ดูและแก้ประวัติรถ (ผ่าน openAllVehicles), ดูประวัติพนักงานทั้งหมด (openAllEmployees)
+- **ทำไม่ได้**: เห็นค่าแรง, ค่าโทร, ค่าห้อง, แผนก, ตำแหน่ง, payment_type, วันที่เริ่มงาน (ในหน้าประวัติ), loan, สถานะออกจากงาน, tab งวดจ่าย
 - `backFromPayroll()` สำหรับ HR จะ `logout()` แทนกลับ main app
 - `loadPayroll()` ฝั่ง HR โหลด: employees + routes + groups + group_members (เพื่อจัดกลุ่มสาย)
 - `saveEmployee()` ฝั่ง HR: บันทึกเฉพาะ name/route_id/nationality/notes; daily_rate คงเดิม (default 360 ถ้าใหม่)
@@ -243,6 +244,9 @@ employees_salary (
 - **Sidebar icon**: `⭐` = is_owner group, `⚡` = auto_collect group, `📁` = normal group
 - **Sidebar gear (`_sbGear`)**: admin-only; `_sbGearToggle(id, e)` toggles gear for a group; when active shows ✏️🗑 buttons + draggable member chips; `_sbGear=null` after any reorder
 - **Sidebar drag-to-reorder members**: `_sbDragStart/End` — saves new sort_order via `sbUpsert('group_members', members.map((r,i)=>({group_id,route_id:r,sort_order:i})))`; only works when `_sbGear` is active for that group
+- **Payroll gear per group (`_prEditGrp`)**: `_prGearToggle(key)` where key = group id or `'standalone'`; toggles `_prEditGrp`; when active: ↑↓ buttons visible in route chips + drag-to-reassign enabled; renders via `renderPayroll()`
+- **`_routeRow(rt, editMode)`**: renders a route chip in payroll employee tab; `editMode=true` shows ↑↓ in left column + attaches touch/mouse drag handlers; `editMode=false` shows plain chip, no drag
+- **Duplicate style attribute bug**: `dragAttrs` must NOT contain a `style="..."` — the outer div's single `style` attribute must carry all styling (background, border, cursor etc.); two style attributes = browser ignores second
 - **`sbUpsert` requires full object**: sending a partial object (e.g., `{id, photo_url}` only) causes NOT NULL constraint on `name`. Always spread the full record: `{...emp, ...patch}`
 
 ## Function Reference
@@ -304,6 +308,16 @@ employees_salary (
 | `OM/CM/CMask/toast` | modal open/close/confirm-close, notification |
 | `_sbGearToggle(id,e)` | toggle sidebar gear สำหรับกลุ่ม (admin only) |
 | `_sbDragStart/_sbDragEnd` | drag-to-reorder สมาชิกในกลุ่ม (sidebar, admin+gear active) |
+| `openVehicle(sid)` | modal แก้ประวัติรถของสายเดียว (plate/chassis/insurance/ins_tel/ins_expiry/tax_expiry/prb_expiry/oil_date) |
+| `saveVehicle(sid)` | upsert routes.vehicle jsonb |
+| `openAllVehicles()` | table modal ประวัติรถทุกสาย; inline edit ด้วย `_allVehField()`; ปุ่ม 🛢️ เซ็ต oil_date = วันนี้ |
+| `_allVehField(routeId,field,val)` | save vehicle field onchange; toUpperCase สำหรับ plate/chassis |
+| `_vehOilToday(routeId)` | เซ็ต oil_date = today(), update DOM input, call `_allVehField` |
+| `openAllEmployees()` | table modal ประวัติพนักงานทุกคน; rowspan grouped by route/group order; HR access (ซ่อน daily_rate/payment_type/start_date); Thai = ซ่อน permit_expiry |
+| `_prGearToggle(key)` | toggle `_prEditGrp` (group id หรือ 'standalone'); เปิด/ปิด edit mode ใน renderPrEmployees |
+| `_routeRow(rt,editMode)` | render route chip ใน tab พนักงาน; editMode=true → ↑↓ + drag handlers |
+| `_prEyeMenu(e)` | เปิด/ปิด `#pr-eye-popup` context menu ใต้ปุ่ม 👁️; วาง position จาก getBoundingClientRect |
+| `_prEyeClose()` | ซ่อน `#pr-eye-popup` |
 
 ## Security
 
@@ -358,8 +372,11 @@ employees (
   permit_photos jsonb,   -- array of up to 4 URLs (work permit, non-Thai only)
   license_photo text,    -- driver's license URL
   notes        text,
+  tel          text,     -- เบอร์โทรศัพท์ (admin + HR กรอก/ดูได้)
   start_date   date,     -- วันที่เริ่มงาน
-  permit_expiry date     -- วันหมดอายุบัตรใบอนุญาตทำงาน
+  permit_expiry date,    -- วันหมดอายุบัตรใบอนุญาตทำงาน (ซ่อนถ้า nationality='ไทย')
+  visa_expiry  date,     -- อายุวีซ่า (ซ่อนถ้า nationality='ไทย' ในตารางประวัติ)
+  passport_expiry date   -- อายุพาสปอร์ต (ซ่อนถ้า nationality='ไทย' ในตารางประวัติ)
 )
 
 employees_salary (
@@ -473,7 +490,10 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - **โอนจ่ายM/รายเดือน filter**: `_monthlyTypes=['โอนจ่ายM','รายเดือน']` — พนักงานกลุ่มนี้ไม่แสดงและไม่สร้าง entries ในงวด A (1-10) และ B (11-20); แสดงเฉพาะงวด C (21-31); การ์ดงวดก็กรองออกเช่นกัน
 - **openPeriod header split totals**: `id="pr-hdr-grand/main/f1/bur"` — ยอดรวม/เฮียรวย/F1/บูรชัย; อัปเดต real-time พร้อมกับ net pay ใน `prUpdateEntry()`
 - **Period card split totals**: การ์ดงวดแสดง เฮียรวย/F1/บูรชัย เหมือนกับหัวหน้างวด; คำนวณสดจาก daily_rate×วัน+โบนัส−หัก−เบิก (ไม่ใช้ net_pay จาก DB)
-- **_allEmpField**: บันทึก salary fields (daily_rate/phone_fee/room_fee/payment_type) ไปที่ `employees_salary`; ฟิลด์อื่น (nationality/start_date ฯลฯ) บันทึกไปที่ `employees` โดย strip salary fields ออกก่อน
+- **_allEmpField**: บันทึก salary fields (daily_rate/phone_fee/room_fee/payment_type) ไปที่ `employees_salary`; ฟิลด์อื่น (nationality/start_date/tel ฯลฯ) บันทึกไปที่ `employees` โดย strip salary fields ออกก่อน
+- **vehicle jsonb**: เก็บใน `routes.vehicle` — `{ plate, chassis, insurance, ins_tel, ins_expiry, tax_expiry, prb_expiry, oil_date }`; โหลดมาพร้อมกับ routes ใน `loadAll()`; ใช้ `_allVehField()` เพื่อ save รายฟิลด์ใน openAllVehicles table (เพิ่ม key ใหม่ได้เลย ไม่ต้องแก้ schema)
+- **openAllEmployees rowspan layout**: pre-group employees ตาม orderedRoutes (group order เหมือน sidebar); แต่ละ route = `<td rowspan="N">` ครั้งแรก; HR ไม่เห็น daily_rate/payment_type/start_date; สัญชาติไทย = ซ่อน permit_expiry
+- **_prEditGrp global**: `null` หรือ group id หรือ `'standalone'`; กดปุ่มเฟืองใน group header ของ tab พนักงาน → toggle; เมื่อ active: chip เป็น grab cursor + ↑↓ ปรากฏในคอลัมน์ซ้ายของ `_routeRow`; FAB fixed top:80px right:24px ไม่ทับปุ่มเพราะ ↑↓ อยู่ซ้ายแล้ว
 - **employees_salary actual columns**: `employee_id, daily_rate, phone_fee, room_fee, payment_type` เท่านั้น — **ไม่มี** `department` และ `position` (อยู่ใน `employees` table)
 - **loadPayroll merge**: merge `department` และ `position` จาก employees_salary เข้า emp ด้วย (ปัจจุบัน column ไม่มีจริง — ดึงจาก employees แทน)
 - **CMask payroll exception**: ใน payroll screen ปิด modal ทันทีไม่มี confirm popup; หน้าอื่นยังมีตามเดิม
@@ -489,8 +509,11 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 | `permit_photos` | employees | jsonb | array URL ใบอนุญาตทำงาน (max 4, non-Thai only) |
 | `license_photo` | employees | text | Cloudinary URL ใบขับขี่ |
 | `notes` | employees | text | หมายเหตุ |
-| `start_date` | employees | date | วันที่เริ่มงาน (HR กรอกได้ตอนเพิ่มใหม่เท่านั้น ดูในโปรไฟล์ไม่ได้) |
-| `permit_expiry` | employees | date | วันหมดอายุบัตร (ทั้ง admin และ HR กรอก/ดูได้) |
+| `tel` | employees | text | เบอร์โทรศัพท์ (admin + HR กรอก/ดูได้; แสดงเป็น `<a href="tel:...">`) |
+| `start_date` | employees | date | วันที่เริ่มงาน (HR กรอกได้ตอนเพิ่มใหม่เท่านั้น ดูในโปรไฟล์ไม่ได้; ซ่อนใน openAllEmployees ถ้า HR) |
+| `permit_expiry` | employees | date | วันหมดอายุบัตร (admin + HR กรอก/ดูได้; ซ่อนถ้า nationality='ไทย') |
+| `visa_expiry` | employees | date | อายุวีซ่า (date input; ตารางประวัติซ่อนถ้า nationality='ไทย') |
+| `passport_expiry` | employees | date | อายุพาสปอร์ต (date input; ตารางประวัติซ่อนถ้า nationality='ไทย') |
 | `daily_rate` | employees_salary | numeric | ค่าแรงต่อวัน (default 360) |
 | `phone_fee` | employees_salary | numeric | ค่าโทรต่องวด |
 | `room_fee` | employees_salary | numeric | ค่าห้องต่องวด |
@@ -500,10 +523,15 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 
 > หลัง `loadPayroll()` (admin) salary fields ถูก merge เข้า emp objects แล้ว ใช้ได้เป็น `emp.daily_rate` ปกติ
 
-### Payroll FAB (floating buttons)
-- `#pr-fab-group`: `position:fixed; top:80px; right:24px` — แสดงเมื่อ `showPayroll()` (admin เท่านั้น), ซ่อนเมื่อ `backFromPayroll()` หรือ HR login
-- 📤 `_prShareCurrent()`: ถ้า tab=employees → `shareEmployeeList()`; ถ้า tab=periods → `sharePeriod()` งวดแรกของเดือน
-- ⚙️ `togglePrTray()`: เปิด/ปิด bottom tray settings
+### Payroll Eye-Menu (แทน FAB)
+- ปุ่ม 👁️ อยู่ใน header row ของ tab พนักงาน (admin only; ถัด + เพิ่มพนักงาน)
+- กดแล้วขึ้น `#pr-eye-popup` — context menu เล็กๆ (position:fixed, วางใต้ปุ่ม) มี 2 ตัวเลือก:
+  - 📤 ส่งต่อ → `_prShareCurrent()`
+  - ⚙️ ตั้งค่า → `togglePrTray()`
+- คลิกนอก popup → ปิดเองด้วย `document.addEventListener('click', _prEyeClose, {once:true})`
+- `_prEyeMenu(e)`: คำนวณ position จาก `getBoundingClientRect()` แล้วแสดง popup
+- `_prEyeClose()`: ซ่อน popup
+- **ไม่มี** `#pr-fab-group` อีกต่อไป — ลบออกแล้ว; `showPayroll/backFromPayroll` ไม่ต้อง toggle FAB
 
 ### งานที่ยังต้องทำ (Payroll)
 - [x] นำเข้าข้อมูลพนักงาน 42 คน + 21 permit loans
@@ -553,6 +581,15 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - [x] Period card แสดง split totals เฮียรวย/F1/บูรชัย + คำนวณสดไม่ใช้ net_pay จาก DB
 - [x] _allEmpField บันทึกถูกตาราง (salary → employees_salary, อื่น → employees)
 - [x] CMask ในหน้า payroll ไม่มี confirm popup
+- [x] tel field บน employees (admin + HR กรอก/ดูได้, แสดงเป็น tel: link)
+- [x] vehicle jsonb บน routes (plate/chassis/insurance/ins_tel/ins_expiry/tax_expiry/prb_expiry/oil_date)
+- [x] openAllVehicles modal — table ทุกสาย, inline edit, ปุ่ม 🛢️ oil-today
+- [x] openAllEmployees — rowspan grouped by route, HR access, tel+permit_expiry cols, ซ่อน salary cols ถ้า HR, Thai = ซ่อน permit_expiry
+- [x] employees.visa_expiry + passport_expiry (date) — ตารางประวัติ + รายคน + ฟอร์มเพิ่ม/แก้ไข; Thai = ซ่อนในตาราง (ต้อง `alter table employees add column`)
+- [x] vehicle tax_expiry + prb_expiry (date) — openVehicle form + openAllVehicles table (jsonb ไม่ต้องแก้ schema)
+- [x] _prEditGrp + _prGearToggle — gear per group ใน tab พนักงาน → unlock drag + ↑↓
+- [x] _routeRow(editMode) — ↑↓ อยู่ซ้าย, drag handlers ติดเฉพาะ editMode=true
+- [x] แทน FAB 2 ปุ่ม (📤⚙️) ด้วยปุ่ม 👁️ + context menu popup ใน header tab พนักงาน
 
 ### 🔲 งานที่ admin ต้องทำเองในแอป (ไม่ใช่งานโค้ด)
 - [ ] กำหนดสาย + ตำแหน่ง + payment_type ให้พนักงานทุกคน
