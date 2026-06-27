@@ -3504,6 +3504,7 @@ function openEmpDetail(empId){
         <div class="sc"><div class="lb">สาย</div><div class="vl" style="font-size:14px;">${rt?rt.name:'—'}</div></div>
         <div class="sc"><div class="lb">สัญชาติ</div><div class="vl" style="font-size:14px;">${emp.nationality||'—'}</div></div>
         <div class="sc"><div class="lb">สถานะ</div><div class="vl" style="font-size:14px;color:${isBL?'var(--red)':isActive?'var(--green)':'var(--text3)'};">${isBL?'🚫 ห้ามรับ':isActive?'✅ ทำงานอยู่':'❌ ออกแล้ว'}</div></div>
+        <div class="sc"><div class="lb">วันที่เริ่มงาน</div><div class="vl" style="font-size:14px;">${emp.start_date||'—'}</div></div>
       </div>`
     :`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
         <div class="sc"><div class="lb">สาย</div><div class="vl" style="font-size:14px;">${rt?rt.name:'—'}</div></div>
@@ -3514,6 +3515,7 @@ function openEmpDetail(empId){
         <div class="sc"><div class="lb">สถานะ</div><div class="vl" style="font-size:14px;color:${isBL?'var(--red)':isActive?'var(--green)':'var(--text3)'};">${isBL?'🚫 ห้ามรับ':isActive?'✅ ทำงานอยู่':'❌ ออกแล้ว'}</div></div>
         <div class="sc"><div class="lb">ค่าโทร/งวด</div><div class="vl">${fmt(emp.phone_fee||0)}</div></div>
         <div class="sc"><div class="lb">ค่าห้อง/งวด</div><div class="vl">${fmt(emp.room_fee||0)}</div></div>
+        <div class="sc"><div class="lb">วันที่เริ่มงาน</div><div class="vl" style="font-size:14px;">${emp.start_date||'—'}</div></div>
         <div class="sc" style="grid-column:1/-1;"><div class="lb">ประเภทการจ่าย</div><div class="vl" style="font-size:14px;">${emp.payment_type||'เงินสดW'}</div></div>
       </div>`;
   const loanSection=isHR()?'':`
