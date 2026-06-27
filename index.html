@@ -3731,36 +3731,22 @@ function openEmpDetail(empId){
 
 function openAllEmployees(){
   const hr=isHR();
-  const sorted=[...PR.employees].filter(e=>e.status==='active').sort((a,b)=>{
-    const ra=S.shops.find(s=>s.id===a.route_id);const rb=S.shops.find(s=>s.id===b.route_id);
-    const na=ra?ra.name:'zzz';const nb=rb?rb.name:'zzz';
-    return na.localeCompare(nb,'th')||a.name.localeCompare(b.name,'th');
-  });
+  const active=PR.employees.filter(e=>e.status==='active');
   const inp=(empId,field,val,type='text',extra='')=>
     `<input type="${type}" value="${val||''}" onchange="_allEmpField('${empId}','${field}',this.value${type==='number'?'*1':''})"
       style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--mono);width:100%;${extra}">`;
   const sel=(empId,field,val,opts)=>
     `<select onchange="_allEmpField('${empId}','${field}',this.value)"
       style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--font);width:100%;">
-      ${opts.map(o=>`<option value="${o.v||o}" ${(val||'')===(o.v||o)?'selected':''}>${o.l||o}</option>`).join('')}
+      ${opts.map(o=>`<option value="${o.v!==undefined?o.v:o}" ${(val||'')===(o.v!==undefined?o.v:o)?'selected':''}>${o.l||o}</option>`).join('')}
     </select>`;
-  const rows=sorted.map((emp,i)=>{
+  const empRow=(emp,i)=>{
     const bg=i%2===0?'':'background:var(--bg3);';
     return`<tr style="border-bottom:1px solid var(--border);${bg}">
-      <td style="padding:6px 8px;font-size:13px;font-weight:500;white-space:nowrap;">🟢 ${emp.name}</td>
-      <td style="padding:4px;">
-        <select onchange="quickAssignRoute('${emp.id}',this.value)"
-          style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--font);width:100%;">
-          <option value="">-- ไม่มีสาย --</option>${S.shops.map(s=>`<option value="${s.id}" ${s.id===emp.route_id?'selected':''}>${s.name}</option>`).join('')}
-        </select>
-      </td>
-      <td style="padding:4px;">
-        ${sel(emp.id,'position',emp.position,[{v:'',l:'--'},'คนขับรถ','เด็กติดรถ','ออฟฟิศทั่วไป','ผู้จัดการ','ผู้จัดการใหญ่'])}
-      </td>
-      <td style="padding:4px;">
-        ${sel(emp.id,'nationality',emp.nationality||'ไทย',['ไทย','เมียนมา','กัมพูชา','ลาว'])}
-      </td>
-      <td style="padding:4px;">${inp(emp.id,'tel',emp.tel,'tel','font-family:var(--mono);')}</td>
+      <td style="padding:6px 8px;font-size:13px;font-weight:500;white-space:nowrap;">${emp.name}</td>
+      <td style="padding:4px;">${sel(emp.id,'position',emp.position,[{v:'',l:'--'},'คนขับรถ','เด็กติดรถ','ออฟฟิศทั่วไป','ผู้จัดการ','ผู้จัดการใหญ่'])}</td>
+      <td style="padding:4px;">${sel(emp.id,'nationality',emp.nationality||'ไทย',['ไทย','เมียนมา','กัมพูชา','ลาว'])}</td>
+      <td style="padding:4px;">${inp(emp.id,'tel',emp.tel,'tel')}</td>
       <td style="padding:4px;">${inp(emp.id,'permit_expiry',emp.permit_expiry,'date','font-family:var(--font);')}</td>
       ${hr?'':`<td style="padding:4px;">${sel(emp.id,'payment_type',emp.payment_type||'เงินสดW',['เงินสดW','โอนจ่ายW','โอนจ่ายM','รายเดือน'])}</td>`}
       ${hr?'':`<td style="padding:4px;"><input type="number" value="${emp.daily_rate||0}" onchange="_allEmpField('${emp.id}','daily_rate',+this.value)" style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--mono);width:80px;text-align:right;"></td>`}
@@ -3769,22 +3755,54 @@ function openAllEmployees(){
         <button onclick="openEmpDetail('${emp.id}')" style="background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:5px;padding:3px 8px;font-size:11px;cursor:pointer;">👤</button>
       </td>
     </tr>`;
-  }).join('');
+  };
+  const groupedIds=new Set(Object.values(S.groupMembers).flat());
+  const sortedGroups=[...S.groups].sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+  const allRoutesSorted=[...S.shops].sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+  const sectionHdr=(label,color)=>
+    `<tr><td colspan="99" style="padding:6px 10px;background:var(--bg3);font-size:12px;font-weight:700;color:${color||'var(--text2)'};border-bottom:1px solid var(--border);">${label}</td></tr>`;
+  const routeHdr=(rt)=>
+    `<tr><td colspan="99" style="padding:4px 10px 4px 20px;background:${rt.color}18;font-size:11px;font-weight:600;color:var(--text3);border-bottom:1px solid var(--border);">
+      <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${rt.color};margin-right:5px;"></span>${rt.name}
+    </td></tr>`;
+  let rows='';
+  let rowIdx=0;
+  // กลุ่ม
+  sortedGroups.forEach(grp=>{
+    const members=(S.groupMembers[grp.id]||[]).map(id=>S.shops.find(s=>s.id===id)).filter(Boolean).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+    const grpEmps=members.flatMap(rt=>active.filter(e=>e.route_id===rt.id));
+    if(grpEmps.length===0)return;
+    rows+=sectionHdr(`${grp.is_owner?'⭐':'📁'} ${grp.name}`,'var(--text)');
+    members.forEach(rt=>{
+      const emps=active.filter(e=>e.route_id===rt.id);
+      if(!emps.length)return;
+      rows+=routeHdr(rt);
+      emps.forEach(e=>{rows+=empRow(e,rowIdx++);});
+    });
+  });
+  // สายไม่มีกลุ่ม
+  const standaloneRts=allRoutesSorted.filter(r=>!groupedIds.has(r.id));
+  standaloneRts.forEach(rt=>{
+    const emps=active.filter(e=>e.route_id===rt.id);
+    if(!emps.length)return;
+    rows+=routeHdr(rt);
+    emps.forEach(e=>{rows+=empRow(e,rowIdx++);});
+  });
+  // ยังไม่มีสาย
+  const noRoute=active.filter(e=>!e.route_id);
+  if(noRoute.length){
+    rows+=sectionHdr('— ยังไม่มีสาย —','var(--text3)');
+    noRoute.forEach(e=>{rows+=empRow(e,rowIdx++);});
+  }
+  const th=(t,extra='')=>`<th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;white-space:nowrap;${extra}">${t}</th>`;
   OM('📋 ประวัติพนักงานทั้งหมด',
     `<div style="overflow-x:auto;">
       <table style="width:100%;border-collapse:collapse;">
-        <thead>
+        <thead style="position:sticky;top:0;z-index:1;">
           <tr style="border-bottom:2px solid var(--border);background:var(--bg3);">
-            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;white-space:nowrap;">ชื่อ</th>
-            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:100px;">สาย</th>
-            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:110px;">ตำแหน่ง</th>
-            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:80px;">สัญชาติ</th>
-            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:110px;">เบอร์โทร</th>
-            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:120px;">วันหมดอายุบัตร</th>
-            ${hr?'':`<th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:100px;">การจ่าย</th>`}
-            ${hr?'':`<th style="padding:8px;font-size:12px;color:var(--text3);text-align:right;white-space:nowrap;">ค่าแรง/วัน</th>`}
-            ${hr?'':`<th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;white-space:nowrap;">วันเริ่มงาน</th>`}
-            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:center;"></th>
+            ${th('ชื่อ')}${th('ตำแหน่ง','min-width:110px;')}${th('สัญชาติ','min-width:80px;')}${th('เบอร์โทร','min-width:110px;')}${th('วันหมดอายุบัตร','min-width:120px;')}
+            ${hr?'':`${th('การจ่าย','min-width:100px;')}${th('ค่าแรง/วัน','text-align:right;')}${th('วันเริ่มงาน','min-width:110px;')}`}
+            <th></th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
