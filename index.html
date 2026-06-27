@@ -2598,16 +2598,6 @@ function openPeriod(periodId){
             <col style="width:84px;">
             <col style="width:42px;">
           </colgroup>
-          <thead><tr style="background:var(--bg2);border-bottom:1px solid var(--border);">
-            <th style="padding:6px 8px;text-align:left;font-size:12px;color:var(--text3);font-weight:500;">ชื่อ</th>
-            <th style="padding:6px 4px;text-align:center;font-size:12px;color:var(--text3);font-weight:500;">วัน</th>
-            ${_prSettings.hideRates?'':` <th style="padding:6px 4px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">ค่าแรง</th>`}
-            <th style="padding:6px 4px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">ห้อง</th>
-            <th style="padding:6px 4px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">บัตร</th>
-            <th style="padding:6px 4px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">อื่นๆ</th>
-            <th style="padding:6px 6px;text-align:right;font-size:12px;color:var(--text3);font-weight:500;">สุทธิ</th>
-            <th style="padding:6px 4px;"></th>
-          </tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -2645,6 +2635,19 @@ function openPeriod(periodId){
         ${_burGrp?`<span style="font-size:12px;color:var(--text2);">${_burGrp.name} <span id="pr-hdr-bur" style="font-family:var(--mono);color:var(--green);font-weight:600;">${fmt(_tot2)}</span></span>`:''}
       </div>
       ${isPaid?`<span style="font-size:12px;color:var(--green);background:var(--gdim);border:1px solid var(--gbr);padding:3px 10px;border-radius:4px;">✅ จ่ายแล้ว</span>`:`<span style="font-size:12px;color:var(--amber);background:var(--adim);border:1px solid var(--abr);padding:3px 10px;border-radius:4px;">⏳ รอจ่าย</span>`}
+    </div>
+    <div style="position:sticky;top:0;z-index:10;background:var(--bg2);border:1px solid var(--border);border-radius:6px;margin-bottom:8px;display:flex;align-items:center;">
+      <div style="flex:0 0 72px;"></div>
+      <div style="flex:1;display:flex;align-items:center;font-size:12px;color:var(--text3);font-weight:500;">
+        <div style="min-width:100px;padding:6px 8px;">ชื่อ</div>
+        <div style="width:64px;padding:6px 4px;text-align:center;">วัน</div>
+        ${_prSettings.hideRates?'':'<div style="width:76px;padding:6px 4px;text-align:right;">ค่าแรง</div>'}
+        <div style="width:66px;padding:6px 4px;text-align:right;">ห้อง</div>
+        <div style="width:66px;padding:6px 4px;text-align:right;">บัตร</div>
+        <div style="width:70px;padding:6px 4px;text-align:right;">อื่นๆ</div>
+        <div style="width:84px;padding:6px 6px;text-align:right;">สุทธิ</div>
+        <div style="width:42px;"></div>
+      </div>
     </div>
     <div style="overflow-x:auto;">${blocks}</div>`,
     `<div style="display:flex;gap:8px;flex-wrap:wrap;">
