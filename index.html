@@ -3151,6 +3151,7 @@ function renderPrEmployees(){
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       ${!isHR()?`<button class="btn ${_prAssignMode?'btn-a':'btn-b'}" onclick="_prAssignMode=!_prAssignMode;renderPayroll();">${_prAssignMode?'✅ เสร็จแล้ว':'⚡ กำหนดสาย'}</button>`:''}
       ${!isHR()?`<button class="btn btn-b" onclick="openAllEmployees()">📋 ประวัติพนักงาน</button>`:''}
+      <button class="btn btn-b" onclick="openAllVehicles()">🚐 ประวัติรถ</button>
       <button class="btn btn-b" onclick="openAddEmployee()">+ เพิ่มพนักงาน</button>
     </div>
   </div>`;
@@ -3804,6 +3805,53 @@ async function _allEmpField(empId,field,val){
       const{daily_rate,phone_fee,room_fee,payment_type,...empData}=emp;
       await sbUpsert('employees',[empData]);
     }
+    toast('บันทึกแล้ว ✓');
+  }catch(e){toast('บันทึกไม่สำเร็จ: '+e.message);}
+}
+function openAllVehicles(){
+  const routes=[...S.shops].sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+  const rows=routes.map((rt,i)=>{
+    const v=rt.vehicle||{};
+    const inp=(id,val,ph,type='text',extra='')=>`<input data-rt="${rt.id}" data-f="${id}" type="${type}" value="${val||''}" placeholder="${ph}"
+      onchange="_allVehField('${rt.id}','${id}',this.value)"
+      style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--mono);width:100%;${extra}">`;
+    return`<tr style="border-bottom:1px solid var(--border);${i%2===0?'':'background:var(--bg3)'};">
+      <td style="padding:6px 8px;white-space:nowrap;">
+        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${rt.color};margin-right:5px;"></span>
+        <span style="font-size:13px;font-weight:600;">${rt.name}</span>
+      </td>
+      <td style="padding:4px;">${inp('plate',v.plate,'กข 1234')}</td>
+      <td style="padding:4px;">${inp('chassis',v.chassis,'17 หลัก')}</td>
+      <td style="padding:4px;">${inp('insurance',v.insurance,'บริษัทประกัน','text','font-family:var(--font);')}</td>
+      <td style="padding:4px;">${inp('ins_tel',v.ins_tel,'02-xxx-xxxx','tel')}</td>
+      <td style="padding:4px;">${inp('oil_date',v.oil_date,'','date','font-family:var(--font);')}</td>
+    </tr>`;
+  }).join('');
+  OM('🚐 ประวัติรถทั้งหมด',
+    `<div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr style="border-bottom:2px solid var(--border);background:var(--bg3);">
+            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;white-space:nowrap;">สาย</th>
+            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:100px;">ทะเบียน</th>
+            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:130px;">เลขครัสซี</th>
+            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:120px;">ประกันของ</th>
+            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:110px;">เบอร์ประกัน</th>
+            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:120px;">ถ่ายน้ำมันล่าสุด</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`,
+    `<button class="btn btn-x" onclick="CMask()">ปิด</button>`
+  );
+}
+async function _allVehField(routeId,field,val){
+  const shop=S.shops.find(s=>s.id===routeId);if(!shop)return;
+  if(!shop.vehicle)shop.vehicle={};
+  shop.vehicle[field]=val.trim().toUpperCase&&['plate','chassis'].includes(field)?val.trim().toUpperCase():val.trim()||null;
+  try{
+    await sbUpsert('routes',[{id:shop.id,name:shop.name,color:shop.color,tab_flags:shop.tab_flags,sort_order:shop.sort_order,vehicle:shop.vehicle}]);
     toast('บันทึกแล้ว ✓');
   }catch(e){toast('บันทึกไม่สำเร็จ: '+e.message);}
 }
