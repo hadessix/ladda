@@ -2906,7 +2906,12 @@ function openAddDed(entryId,periodId){
         ${activeLoans.map(l=>`<button onclick="addDedFromLoan('${entryId}','${periodId}','${l.id}')" style="display:block;width:100%;text-align:left;padding:8px 12px;margin-bottom:4px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);cursor:pointer;font-size:13px;font-family:var(--font);">${l.description||l.type} · คงค้าง ${fmt(l.total_amount-l.paid_amount)} · งวดละ ${fmt(l.per_period_amount)}</button>`).join('')}
       </div><div style="border-top:1px solid var(--border);padding-top:12px;">`:''}<div style="font-size:13px;color:var(--text2);margin-bottom:8px;">หักรายการอื่น</div>
         <input id="add-ded-label" placeholder="รายการ เช่น กระสอบหาย" style="width:100%;margin-bottom:8px;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);">
-        <input id="add-ded-amount" type="number" placeholder="จำนวนเงิน" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--mono);">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:4px;">
+          <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">ยอดรวมที่ต้องหัก</div>
+            <input id="add-ded-amount" type="number" placeholder="0" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--mono);"></div>
+          <div><div style="font-size:12px;color:var(--text3);margin-bottom:4px;">หักวีคละ <span style="color:var(--text3);font-size:11px;">(ว่าง=หักครั้งเดียว)</span></div>
+            <input id="add-ded-per" type="number" placeholder="0" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--mono);"></div>
+        </div>
       ${activeLoans.length>0?'</div>':''}`,
       `<div style="display:flex;gap:8px;">
         <button class="btn btn-x" onclick="CM();setTimeout(()=>openPrEntryDetail('${entryId}','${periodId}'),50)">ยกเลิก</button>
@@ -2933,12 +2938,23 @@ async function addDedFromLoan(entryId,periodId,loanId){
 async function saveAddDed(entryId,periodId){
   const label=(document.getElementById('add-ded-label')?.value||'').trim();
   const amount=parseFloat(document.getElementById('add-ded-amount')?.value)||0;
+  const perPeriod=parseFloat(document.getElementById('add-ded-per')?.value)||0;
   if(!label||!amount){toast('กรุณากรอกรายการและจำนวน');return;}
-  const d={id:uid(),entry_id:entryId,loan_id:null,type:'other',label,amount};
+  const e=PR.entries.find(x=>x.id===entryId);
+  const emp=PR.employees.find(x=>x.id===e.employee_id);
   try{
+    let loanId=null;
+    const dedAmount=(perPeriod>0&&perPeriod<amount)?perPeriod:amount;
+    if(perPeriod>0&&perPeriod<amount){
+      // สร้าง loan ใหม่เพื่อหักต่อเนื่องงวดถัดไป
+      const loan={id:uid(),employee_id:emp.id,type:'other',description:label,
+        total_amount:amount,per_period_amount:perPeriod,paid_amount:0,status:'active'};
+      await sbUpsert('employee_loans',[loan]);
+      PR.loans.push(loan);
+      loanId=loan.id;
+    }
+    const d={id:uid(),entry_id:entryId,loan_id:loanId,type:'other',label,amount:dedAmount};
     await sbUpsert('payroll_deductions',[d]);PR.deductions.push(d);
-    const e=PR.entries.find(x=>x.id===entryId);
-    const emp=PR.employees.find(x=>x.id===e.employee_id);
     const deds=PR.deductions.filter(x=>x.entry_id===entryId);
     e.net_pay=(emp.daily_rate||0)*(e.days_worked||0)+(e.bonus||0)-deds.reduce((s,x)=>s+x.amount,0)-(e.advance||0);
     await sbUpsert('payroll_entries',[e]);
