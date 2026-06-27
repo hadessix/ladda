@@ -2522,12 +2522,20 @@ function openPeriod(periodId){
     const k=emp.route_id||'__none__';
     if(!byRoute[k])byRoute[k]=[];byRoute[k].push({e,emp});
   });
-  // sort routes: shops first by sort_order, then __none__
-  const sortedKeys=Object.keys(byRoute).sort((a,b)=>{
-    if(a==='__none__')return 1;if(b==='__none__')return -1;
-    const ra=S.shops.find(s=>s.id===a);const rb=S.shops.find(s=>s.id===b);
-    return (ra?.sort_order||0)-(rb?.sort_order||0);
+  // sort routes: ตามลำดับกลุ่ม → route ในกลุ่ม → standalone → __none__
+  const _sortedGroups=[...S.groups].sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+  const _groupedIds=new Set(Object.values(S.groupMembers).flat());
+  const _orderedRouteIds=[];
+  _sortedGroups.forEach(grp=>{
+    const members=(S.groupMembers[grp.id]||[])
+      .map(id=>S.shops.find(s=>s.id===id)).filter(Boolean)
+      .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+    members.forEach(r=>_orderedRouteIds.push(r.id));
   });
+  [...S.shops].filter(s=>!_groupedIds.has(s.id)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
+    .forEach(r=>_orderedRouteIds.push(r.id));
+  _orderedRouteIds.push('__none__');
+  const sortedKeys=_orderedRouteIds.filter(id=>byRoute[id]);
   let blocks='';
   sortedKeys.forEach(rid=>{
     const items=byRoute[rid];
