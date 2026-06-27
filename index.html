@@ -858,6 +858,21 @@ function renderShopContent(){
       BT.filter(t=>cb[t]!==0).map(t=>{const neg=cb[t]<0;return`<span class="pill ${BC[t]}" style="${neg?'outline:1px solid var(--red);opacity:.8;':''}">฿${BL[t]} × ${neg?'<span style="color:var(--red)">':''}${fN(cb[t])}${neg?'</span>':''}</span>`;}).join('')+
     `</div></div>`;
   }
+  const veh=shop.vehicle||{};
+  const hasVeh=veh.plate||veh.chassis||veh.insurance||veh.ins_tel||veh.oil_date;
+  h+=`<div class="cumul" style="display:flex;align-items:flex-start;gap:10px;justify-content:space-between;">
+    <div style="flex:1;">
+      <div class="clb" style="margin-bottom:6px;">🚐 ข้อมูลรถ</div>
+      ${hasVeh?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:13px;">
+        ${veh.plate?`<div><span style="color:var(--text3);">ทะเบียน:</span> <span style="font-family:var(--mono);font-weight:600;">${veh.plate}</span></div>`:''}
+        ${veh.chassis?`<div><span style="color:var(--text3);">เลขครัสซี:</span> <span style="font-family:var(--mono);font-size:11px;">${veh.chassis}</span></div>`:''}
+        ${veh.insurance?`<div><span style="color:var(--text3);">ประกัน:</span> ${veh.insurance}</div>`:''}
+        ${veh.ins_tel?`<div><span style="color:var(--text3);">เบอร์ประกัน:</span> <a href="tel:${veh.ins_tel}" style="color:var(--text);font-family:var(--mono);">${veh.ins_tel}</a></div>`:''}
+        ${veh.oil_date?`<div style="grid-column:1/-1;"><span style="color:var(--text3);">ถ่ายน้ำมันล่าสุด:</span> ${veh.oil_date}</div>`:''}
+      </div>`:`<div style="color:var(--text3);font-size:13px;">ยังไม่มีข้อมูลรถ</div>`}
+    </div>
+    ${isAdmin()?`<button onclick="openVehicle('${sid}')" style="flex-shrink:0;font-size:12px;padding:4px 10px;background:transparent;border:1px dashed var(--border2);color:var(--text3);border-radius:6px;cursor:pointer;">✏️ แก้ไข</button>`:''}
+  </div>`;
   if(sess){
     const sessTotal=sess.subs.reduce((s,e)=>s+bv(e.bills||eb()),0);
     const n=sess.subs.length;
@@ -1949,6 +1964,41 @@ async function deleteShop(id){
     if(S.view.type==='shop')S.shop=S.view.id;
     CM();render();toast(`ลบสาย "${shop.name}" แล้ว`);
   }catch(err){toast('ลบไม่สำเร็จ: '+err.message);console.error(err);}
+}
+
+function openVehicle(sid){
+  const shop=S.shops.find(s=>s.id===sid);if(!shop)return;
+  const v=shop.vehicle||{};
+  OM('🚐 ข้อมูลรถ — '+shop.name,
+    `<div style="display:grid;gap:10px;">
+      <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">เลขทะเบียนรถ</div>
+        <input id="veh-plate" value="${v.plate||''}" placeholder="กข 1234 กรุงเทพ" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--mono);text-transform:uppercase;"></div>
+      <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">เลขครัสซี (17 หลัก)</div>
+        <input id="veh-chassis" value="${v.chassis||''}" placeholder="XXXXXXXXXXXXXXXXX" maxlength="17" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--mono);text-transform:uppercase;"></div>
+      <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ประกันอุบัติเหตุของ</div>
+        <input id="veh-insurance" value="${v.insurance||''}" placeholder="ชื่อบริษัทประกัน" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
+      <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">เบอร์โทรประกันอุบัติเหตุ</div>
+        <input id="veh-ins-tel" type="tel" value="${v.ins_tel||''}" placeholder="02-xxx-xxxx" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--mono);"></div>
+      <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">วันที่ถ่ายน้ำมันเครื่องล่าสุด</div>
+        <input id="veh-oil" type="date" value="${v.oil_date||''}" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
+    </div>`,
+    `<button class="btn btn-x" onclick="CMask()">ยกเลิก</button><button class="btn btn-g" onclick="saveVehicle('${sid}')">บันทึก</button>`
+  );
+}
+async function saveVehicle(sid){
+  const shop=S.shops.find(s=>s.id===sid);if(!shop)return;
+  const vehicle={
+    plate:(document.getElementById('veh-plate')?.value||'').trim().toUpperCase()||null,
+    chassis:(document.getElementById('veh-chassis')?.value||'').trim().toUpperCase()||null,
+    insurance:(document.getElementById('veh-insurance')?.value||'').trim()||null,
+    ins_tel:(document.getElementById('veh-ins-tel')?.value||'').trim()||null,
+    oil_date:document.getElementById('veh-oil')?.value||null,
+  };
+  try{
+    await sbUpsert('routes',[{id:sid,name:shop.name,color:shop.color,tab_flags:shop.tab_flags,sort_order:shop.sort_order,vehicle}]);
+    shop.vehicle=vehicle;
+    CM();render();toast('บันทึกข้อมูลรถแล้ว ✓');
+  }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);}
 }
 
 function setView(type,id){S.view={type,id};if(type==='shop')S.shop=id;render();}
