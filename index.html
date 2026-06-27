@@ -3199,11 +3199,9 @@ function renderPrEmployees(){
     </div>`:'';
     const chips=emps.map(emp=>{
       const loans=PR.loans.filter(l=>l.employee_id===emp.id&&l.status==='active');
-      const dragAttrs=editMode
-        ?`ontouchstart="_empTouchStart(event,'${emp.id}')" onmousedown="_empMouseStart(event,'${emp.id}')" style="cursor:grab;"`
-        :`style="cursor:pointer;"`;
+      const dragAttrs=editMode?`ontouchstart="_empTouchStart(event,'${emp.id}')" onmousedown="_empMouseStart(event,'${emp.id}')"`:'' ;
       return`<div data-emp-id="${emp.id}" onclick="openEmpDetail('${emp.id}')" ${dragAttrs}
-        style="display:inline-flex;flex-direction:column;gap:1px;padding:6px 10px;background:var(--bg2);border:1px solid ${editMode?'var(--amber)':'var(--border)'};border-radius:7px;min-width:80px;transition:border .15s;user-select:none;-webkit-user-select:none;"
+        style="display:inline-flex;flex-direction:column;gap:1px;padding:6px 10px;background:var(--bg2);border:1px solid ${editMode?'var(--amber)':'var(--border)'};border-radius:7px;min-width:80px;transition:border .15s;user-select:none;-webkit-user-select:none;cursor:${editMode?'grab':'pointer'};"
         onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='var(--bg2)'">
         <div style="font-size:13px;font-weight:500;white-space:nowrap;">${emp.name}${loans.length>0?`<span style="font-size:10px;color:var(--amber);margin-left:3px;">●</span>`:''}</div>
         ${(_prSettings.hideRates||isHR())?'':` <div style="font-size:11px;color:var(--text3);font-family:var(--mono);">${fmt(emp.daily_rate||0)}</div>`}
