@@ -868,6 +868,7 @@ function renderShopContent(){
         ${veh.chassis?`<div><span style="color:var(--text3);">เลขครัสซี:</span> <span style="font-family:var(--mono);font-size:11px;">${veh.chassis}</span></div>`:''}
         ${veh.insurance?`<div><span style="color:var(--text3);">ประกัน:</span> ${veh.insurance}</div>`:''}
         ${veh.ins_tel?`<div><span style="color:var(--text3);">เบอร์ประกัน:</span> <a href="tel:${veh.ins_tel}" style="color:var(--text);font-family:var(--mono);">${veh.ins_tel}</a></div>`:''}
+        ${veh.ins_expiry?`<div><span style="color:var(--text3);">ประกันหมด:</span> ${veh.ins_expiry}</div>`:''}
         ${veh.oil_date?`<div style="grid-column:1/-1;"><span style="color:var(--text3);">ถ่ายน้ำมันล่าสุด:</span> ${veh.oil_date}</div>`:''}
       </div>`:`<div style="color:var(--text3);font-size:13px;">ยังไม่มีข้อมูลรถ</div>`}
     </div>
@@ -1979,6 +1980,8 @@ function openVehicle(sid){
         <input id="veh-insurance" value="${v.insurance||''}" placeholder="ชื่อบริษัทประกัน" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
       <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">เบอร์โทรประกันอุบัติเหตุ</div>
         <input id="veh-ins-tel" type="tel" value="${v.ins_tel||''}" placeholder="02-xxx-xxxx" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--mono);"></div>
+      <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">วันหมดอายุประกัน</div>
+        <input id="veh-ins-expiry" type="date" value="${v.ins_expiry||''}" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
       <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">วันที่ถ่ายน้ำมันเครื่องล่าสุด</div>
         <input id="veh-oil" type="date" value="${v.oil_date||''}" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
     </div>`,
@@ -1992,6 +1995,7 @@ async function saveVehicle(sid){
     chassis:(document.getElementById('veh-chassis')?.value||'').trim().toUpperCase()||null,
     insurance:(document.getElementById('veh-insurance')?.value||'').trim()||null,
     ins_tel:(document.getElementById('veh-ins-tel')?.value||'').trim()||null,
+    ins_expiry:document.getElementById('veh-ins-expiry')?.value||null,
     oil_date:document.getElementById('veh-oil')?.value||null,
   };
   try{
@@ -3864,6 +3868,7 @@ function openAllVehicles(){
       <td style="padding:4px;">${inp('chassis',v.chassis,'17 หลัก')}</td>
       <td style="padding:4px;">${inp('insurance',v.insurance,'บริษัทประกัน','text','font-family:var(--font);')}</td>
       <td style="padding:4px;">${inp('ins_tel',v.ins_tel,'02-xxx-xxxx','tel')}</td>
+      <td style="padding:4px;">${inp('ins_expiry',v.ins_expiry,'','date','font-family:var(--font);')}</td>
       <td style="padding:4px;">
         <div style="display:flex;gap:4px;align-items:center;">
           ${inp('oil_date',v.oil_date,'','date','font-family:var(--font);flex:1;')}
@@ -3882,6 +3887,7 @@ function openAllVehicles(){
             <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:130px;">เลขครัสซี</th>
             <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:120px;">ประกันของ</th>
             <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:110px;">เบอร์ประกัน</th>
+            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:120px;">ประกันหมดอายุ</th>
             <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:120px;">ถ่ายน้ำมันล่าสุด</th>
           </tr>
         </thead>
