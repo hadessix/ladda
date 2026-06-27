@@ -3709,8 +3709,15 @@ function openAllEmployees(){
 async function _allEmpField(empId,field,val){
   const emp=PR.employees.find(e=>e.id===empId);if(!emp)return;
   emp[field]=val;
-  try{await sbUpsert('employees',[emp]);toast('บันทึกแล้ว ✓');}
-  catch(e){toast('บันทึกไม่สำเร็จ');}
+  const salaryFields=['daily_rate','phone_fee','room_fee','department','position','payment_type'];
+  try{
+    if(salaryFields.includes(field)){
+      await sbUpsert('employees_salary',[{employee_id:empId,daily_rate:emp.daily_rate||360,phone_fee:emp.phone_fee||0,room_fee:emp.room_fee||0,department:emp.department||null,position:emp.position||null,payment_type:emp.payment_type||'เงินสดW'}]);
+    } else {
+      await sbUpsert('employees',[emp]);
+    }
+    toast('บันทึกแล้ว ✓');
+  }catch(e){toast('บันทึกไม่สำเร็จ');}
 }
 function openEditEmployee(empId){
   const emp=PR.employees.find(e=>e.id===empId);if(!emp)return;
