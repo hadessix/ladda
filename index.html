@@ -3864,7 +3864,12 @@ function openAllVehicles(){
       <td style="padding:4px;">${inp('chassis',v.chassis,'17 หลัก')}</td>
       <td style="padding:4px;">${inp('insurance',v.insurance,'บริษัทประกัน','text','font-family:var(--font);')}</td>
       <td style="padding:4px;">${inp('ins_tel',v.ins_tel,'02-xxx-xxxx','tel')}</td>
-      <td style="padding:4px;">${inp('oil_date',v.oil_date,'','date','font-family:var(--font);')}</td>
+      <td style="padding:4px;">
+        <div style="display:flex;gap:4px;align-items:center;">
+          ${inp('oil_date',v.oil_date,'','date','font-family:var(--font);flex:1;')}
+          <button onclick="_vehOilToday('${rt.id}')" title="ถ่ายน้ำมันวันนี้" style="flex-shrink:0;font-size:16px;padding:3px 6px;background:transparent;border:1px solid var(--border);border-radius:5px;cursor:pointer;line-height:1;">🛢️</button>
+        </div>
+      </td>
     </tr>`;
   }).join('');
   OM('🚐 ประวัติรถทั้งหมด',
@@ -3885,6 +3890,13 @@ function openAllVehicles(){
     </div>`,
     `<button class="btn btn-x" onclick="CMask()">ปิด</button>`
   );
+}
+async function _vehOilToday(routeId){
+  const d=today();
+  // อัปเดต input ใน DOM
+  const input=document.querySelector(`input[data-rt="${routeId}"][data-f="oil_date"]`);
+  if(input)input.value=d;
+  await _allVehField(routeId,'oil_date',d);
 }
 async function _allVehField(routeId,field,val){
   const shop=S.shops.find(s=>s.id===routeId);if(!shop)return;
