@@ -3151,6 +3151,8 @@ function openAddEmployee(){
       </div>
       ${natFieldHR}
       ${salaryFields}
+      ${isHR()?`<div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">วันที่เริ่มงาน</div>
+        <input id="ae-start" type="date" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>`:''}
       <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">หมายเหตุ</div>
         <input id="ae-notes" placeholder="..." style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
     </div>`,
@@ -3355,6 +3357,13 @@ async function saveEmployee(editId){
     emp.department=existing?.department||null;
     emp.position=existing?.position||null;
     emp.payment_type=existing?.payment_type||'เงินสดW';
+    // HR กรอก start_date ได้ตอนเพิ่มใหม่เท่านั้น
+    if(!editId){
+      const sd=document.getElementById('ae-start')?.value;
+      if(sd) emp.start_date=sd;
+    } else {
+      emp.start_date=existing?.start_date||null;
+    }
   }
   try{
     await sbUpsert('employees',[emp]);
@@ -3504,7 +3513,6 @@ function openEmpDetail(empId){
         <div class="sc"><div class="lb">สาย</div><div class="vl" style="font-size:14px;">${rt?rt.name:'—'}</div></div>
         <div class="sc"><div class="lb">สัญชาติ</div><div class="vl" style="font-size:14px;">${emp.nationality||'—'}</div></div>
         <div class="sc"><div class="lb">สถานะ</div><div class="vl" style="font-size:14px;color:${isBL?'var(--red)':isActive?'var(--green)':'var(--text3)'};">${isBL?'🚫 ห้ามรับ':isActive?'✅ ทำงานอยู่':'❌ ออกแล้ว'}</div></div>
-        <div class="sc"><div class="lb">วันที่เริ่มงาน</div><div class="vl" style="font-size:14px;">${emp.start_date||'—'}</div></div>
       </div>`
     :`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
         <div class="sc"><div class="lb">สาย</div><div class="vl" style="font-size:14px;">${rt?rt.name:'—'}</div></div>
