@@ -871,7 +871,7 @@ function renderShopContent(){
         ${veh.oil_date?`<div style="grid-column:1/-1;"><span style="color:var(--text3);">ถ่ายน้ำมันล่าสุด:</span> ${veh.oil_date}</div>`:''}
       </div>`:`<div style="color:var(--text3);font-size:13px;">ยังไม่มีข้อมูลรถ</div>`}
     </div>
-    ${isAdmin()?`<button onclick="openVehicle('${sid}')" style="flex-shrink:0;font-size:12px;padding:4px 10px;background:transparent;border:1px dashed var(--border2);color:var(--text3);border-radius:6px;cursor:pointer;">✏️ แก้ไข</button>`:''}
+    ${(isAdmin()||isHR())?`<button onclick="openVehicle('${sid}')" style="flex-shrink:0;font-size:12px;padding:4px 10px;background:transparent;border:1px dashed var(--border2);color:var(--text3);border-radius:6px;cursor:pointer;">✏️ แก้ไข</button>`:''}
   </div>`;
   if(sess){
     const sessTotal=sess.subs.reduce((s,e)=>s+bv(e.bills||eb()),0);
