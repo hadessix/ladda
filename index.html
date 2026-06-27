@@ -2628,11 +2628,11 @@ function openPeriod(periodId){
     `<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
       <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;">
         <span style="font-size:13px;color:var(--text2);">${ents.length} คน</span>
-        <span style="font-family:var(--mono);color:var(--green);font-size:16px;font-weight:600;">${fmt(grandTotal)}</span>
+        <span id="pr-hdr-grand" style="font-family:var(--mono);color:var(--green);font-size:16px;font-weight:600;">${fmt(grandTotal)}</span>
         <span style="font-size:11px;color:var(--text3);">|</span>
-        <span style="font-size:12px;color:var(--text2);">${_ownerName} <span style="font-family:var(--mono);color:var(--green);font-weight:600;">${fmt(_tot1Main)}</span></span>
-        ${_f1Id?`<span style="font-size:12px;color:var(--text2);">F1 <span style="font-family:var(--mono);color:var(--green);font-weight:600;">${fmt(_tot1F1)}</span></span>`:''}
-        ${_burGrp?`<span style="font-size:12px;color:var(--text2);">${_burGrp.name} <span style="font-family:var(--mono);color:var(--green);font-weight:600;">${fmt(_tot2)}</span></span>`:''}
+        <span style="font-size:12px;color:var(--text2);">${_ownerName} <span id="pr-hdr-main" style="font-family:var(--mono);color:var(--green);font-weight:600;">${fmt(_tot1Main)}</span></span>
+        ${_f1Id?`<span style="font-size:12px;color:var(--text2);">F1 <span id="pr-hdr-f1" style="font-family:var(--mono);color:var(--green);font-weight:600;">${fmt(_tot1F1)}</span></span>`:''}
+        ${_burGrp?`<span style="font-size:12px;color:var(--text2);">${_burGrp.name} <span id="pr-hdr-bur" style="font-family:var(--mono);color:var(--green);font-weight:600;">${fmt(_tot2)}</span></span>`:''}
       </div>
       ${isPaid?`<span style="font-size:12px;color:var(--green);background:var(--gdim);border:1px solid var(--gbr);padding:3px 10px;border-radius:4px;">✅ จ่ายแล้ว</span>`:`<span style="font-size:12px;color:var(--amber);background:var(--adim);border:1px solid var(--abr);padding:3px 10px;border-radius:4px;">⏳ รอจ่าย</span>`}
     </div>
@@ -2838,9 +2838,31 @@ async function prUpdateEntry(entryId,field,value){
   const deds=PR.deductions.filter(d=>d.entry_id===entryId);
   const net=(emp.daily_rate||0)*(e.days_worked||0)+(e.bonus||0)-deds.reduce((s,d)=>s+d.amount,0)-(e.advance||0);
   e.net_pay=net;
-  // อัปเดต cell สุทธิใน DOM ทันที ไม่ต้อง F5
+  // อัปเดต cell สุทธิใน DOM ทันที
   const netCell=document.getElementById('pr-net-'+entryId);
   if(netCell){netCell.textContent=fmt(net);netCell.style.color=net<0?'var(--red)':'var(--text)';}
+  // อัปเดต header totals ทันที
+  const periodId=e.period_id;
+  const periodEnts=PR.entries.filter(x=>x.period_id===periodId);
+  const _f1Id=S.shops.find(s=>s.name==='F1')?.id;
+  const _burGrp=S.groups.find(g=>g.name.includes('บูรชัย'));
+  const _burIds=new Set(_burGrp?S.groupMembers[_burGrp.id]||[]:[]);
+  let _grand=0,_main=0,_f1=0,_bur=0;
+  periodEnts.forEach(x=>{
+    const xemp=PR.employees.find(p=>p.id===x.employee_id);if(!xemp)return;
+    const xdeds=PR.deductions.filter(d=>d.entry_id===x.id);
+    const xnet=(xemp.daily_rate||0)*(x.days_worked||0)+(x.bonus||0)-xdeds.reduce((s,d)=>s+d.amount,0)-(x.advance||0);
+    const pt=xemp.payment_type||'เงินสดW';
+    const inBur=_burIds.has(xemp.route_id);
+    _grand+=xnet;
+    if(xemp.route_id===_f1Id&&pt==='เงินสดW')_f1+=xnet;
+    else if(inBur&&(pt==='เงินสดW'||pt==='โอนจ่ายM'))_bur+=xnet;
+    else if(pt==='เงินสดW')_main+=xnet;
+  });
+  const _g=document.getElementById('pr-hdr-grand');if(_g)_g.textContent=fmt(_grand);
+  const _m=document.getElementById('pr-hdr-main');if(_m)_m.textContent=fmt(_main);
+  const _f=document.getElementById('pr-hdr-f1');if(_f)_f.textContent=fmt(_f1);
+  const _b=document.getElementById('pr-hdr-bur');if(_b)_b.textContent=fmt(_bur);
   try{await sbUpsert('payroll_entries',[e]);}catch(err){toast('บันทึกไม่สำเร็จ');}
 }
 
