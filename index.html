@@ -2432,7 +2432,12 @@ function renderPrPeriods(){
         if(k!=='C'){const emp=PR.employees.find(x=>x.id===e.employee_id);if(emp&&_monthlyTypes.includes(emp.payment_type))return false;}
         return true;
       });
-      const total=ents.reduce((s,e)=>s+(e.net_pay||0),0);
+      const total=ents.reduce((s,e)=>{
+        const emp=PR.employees.find(x=>x.id===e.employee_id);
+        const deds=PR.deductions.filter(d=>d.entry_id===e.id);
+        const net=(emp?.daily_rate||0)*(e.days_worked||0)+(e.bonus||0)-deds.reduce((a,d)=>a+d.amount,0)-(e.advance||0);
+        return s+net;
+      },0);
       const isPaid=period.status==='paid';
       html+=`<div class="pr-period-card ${isPaid?'paid':'draft'}" onclick="openPeriod('${period.id}')">
         <div class="pr-period-title">${lbl}</div>
