@@ -3120,6 +3120,8 @@ function _prEyeClose(){
   const popup=document.getElementById('pr-eye-popup');
   if(popup)popup.style.display='none';
 }
+// จัดอันดับตำแหน่งสำหรับเรียง chip: คนขับรถ < อื่นๆ < เด็กติดรถ
+function _empPosRank(e){const p=e.position||'';if(p==='คนขับรถ')return 0;if(p==='เด็กติดรถ')return 2;return 1;}
 function renderPrEmployees(){
   const _hiddenPos=new Set([...(_prSettings.hideManager?['ผู้จัดการ']:[]),...(_prSettings.hideTopManager?['ผู้จัดการใหญ่']:[])]);
   const active=PR.employees.filter(e=>e.status==='active'&&!_hiddenPos.has(e.position));
@@ -3171,6 +3173,7 @@ function renderPrEmployees(){
   }
   function _routeRow(rt, emps, allRoutes, isFirst, editMode){
     if(!emps||emps.length===0)return'';
+    emps=[...emps].sort((a,b)=>_empPosRank(a)-_empPosRank(b)); // คนขับรถมาก่อนเด็กติดรถเสมอ
     const idx=allRoutes.findIndex(r=>r.id===rt.id);
     const canUp=idx>0, canDown=idx<allRoutes.length-1;
     const arrowBtns=editMode?`<div style="display:flex;gap:3px;margin-top:2px;">
