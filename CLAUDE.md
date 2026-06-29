@@ -343,7 +343,8 @@ employees_salary (
 | `_migrateVehicles()` | admin: copy routes.vehicle เดิม → vehicles (owner_type='route'); idempotent ข้ามสายที่มีแล้ว |
 | `openAllEmployees()` | table modal ประวัติพนักงานทุกคน; rowspan grouped by route/group order; HR access (ซ่อน daily_rate/payment_type/start_date); Thai = ซ่อน permit_expiry |
 | `_prGearToggle(key)` | toggle `_prEditGrp` (group id หรือ 'standalone'); เปิด/ปิด edit mode ใน renderPrEmployees |
-| `_routeRow(rt,editMode)` | render route chip ใน tab พนักงาน; editMode=true → ↑↓ + drag handlers |
+| `_routeRow(rt,editMode)` | render route chip ใน tab พนักงาน; editMode=true → ↑↓ + drag handlers; chip เรียงด้วย `_empPosRank` (คนขับรถก่อนเด็กติดรถ) |
+| `_empPosRank(e)` | จัดอันดับเรียง chip ในสาย: คนขับรถ=0, อื่นๆ=1, เด็กติดรถ=2 |
 | `_prEyeMenu(e)` | เปิด/ปิด `#pr-eye-popup` context menu ใต้ปุ่ม 👁️; วาง position จาก getBoundingClientRect |
 | `_prEyeClose()` | ซ่อน `#pr-eye-popup` |
 
@@ -481,7 +482,7 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 | `openAddEmployee()` | admin: form เต็ม; hr: form แค่ ชื่อ/สาย/สัญชาติ/หมายเหตุ |
 | `openEditEmployee(empId)` | admin: form เต็ม; hr: form แค่ ชื่อ/สาย/สัญชาติ/หมายเหตุ |
 | `saveEmployee(editId)` | admin: upsert employees + employees_salary; hr: upsert employees เท่านั้น (คง daily_rate เดิม) |
-| `openEmpDetail(empId)` | admin: โปรไฟล์เต็ม + loan + status buttons; hr: เห็นแค่ สาย/สัญชาติ/สถานะ + รูป |
+| `openEmpDetail(empId)` | admin: โปรไฟล์เต็ม + loan + status buttons; hr: เห็นแค่ สาย/สัญชาติ/สถานะ + รูป; รูปโปรไฟล์ใหญ่ `min(68vw,260px)` aspect 3/4 มุมมน แตะดูเต็ม |
 | `setEmpStatus(empId,status)` | active/resigned/blacklisted (admin only) |
 | `openAddLoan(empId)` | เพิ่ม loan/บัตร (admin only) |
 | `saveLoan(empId)` | บันทึก loan |
@@ -618,7 +619,11 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - [x] _prEditGrp + _prGearToggle — gear per group ใน tab พนักงาน → unlock drag + ↑↓
 - [x] _routeRow(editMode) — ↑↓ อยู่ซ้าย, drag handlers ติดเฉพาะ editMode=true
 - [x] แทน FAB 2 ปุ่ม (📤⚙️) ด้วยปุ่ม 👁️ + context menu popup ใน header tab พนักงาน
-- [x] vehicles table แยก (1 แถว=1คัน, owner route/group/office) — openAllVehicles แบ่ง section ตามเจ้าของ + เพิ่ม/ลบหลายคัน; ปุ่ม 📥 migrate จาก routes.vehicle เดิม (รองรับ บูรชัย 4 + ออฟฟิศ 3) — ต้อง `create table vehicles` + grant + disable RLS
+- [x] vehicles table แยก (1 แถว=1คัน, owner route/office) — openAllVehicles แบ่ง section รายสายย่อย + เพิ่ม/ลบหลายคัน; ปุ่ม 📥 migrate จาก routes.vehicle เดิม (รองรับ บูรชัย 4 + ออฟฟิศ 3) — ต้อง `create table vehicles` + grant + disable RLS
+- [x] openRouteVehicles — โมดัลรถรายสาย (การ์ดเต็ม) เปิดจากปุ่ม 🚐 ที่สายย่อย/หน้าสาย; `_vehCtx`+`_vehRerender()` แยกบริบทกับ openAllVehicles
+- [x] vehicles.photos jsonb — รูปรถ 3 มุม (front/side/rear) ผ่าน Cloudinary; แสดงบนสุดของการ์ดรายคัน; อัปจากแกลเลอรีได้ (ไม่ล็อกกล้อง) — ต้อง `alter table vehicles add column photos jsonb`
+- [x] รูปโปรไฟล์พนักงานใน openEmpDetail ใหญ่ขึ้น `min(68vw,260px)` aspect 3/4 แตะดูเต็ม
+- [x] เรียง chip พนักงานในสาย: คนขับรถก่อนเด็กติดรถ (`_empPosRank`)
 
 ### 🔲 งานที่ admin ต้องทำเองในแอป (ไม่ใช่งานโค้ด)
 - [ ] กำหนดสาย + ตำแหน่ง + payment_type ให้พนักงานทุกคน
