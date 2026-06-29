@@ -45,6 +45,7 @@ alter table vehicles disable row level security;
 | `tax_expiry` | อายุภาษี |
 | `prb_expiry` | อายุพรบ. |
 | `oil_date` | วันถ่ายน้ำมันล่าสุด |
+| `photos` | jsonb `{ front, side, rear }` URL รูปรถ 3 มุม (Cloudinary) — แสดง/อัปโหลดในโมดัลรายคันเท่านั้น |
 
 **รถในกลุ่มผูกกับสายย่อยเสมอ** — กลุ่ม (เช่น บูรชัย) เป็นแค่ header กำกับ ไม่กองรวมที่ระดับกลุ่ม เพื่อให้รู้ว่าคันไหนเป็นของสายไหน
 
@@ -59,6 +60,12 @@ alter table vehicles disable row level security;
 ### ดู/แก้รถของสายเดียว
 - ปุ่ม 🚐 ที่กล่องสายย่อย (tab พนักงาน) หรือปุ่ม ✏️ จัดการ (หน้าสายในแอปหลัก)
 - เปิด modal เฉพาะรถของสายนั้น ใช้การ์ดเต็ม (label + ช่อง 2 คอลัมน์)
+
+### รูปรถ 3 มุม (เฉพาะโมดัลรายคัน)
+ในการ์ดรถแบบรายคัน (openRouteVehicles) มีช่องอัปโหลดรูป 3 มุม: **ด้านหน้า / ด้านข้าง / ด้านท้าย**
+- กด 📷 เพิ่มรูป → อัปโหลดขึ้น Cloudinary (preset `ladda_employees`, public_id `veh_<id>_<slot>`) → เก็บ URL ใน `vehicles.photos` jsonb
+- คลิกรูป → เปิดดูเต็มในแท็บใหม่; กด × มุมขวาบน → ลบรูป
+- ต้องมีคอลัมน์ `photos` ก่อน: `alter table vehicles add column if not exists photos jsonb;`
 
 ### ปุ่มอื่น
 - 🛢️ ข้างช่องถ่ายน้ำมัน → เซ็ตวันถ่ายน้ำมันเป็นวันนี้

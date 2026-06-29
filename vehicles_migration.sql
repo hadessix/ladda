@@ -15,6 +15,7 @@ create table if not exists vehicles (
   tax_expiry  date,
   prb_expiry  date,
   oil_date    date,
+  photos      jsonb,                -- { front, side, rear } URL รูปรถ 3 มุม (Cloudinary)
   sort_order  int default 0,
   created_at  timestamp default now()
 );
@@ -22,3 +23,6 @@ create table if not exists vehicles (
 -- Supabase SQL editor ไม่ auto-grant anon role → ต้อง grant + disable RLS เอง
 grant all on table vehicles to anon, authenticated, service_role;
 alter table vehicles disable row level security;
+
+-- ถ้าสร้างตาราง vehicles ไปก่อนหน้านี้แล้ว (ยังไม่มี photos) ให้รันบรรทัดนี้เพิ่ม:
+alter table vehicles add column if not exists photos jsonb;

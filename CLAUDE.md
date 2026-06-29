@@ -88,6 +88,7 @@ vehicles (                          -- ประวัติรถ: 1 แถว 
   tax_expiry  date,
   prb_expiry  date,
   oil_date    date,
+  photos      jsonb,                          -- { front, side, rear } URL รูปรถ 3 มุม (Cloudinary); แสดงเฉพาะโมดัลรายคัน
   sort_order  int DEFAULT 0,
   created_at  timestamp DEFAULT now()
 )
@@ -330,6 +331,9 @@ employees_salary (
 | `_vehSection(o)` | render 1 section ต่อเจ้าของใน openAllVehicles; กล่องสายซ้าย + การ์ด compact `_vehCard` ขวา |
 | `_vehCardFull(v)` / `_vehCard(v)` | การ์ดเต็ม (รายสาย) / การ์ด compact 1 แถว (ทั้งหมด) |
 | `_vehCtx` / `_vehRerender()` | `null`=ดูทั้งหมด, routeId=ดูรายสาย; `_vehAdd`/`_vehDel` เรียก `_vehRerender()` เพื่อ re-render โมดัลที่เปิดอยู่ให้ถูกตัว |
+| `_vehPhotoSlot(v,slot,label)` | render ช่องรูปรถ 1 มุม (front/side/rear) ใน `_vehCardFull`; มีรูป=thumbnail+ลบ, ไม่มี=ปุ่มอัปโหลด |
+| `uploadVehPhoto(vehId,slot,input)` | อัปโหลดรูปรถขึ้น Cloudinary → เก็บใน `vehicles.photos[slot]` → `_vehRerender()` |
+| `delVehPhoto(vehId,slot)` | ลบรูปมุมนั้นจาก `photos` jsonb |
 | `_vehFor(type,id)` | คืน vehicles ของเจ้าของนั้น (office: owner_type==='office') |
 | `_vehCard(v)` | render การ์ดรถ 1 คัน (name + grid fields + 🗑/🛢️) |
 | `_vehField(id,field,val)` | save field onchange → upsert vehicles แถวเต็ม; toUpperCase plate/chassis |
