@@ -3898,36 +3898,44 @@ function _vehCard(v){
     </div>
   </div>`;
 }
-function _vehOwners(){
-  const grouped=groupedRouteIds();
-  const owners=[];
-  [...S.groups].sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).forEach(g=>owners.push({type:'group',id:g.id,name:g.name,color:'#8b5cf6'}));
-  [...S.shops].filter(s=>!grouped.has(s.id)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).forEach(r=>owners.push({type:'route',id:r.id,name:r.name,color:r.color||'#22c55e'}));
-  owners.push({type:'office',id:'',name:'ออฟฟิศ',color:'#64748b'});
-  return owners;
-}
 function _vehFor(type,id){
   return S.vehicles.filter(v=>type==='office'?v.owner_type==='office':(v.owner_type===type&&v.owner_id===id))
     .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
 }
-function openAllVehicles(){
-  const sections=_vehOwners().map(o=>{
-    const vs=_vehFor(o.type,o.id);
-    return`<div style="margin-bottom:18px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;">
-        <div style="display:flex;align-items:center;gap:7px;">
-          <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${o.color};"></span>
-          <span style="font-size:14px;font-weight:700;">${o.name}</span>
-          <span style="font-size:11px;color:var(--text3);">${vs.length} คัน</span>
-        </div>
-        <button onclick="_vehAdd('${o.type}','${o.id}')" style="font-size:12px;padding:5px 12px;background:transparent;border:1px dashed var(--border2);color:var(--text2);border-radius:6px;cursor:pointer;">+ เพิ่มรถ</button>
+// section ต่อ "เจ้าของ" 1 ราย (สายย่อย / สายเดี่ยว / ออฟฟิศ) — indent ถ้าเป็นสายในกลุ่ม
+function _vehSection(o,indent){
+  const vs=_vehFor(o.type,o.id);
+  return`<div style="margin-bottom:14px;${indent?'padding-left:14px;border-left:2px solid var(--border);margin-left:3px;':''}">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;">
+      <div style="display:flex;align-items:center;gap:7px;">
+        <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${o.color};"></span>
+        <span style="font-size:14px;font-weight:700;">${o.name}</span>
+        <span style="font-size:11px;color:var(--text3);">${vs.length} คัน</span>
       </div>
-      ${vs.length?vs.map(_vehCard).join(''):`<div style="font-size:12px;color:var(--text3);padding:6px 2px;">ยังไม่มีรถ</div>`}
-    </div>`;
-  }).join('');
+      <button onclick="_vehAdd('${o.type}','${o.id}')" style="font-size:12px;padding:5px 12px;background:transparent;border:1px dashed var(--border2);color:var(--text2);border-radius:6px;cursor:pointer;">+ เพิ่มรถ</button>
+    </div>
+    ${vs.length?vs.map(_vehCard).join(''):`<div style="font-size:12px;color:var(--text3);padding:6px 2px;">ยังไม่มีรถ</div>`}
+  </div>`;
+}
+function openAllVehicles(){
+  const grouped=groupedRouteIds();
+  const byId=id=>S.shops.find(s=>s.id===id);
+  let body='';
+  // กลุ่ม → header กลุ่ม + สายย่อยแต่ละสาย (รถผูกกับสายย่อย ไม่กองรวมที่กลุ่ม)
+  [...S.groups].sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).forEach(g=>{
+    const members=(S.groupMembers[g.id]||[]).map(byId).filter(Boolean);
+    if(!members.length)return;
+    body+=`<div style="font-size:13px;font-weight:700;color:var(--text2);margin:4px 0 8px;display:flex;align-items:center;gap:6px;">📁 ${g.name}</div>`;
+    members.forEach(r=>body+=_vehSection({type:'route',id:r.id,name:r.name,color:r.color||'#22c55e'},true));
+  });
+  // สายเดี่ยว (ไม่อยู่ในกลุ่ม)
+  [...S.shops].filter(s=>!grouped.has(s.id)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
+    .forEach(r=>body+=_vehSection({type:'route',id:r.id,name:r.name,color:r.color||'#22c55e'},false));
+  // ออฟฟิศ
+  body+=_vehSection({type:'office',id:'',name:'ออฟฟิศ',color:'#64748b'},false);
   const migrateBtn=isAdmin()?`<div style="margin-bottom:14px;text-align:right;"><button onclick="_migrateVehicles()" style="font-size:11px;padding:4px 10px;background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:6px;cursor:pointer;">📥 นำเข้าข้อมูลรถเดิม (1 สาย=1คัน)</button></div>`:'';
   OM('🚐 ประวัติรถทั้งหมด',
-    `<div>${migrateBtn}${sections}</div>`,
+    `<div>${migrateBtn}${body}</div>`,
     `<button class="btn btn-x" onclick="CMask()">ปิด</button>`
   );
 }

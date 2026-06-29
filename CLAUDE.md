@@ -77,8 +77,8 @@ routes (
 
 vehicles (                          -- ประวัติรถ: 1 แถว = 1 คัน, ผูกกับ route/group/office (รองรับหลายคันต่อเจ้าของ)
   id          text PRIMARY KEY,
-  owner_type  text NOT NULL DEFAULT 'route',  -- 'route' | 'group' | 'office'
-  owner_id    text,                           -- route_id / group_id / null สำหรับ office
+  owner_type  text NOT NULL DEFAULT 'route',  -- 'route' | 'office' (UI ผูกรถกับสายย่อยเสมอ, ไม่กองรวมที่กลุ่ม)
+  owner_id    text,                           -- route_id / null สำหรับ office
   name        text,                           -- ป้ายชื่อรถ (เช่น "รถบูรชัย 1")
   plate       text,
   chassis     text,
@@ -325,8 +325,8 @@ employees_salary (
 | `OM/CM/CMask/toast` | modal open/close/confirm-close, notification |
 | `_sbGearToggle(id,e)` | toggle sidebar gear สำหรับกลุ่ม (admin only) |
 | `_sbDragStart/_sbDragEnd` | drag-to-reorder สมาชิกในกลุ่ม (sidebar, admin+gear active) |
-| `openAllVehicles()` | modal จัดการรถทั้งหมด แบ่ง section ตามเจ้าของ (กลุ่ม → สายไม่มีกลุ่ม → ออฟฟิศ); แต่ละ section มีปุ่ม "+ เพิ่มรถ"; การ์ดต่อคันมี inline edit + 🗑 ลบ + 🛢️ oil-today; admin มีปุ่ม 📥 นำเข้าข้อมูลรถเดิม |
-| `_vehOwners()` | คืน list เจ้าของรถ: groups (sort) + standalone routes + office |
+| `openAllVehicles()` | modal จัดการรถ; กลุ่มแสดงเป็น header 📁 แล้วแตก section ราย**สายย่อย** (รถผูกกับสายย่อย ไม่กองรวมที่กลุ่ม) → สายเดี่ยว → ออฟฟิศ; แต่ละ section มีปุ่ม "+ เพิ่มรถ"; การ์ดต่อคันมี inline edit + 🗑 ลบ + 🛢️ oil-today; admin มีปุ่ม 📥 นำเข้าข้อมูลรถเดิม |
+| `_vehSection(o,indent)` | render 1 section ต่อเจ้าของ (สายย่อย/สายเดี่ยว/ออฟฟิศ); indent=true = สายในกลุ่ม (เยื้อง + เส้นซ้าย) |
 | `_vehFor(type,id)` | คืน vehicles ของเจ้าของนั้น (office: owner_type==='office') |
 | `_vehCard(v)` | render การ์ดรถ 1 คัน (name + grid fields + 🗑/🛢️) |
 | `_vehField(id,field,val)` | save field onchange → upsert vehicles แถวเต็ม; toUpperCase plate/chassis |
@@ -512,7 +512,7 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - **openPeriod header split totals**: `id="pr-hdr-grand/main/f1/bur"` — ยอดรวม/เฮียรวย/F1/บูรชัย; อัปเดต real-time พร้อมกับ net pay ใน `prUpdateEntry()`
 - **Period card split totals**: การ์ดงวดแสดง เฮียรวย/F1/บูรชัย เหมือนกับหัวหน้างวด; คำนวณสดจาก daily_rate×วัน+โบนัส−หัก−เบิก (ไม่ใช้ net_pay จาก DB)
 - **_allEmpField**: บันทึก salary fields (daily_rate/phone_fee/room_fee/payment_type) ไปที่ `employees_salary`; ฟิลด์อื่น (nationality/start_date/tel ฯลฯ) บันทึกไปที่ `employees` โดย strip salary fields ออกก่อน
-- **vehicles table**: ประวัติรถย้ายจาก `routes.vehicle` jsonb (1 สาย=1คัน) → table `vehicles` แยก (1 แถว=1คัน, หลายคันต่อเจ้าของ); `owner_type` = `route`/`group`/`office`; โหลดเข้า `S.vehicles[]` ทั้งใน `loadAll()` และ `loadPayroll()` (ทั้ง admin+hr); ใช้ `.catch(()=>[])` กันแอปพังถ้ายังไม่สร้าง table; การ์ดต่อคันใน `openAllVehicles()`; **`routes.vehicle` เดิมยังอยู่** สำหรับ migrate ผ่านปุ่ม 📥 `_migrateVehicles()` — บูรชัย(กลุ่ม) 4 คัน + ออฟฟิศ 3 คันเป็นเคสที่ทำให้ต้องแยก table
+- **vehicles table**: ประวัติรถย้ายจาก `routes.vehicle` jsonb (1 สาย=1คัน) → table `vehicles` แยก (1 แถว=1คัน, หลายคันต่อสายได้); `owner_type` = `route`/`office`; **รถในกลุ่มผูกกับสายย่อยเสมอ** (กลุ่มเป็นแค่ header กำกับ ไม่กองรวมที่ระดับกลุ่ม — งั้นจะดูไม่ออกว่าคันไหนของสายไหน); office = รถไม่ผูกสาย; โหลดเข้า `S.vehicles[]` ทั้งใน `loadAll()` และ `loadPayroll()` (admin+hr); `.catch(()=>[])` กันแอปพังถ้ายังไม่สร้าง table; **`routes.vehicle` เดิมยังอยู่** สำหรับ migrate ผ่านปุ่ม 📥 `_migrateVehicles()`
 - **openAllEmployees rowspan layout**: pre-group employees ตาม orderedRoutes (group order เหมือน sidebar); แต่ละ route = `<td rowspan="N">` ครั้งแรก; HR ไม่เห็น daily_rate/payment_type/start_date; สัญชาติไทย = ซ่อน permit_expiry
 - **_prEditGrp global**: `null` หรือ group id หรือ `'standalone'`; กดปุ่มเฟืองใน group header ของ tab พนักงาน → toggle; เมื่อ active: chip เป็น grab cursor + ↑↓ ปรากฏในคอลัมน์ซ้ายของ `_routeRow`; FAB fixed top:80px right:24px ไม่ทับปุ่มเพราะ ↑↓ อยู่ซ้ายแล้ว
 - **employees_salary actual columns**: `employee_id, daily_rate, phone_fee, room_fee, payment_type` เท่านั้น — **ไม่มี** `department` และ `position` (อยู่ใน `employees` table)
