@@ -71,7 +71,24 @@ routes (
   color       text NOT NULL DEFAULT '#22c55e',
   tab_flags   jsonb DEFAULT '{"count":true,"income":true,"expense":true,"exchange":true,"payowner":false,"auto_collect":false,"viewer_visible":false}',
   sort_order  int DEFAULT 0,
-  vehicle     jsonb,               -- { plate, chassis, insurance, ins_tel, ins_expiry, tax_expiry, prb_expiry, oil_date }
+  vehicle     jsonb,               -- LEGACY (1 สาย=1คัน) ย้ายไป table `vehicles` แล้ว; เก็บไว้สำหรับ migrate
+  created_at  timestamp DEFAULT now()
+)
+
+vehicles (                          -- ประวัติรถ: 1 แถว = 1 คัน, ผูกกับ route/group/office (รองรับหลายคันต่อเจ้าของ)
+  id          text PRIMARY KEY,
+  owner_type  text NOT NULL DEFAULT 'route',  -- 'route' | 'group' | 'office'
+  owner_id    text,                           -- route_id / group_id / null สำหรับ office
+  name        text,                           -- ป้ายชื่อรถ (เช่น "รถบูรชัย 1")
+  plate       text,
+  chassis     text,
+  insurance   text,
+  ins_tel     text,
+  ins_expiry  date,
+  tax_expiry  date,
+  prb_expiry  date,
+  oil_date    date,
+  sort_order  int DEFAULT 0,
   created_at  timestamp DEFAULT now()
 )
 
@@ -308,11 +325,15 @@ employees_salary (
 | `OM/CM/CMask/toast` | modal open/close/confirm-close, notification |
 | `_sbGearToggle(id,e)` | toggle sidebar gear สำหรับกลุ่ม (admin only) |
 | `_sbDragStart/_sbDragEnd` | drag-to-reorder สมาชิกในกลุ่ม (sidebar, admin+gear active) |
-| `openVehicle(sid)` | modal แก้ประวัติรถของสายเดียว (plate/chassis/insurance/ins_tel/ins_expiry/tax_expiry/prb_expiry/oil_date) |
-| `saveVehicle(sid)` | upsert routes.vehicle jsonb |
-| `openAllVehicles()` | table modal ประวัติรถทุกสาย; inline edit ด้วย `_allVehField()`; ปุ่ม 🛢️ เซ็ต oil_date = วันนี้ |
-| `_allVehField(routeId,field,val)` | save vehicle field onchange; toUpperCase สำหรับ plate/chassis |
-| `_vehOilToday(routeId)` | เซ็ต oil_date = today(), update DOM input, call `_allVehField` |
+| `openAllVehicles()` | modal จัดการรถทั้งหมด แบ่ง section ตามเจ้าของ (กลุ่ม → สายไม่มีกลุ่ม → ออฟฟิศ); แต่ละ section มีปุ่ม "+ เพิ่มรถ"; การ์ดต่อคันมี inline edit + 🗑 ลบ + 🛢️ oil-today; admin มีปุ่ม 📥 นำเข้าข้อมูลรถเดิม |
+| `_vehOwners()` | คืน list เจ้าของรถ: groups (sort) + standalone routes + office |
+| `_vehFor(type,id)` | คืน vehicles ของเจ้าของนั้น (office: owner_type==='office') |
+| `_vehCard(v)` | render การ์ดรถ 1 คัน (name + grid fields + 🗑/🛢️) |
+| `_vehField(id,field,val)` | save field onchange → upsert vehicles แถวเต็ม; toUpperCase plate/chassis |
+| `_vehAdd(ownerType,ownerId)` | สร้างรถใหม่ในเจ้าของนั้น → re-render openAllVehicles |
+| `_vehDel(id)` | confirm + ลบรถ → re-render |
+| `_vehOilToday(id)` | เซ็ต oil_date = today(), update DOM input, call `_vehField` |
+| `_migrateVehicles()` | admin: copy routes.vehicle เดิม → vehicles (owner_type='route'); idempotent ข้ามสายที่มีแล้ว |
 | `openAllEmployees()` | table modal ประวัติพนักงานทุกคน; rowspan grouped by route/group order; HR access (ซ่อน daily_rate/payment_type/start_date); Thai = ซ่อน permit_expiry |
 | `_prGearToggle(key)` | toggle `_prEditGrp` (group id หรือ 'standalone'); เปิด/ปิด edit mode ใน renderPrEmployees |
 | `_routeRow(rt,editMode)` | render route chip ใน tab พนักงาน; editMode=true → ↑↓ + drag handlers |
@@ -491,7 +512,7 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - **openPeriod header split totals**: `id="pr-hdr-grand/main/f1/bur"` — ยอดรวม/เฮียรวย/F1/บูรชัย; อัปเดต real-time พร้อมกับ net pay ใน `prUpdateEntry()`
 - **Period card split totals**: การ์ดงวดแสดง เฮียรวย/F1/บูรชัย เหมือนกับหัวหน้างวด; คำนวณสดจาก daily_rate×วัน+โบนัส−หัก−เบิก (ไม่ใช้ net_pay จาก DB)
 - **_allEmpField**: บันทึก salary fields (daily_rate/phone_fee/room_fee/payment_type) ไปที่ `employees_salary`; ฟิลด์อื่น (nationality/start_date/tel ฯลฯ) บันทึกไปที่ `employees` โดย strip salary fields ออกก่อน
-- **vehicle jsonb**: เก็บใน `routes.vehicle` — `{ plate, chassis, insurance, ins_tel, ins_expiry, tax_expiry, prb_expiry, oil_date }`; โหลดมาพร้อมกับ routes ใน `loadAll()`; ใช้ `_allVehField()` เพื่อ save รายฟิลด์ใน openAllVehicles table (เพิ่ม key ใหม่ได้เลย ไม่ต้องแก้ schema)
+- **vehicles table**: ประวัติรถย้ายจาก `routes.vehicle` jsonb (1 สาย=1คัน) → table `vehicles` แยก (1 แถว=1คัน, หลายคันต่อเจ้าของ); `owner_type` = `route`/`group`/`office`; โหลดเข้า `S.vehicles[]` ทั้งใน `loadAll()` และ `loadPayroll()` (ทั้ง admin+hr); ใช้ `.catch(()=>[])` กันแอปพังถ้ายังไม่สร้าง table; การ์ดต่อคันใน `openAllVehicles()`; **`routes.vehicle` เดิมยังอยู่** สำหรับ migrate ผ่านปุ่ม 📥 `_migrateVehicles()` — บูรชัย(กลุ่ม) 4 คัน + ออฟฟิศ 3 คันเป็นเคสที่ทำให้ต้องแยก table
 - **openAllEmployees rowspan layout**: pre-group employees ตาม orderedRoutes (group order เหมือน sidebar); แต่ละ route = `<td rowspan="N">` ครั้งแรก; HR ไม่เห็น daily_rate/payment_type/start_date; สัญชาติไทย = ซ่อน permit_expiry
 - **_prEditGrp global**: `null` หรือ group id หรือ `'standalone'`; กดปุ่มเฟืองใน group header ของ tab พนักงาน → toggle; เมื่อ active: chip เป็น grab cursor + ↑↓ ปรากฏในคอลัมน์ซ้ายของ `_routeRow`; FAB fixed top:80px right:24px ไม่ทับปุ่มเพราะ ↑↓ อยู่ซ้ายแล้ว
 - **employees_salary actual columns**: `employee_id, daily_rate, phone_fee, room_fee, payment_type` เท่านั้น — **ไม่มี** `department` และ `position` (อยู่ใน `employees` table)
@@ -590,6 +611,7 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - [x] _prEditGrp + _prGearToggle — gear per group ใน tab พนักงาน → unlock drag + ↑↓
 - [x] _routeRow(editMode) — ↑↓ อยู่ซ้าย, drag handlers ติดเฉพาะ editMode=true
 - [x] แทน FAB 2 ปุ่ม (📤⚙️) ด้วยปุ่ม 👁️ + context menu popup ใน header tab พนักงาน
+- [x] vehicles table แยก (1 แถว=1คัน, owner route/group/office) — openAllVehicles แบ่ง section ตามเจ้าของ + เพิ่ม/ลบหลายคัน; ปุ่ม 📥 migrate จาก routes.vehicle เดิม (รองรับ บูรชัย 4 + ออฟฟิศ 3) — ต้อง `create table vehicles` + grant + disable RLS
 
 ### 🔲 งานที่ admin ต้องทำเองในแอป (ไม่ใช่งานโค้ด)
 - [ ] กำหนดสาย + ตำแหน่ง + payment_type ให้พนักงานทุกคน

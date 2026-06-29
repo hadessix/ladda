@@ -545,6 +545,7 @@ let S={
   shops:[],
   groups:[],       // [{id,name,sort_order,tab_flags}]
   groupMembers:{}, // {groupId:[routeId,...]}
+  vehicles:[],  // [{id,owner_type,owner_id,name,plate,...}] — owner_type: 'route'|'group'|'office'
   entries:{},   // entries[sid][monthKey] = [{...}]
   sessions:{},  // sessions[sid][monthKey] = {subs:[...]} | null
   shop:null,
@@ -556,13 +557,15 @@ let S={
 async function loadAll(){
   document.getElementById('content').innerHTML='<div class="empty"><div class="ei">⏳</div><p>กำลังโหลดข้อมูล...</p></div>';
   try{
-    const [routes,entries,sessions,groups,gMembers]=await Promise.all([
+    const [routes,entries,sessions,groups,gMembers,vehicles]=await Promise.all([
       sbGet('routes','order=sort_order.asc,created_at.asc'),
       sbGet('entries','order=created_at.asc'),
       sbGet('sessions','order=created_at.asc'),
       sbGet('groups','order=sort_order.asc,id.asc'),
       sbGet('group_members','order=sort_order.asc'),
+      sbGet('vehicles','order=sort_order.asc,created_at.asc').catch(()=>[]),
     ]);
+    S.vehicles=vehicles||[];
     S.shops=routes.map(r=>({id:r.id,name:r.name,color:r.color,tab_flags:r.tab_flags||{count:true,income:true,expense:true,exchange:true,payowner:false},sort_order:r.sort_order||0}));
     S.groups=groups.map(g=>({id:g.id,name:g.name,sort_order:g.sort_order||0,is_owner:g.is_owner||false,tab_flags:g.tab_flags||{count:true,income:true,expense:true,exchange:true,payowner:false}}));
     S.groupMembers={};
@@ -859,21 +862,21 @@ function renderShopContent(){
       BT.filter(t=>cb[t]!==0).map(t=>{const neg=cb[t]<0;return`<span class="pill ${BC[t]}" style="${neg?'outline:1px solid var(--red);opacity:.8;':''}">฿${BL[t]} × ${neg?'<span style="color:var(--red)">':''}${fN(cb[t])}${neg?'</span>':''}</span>`;}).join('')+
     `</div></div>`;
   }
-  const veh=shop.vehicle||{};
-  const hasVeh=veh.plate||veh.chassis||veh.insurance||veh.ins_tel||veh.oil_date;
+  const myVehs=(S.vehicles||[]).filter(v=>v.owner_type==='route'&&v.owner_id===sid);
   h+=`<div class="cumul" style="display:flex;align-items:flex-start;gap:10px;justify-content:space-between;">
     <div style="flex:1;">
-      <div class="clb" style="margin-bottom:6px;">🚐 ข้อมูลรถ</div>
-      ${hasVeh?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:13px;">
+      <div class="clb" style="margin-bottom:6px;">🚐 ข้อมูลรถ${myVehs.length>1?` (${myVehs.length} คัน)`:''}</div>
+      ${myVehs.length?myVehs.map(veh=>`<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;font-size:13px;margin-bottom:6px;">
+        ${veh.name?`<div style="grid-column:1/-1;font-weight:600;">${veh.name}</div>`:''}
         ${veh.plate?`<div><span style="color:var(--text3);">ทะเบียน:</span> <span style="font-family:var(--mono);font-weight:600;">${veh.plate}</span></div>`:''}
         ${veh.chassis?`<div><span style="color:var(--text3);">เลขครัสซี:</span> <span style="font-family:var(--mono);font-size:11px;">${veh.chassis}</span></div>`:''}
         ${veh.insurance?`<div><span style="color:var(--text3);">ประกัน:</span> ${veh.insurance}</div>`:''}
         ${veh.ins_tel?`<div><span style="color:var(--text3);">เบอร์ประกัน:</span> <a href="tel:${veh.ins_tel}" style="color:var(--text);font-family:var(--mono);">${veh.ins_tel}</a></div>`:''}
         ${veh.ins_expiry?`<div><span style="color:var(--text3);">ประกันหมด:</span> ${veh.ins_expiry}</div>`:''}
         ${veh.oil_date?`<div style="grid-column:1/-1;"><span style="color:var(--text3);">ถ่ายน้ำมันล่าสุด:</span> ${veh.oil_date}</div>`:''}
-      </div>`:`<div style="color:var(--text3);font-size:13px;">ยังไม่มีข้อมูลรถ</div>`}
+      </div>`).join(''):`<div style="color:var(--text3);font-size:13px;">ยังไม่มีข้อมูลรถ</div>`}
     </div>
-    ${(isAdmin()||isHR())?`<button onclick="openVehicle('${sid}')" style="flex-shrink:0;font-size:12px;padding:4px 10px;background:transparent;border:1px dashed var(--border2);color:var(--text3);border-radius:6px;cursor:pointer;">✏️ แก้ไข</button>`:''}
+    ${(isAdmin()||isHR())?`<button onclick="openAllVehicles()" style="flex-shrink:0;font-size:12px;padding:4px 10px;background:transparent;border:1px dashed var(--border2);color:var(--text3);border-radius:6px;cursor:pointer;">✏️ จัดการ</button>`:''}
   </div>`;
   if(sess){
     const sessTotal=sess.subs.reduce((s,e)=>s+bv(e.bills||eb()),0);
@@ -1968,50 +1971,6 @@ async function deleteShop(id){
   }catch(err){toast('ลบไม่สำเร็จ: '+err.message);console.error(err);}
 }
 
-function openVehicle(sid){
-  const shop=S.shops.find(s=>s.id===sid);if(!shop)return;
-  const v=shop.vehicle||{};
-  OM('🚐 ข้อมูลรถ — '+shop.name,
-    `<div style="display:grid;gap:10px;">
-      <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">เลขทะเบียนรถ</div>
-        <input id="veh-plate" value="${v.plate||''}" placeholder="กข 1234 กรุงเทพ" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--mono);text-transform:uppercase;"></div>
-      <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">เลขครัสซี (17 หลัก)</div>
-        <input id="veh-chassis" value="${v.chassis||''}" placeholder="XXXXXXXXXXXXXXXXX" maxlength="17" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--mono);text-transform:uppercase;"></div>
-      <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">ประกันอุบัติเหตุของ</div>
-        <input id="veh-insurance" value="${v.insurance||''}" placeholder="ชื่อบริษัทประกัน" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
-      <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">เบอร์โทรประกันอุบัติเหตุ</div>
-        <input id="veh-ins-tel" type="tel" value="${v.ins_tel||''}" placeholder="02-xxx-xxxx" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--mono);"></div>
-      <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">วันหมดอายุประกัน</div>
-        <input id="veh-ins-expiry" type="date" value="${v.ins_expiry||''}" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
-      <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">อายุภาษี</div>
-        <input id="veh-tax-expiry" type="date" value="${v.tax_expiry||''}" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
-      <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">อายุพรบ.</div>
-        <input id="veh-prb-expiry" type="date" value="${v.prb_expiry||''}" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
-      <div><div style="font-size:13px;color:var(--text2);margin-bottom:4px;">วันที่ถ่ายน้ำมันเครื่องล่าสุด</div>
-        <input id="veh-oil" type="date" value="${v.oil_date||''}" style="width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:8px 10px;font-size:14px;font-family:var(--font);"></div>
-    </div>`,
-    `<button class="btn btn-x" onclick="CMask()">ยกเลิก</button><button class="btn btn-g" onclick="saveVehicle('${sid}')">บันทึก</button>`
-  );
-}
-async function saveVehicle(sid){
-  const shop=S.shops.find(s=>s.id===sid);if(!shop)return;
-  const vehicle={
-    plate:(document.getElementById('veh-plate')?.value||'').trim().toUpperCase()||null,
-    chassis:(document.getElementById('veh-chassis')?.value||'').trim().toUpperCase()||null,
-    insurance:(document.getElementById('veh-insurance')?.value||'').trim()||null,
-    ins_tel:(document.getElementById('veh-ins-tel')?.value||'').trim()||null,
-    ins_expiry:document.getElementById('veh-ins-expiry')?.value||null,
-    tax_expiry:document.getElementById('veh-tax-expiry')?.value||null,
-    prb_expiry:document.getElementById('veh-prb-expiry')?.value||null,
-    oil_date:document.getElementById('veh-oil')?.value||null,
-  };
-  try{
-    await sbUpsert('routes',[{id:sid,name:shop.name,color:shop.color,tab_flags:shop.tab_flags,sort_order:shop.sort_order,vehicle}]);
-    shop.vehicle=vehicle;
-    CM();render();toast('บันทึกข้อมูลรถแล้ว ✓');
-  }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);}
-}
-
 function setView(type,id){S.view={type,id};if(type==='shop')S.shop=id;render();}
 function setYear(y){S.year=y;const months=Object.keys(Object.assign({},...Object.values(S.entries).map(e=>e))).filter(mk=>mk.startsWith(y));const cp=cpk();const all=new Set([...months,cp.startsWith(y)?cp:''].filter(Boolean));const sorted=[...all].sort();S.month=sorted[sorted.length-1]||cpk();render();}
 function setShop(id){setView('shop',id);}
@@ -2400,14 +2359,16 @@ async function loadPayroll(){
   try{
     if(isHR()){
       // hr โหลด employees + routes + groups + group_members (เพื่อเรียงลำดับให้เหมือน admin)
-      const[emps,routes,groups,gMembers]=await Promise.all([
+      const[emps,routes,groups,gMembers,vehicles]=await Promise.all([
         sbGet('employees','order=created_at'),
         sbGet('routes','order=sort_order'),
         sbGet('groups','order=sort_order'),
-        sbGet('group_members','order=sort_order')
+        sbGet('group_members','order=sort_order'),
+        sbGet('vehicles','order=sort_order.asc,created_at.asc').catch(()=>[])
       ]);
       S.shops=routes;
       S.groups=groups;
+      S.vehicles=vehicles||[];
       S.groupMembers={};
       gMembers.forEach(m=>{if(!S.groupMembers[m.group_id])S.groupMembers[m.group_id]=[];S.groupMembers[m.group_id].push(m.route_id);});
       PR.employees=emps;PR.loans=[];PR.periods=[];PR.entries=[];PR.deductions=[];PR._loaded=true;
@@ -3232,7 +3193,7 @@ function renderPrEmployees(){
         <div style="font-size:11px;font-weight:600;text-align:center;color:var(--text);line-height:1.3;">${rt.name}</div>
         <div style="font-size:10px;color:var(--text3);">${emps.length} คน</div>
         ${arrowBtns}
-        <button onclick="openVehicle('${rt.id}')" title="ข้อมูลรถ" style="font-size:10px;padding:2px 6px;background:transparent;border:1px dashed var(--border2);color:var(--text3);border-radius:5px;cursor:pointer;line-height:1.4;margin-top:2px;">🚐</button>
+        <button onclick="openAllVehicles()" title="ข้อมูลรถ" style="font-size:10px;padding:2px 6px;background:transparent;border:1px dashed var(--border2);color:var(--text3);border-radius:5px;cursor:pointer;line-height:1.4;margin-top:2px;">🚐</button>
       </div>
       <div data-drop-route="${rt.id}" style="flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:8px 10px;transition:background .15s;">${chips}</div>
     </div>`;
@@ -3908,70 +3869,114 @@ async function _allEmpField(empId,field,val){
     toast('บันทึกแล้ว ✓');
   }catch(e){toast('บันทึกไม่สำเร็จ: '+e.message);}
 }
+// ── ประวัติรถ (ตาราง vehicles แยก: 1 แถว = 1 คัน, ผูกกับ route/group/office) ──
+function _vehEsc(s){return String(s==null?'':s).replace(/"/g,'&quot;');}
+function _vehInp(v,f,ph,type='text',extra=''){
+  return`<input data-vid="${v.id}" data-f="${f}" type="${type}" value="${_vehEsc(v[f])}" placeholder="${ph}"
+    onchange="_vehField('${v.id}','${f}',this.value)"
+    style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:5px 7px;font-size:12px;width:100%;box-sizing:border-box;${extra}">`;
+}
+function _vehFld(label,inner){return`<div><div style="font-size:11px;color:var(--text3);margin-bottom:3px;">${label}</div>${inner}</div>`;}
+function _vehCard(v){
+  return`<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--bg2);">
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
+      ${_vehInp(v,'name','ชื่อ/ป้ายรถ เช่น รถบูรชัย 1','text','flex:1;font-weight:600;font-size:13px;')}
+      <button onclick="_vehDel('${v.id}')" title="ลบรถคันนี้" style="flex-shrink:0;font-size:14px;padding:5px 8px;background:transparent;border:1px solid var(--border);border-radius:5px;cursor:pointer;line-height:1;">🗑</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;">
+      ${_vehFld('ทะเบียน',_vehInp(v,'plate','กข 1234','text','font-family:var(--mono);text-transform:uppercase;'))}
+      ${_vehFld('เลขครัสซี',_vehInp(v,'chassis','17 หลัก','text','font-family:var(--mono);text-transform:uppercase;'))}
+      ${_vehFld('ประกันของ',_vehInp(v,'insurance','บริษัทประกัน','text','font-family:var(--font);'))}
+      ${_vehFld('เบอร์ประกัน',_vehInp(v,'ins_tel','02-xxx-xxxx','tel','font-family:var(--mono);'))}
+      ${_vehFld('ประกันหมดอายุ',_vehInp(v,'ins_expiry','','date','font-family:var(--font);'))}
+      ${_vehFld('อายุภาษี',_vehInp(v,'tax_expiry','','date','font-family:var(--font);'))}
+      ${_vehFld('อายุพรบ.',_vehInp(v,'prb_expiry','','date','font-family:var(--font);'))}
+      ${_vehFld('ถ่ายน้ำมันล่าสุด',`<div style="display:flex;gap:4px;align-items:center;">
+        ${_vehInp(v,'oil_date','','date','font-family:var(--font);flex:1;')}
+        <button onclick="_vehOilToday('${v.id}')" title="ถ่ายน้ำมันวันนี้" style="flex-shrink:0;font-size:15px;padding:4px 6px;background:transparent;border:1px solid var(--border);border-radius:5px;cursor:pointer;line-height:1;">🛢️</button>
+      </div>`)}
+    </div>
+  </div>`;
+}
+function _vehOwners(){
+  const grouped=groupedRouteIds();
+  const owners=[];
+  [...S.groups].sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).forEach(g=>owners.push({type:'group',id:g.id,name:g.name,color:'#8b5cf6'}));
+  [...S.shops].filter(s=>!grouped.has(s.id)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).forEach(r=>owners.push({type:'route',id:r.id,name:r.name,color:r.color||'#22c55e'}));
+  owners.push({type:'office',id:'',name:'ออฟฟิศ',color:'#64748b'});
+  return owners;
+}
+function _vehFor(type,id){
+  return S.vehicles.filter(v=>type==='office'?v.owner_type==='office':(v.owner_type===type&&v.owner_id===id))
+    .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
+}
 function openAllVehicles(){
-  const routes=[...S.shops].sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
-  const rows=routes.map((rt,i)=>{
-    const v=rt.vehicle||{};
-    const inp=(id,val,ph,type='text',extra='')=>`<input data-rt="${rt.id}" data-f="${id}" type="${type}" value="${val||''}" placeholder="${ph}"
-      onchange="_allVehField('${rt.id}','${id}',this.value)"
-      style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:12px;font-family:var(--mono);width:100%;${extra}">`;
-    return`<tr style="border-bottom:1px solid var(--border);${i%2===0?'':'background:var(--bg3)'};">
-      <td style="padding:6px 8px;white-space:nowrap;">
-        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${rt.color};margin-right:5px;"></span>
-        <span style="font-size:13px;font-weight:600;">${rt.name}</span>
-      </td>
-      <td style="padding:4px;">${inp('plate',v.plate,'กข 1234')}</td>
-      <td style="padding:4px;">${inp('chassis',v.chassis,'17 หลัก')}</td>
-      <td style="padding:4px;">${inp('insurance',v.insurance,'บริษัทประกัน','text','font-family:var(--font);')}</td>
-      <td style="padding:4px;">${inp('ins_expiry',v.ins_expiry,'','date','font-family:var(--font);')}</td>
-      <td style="padding:4px;">${inp('ins_tel',v.ins_tel,'02-xxx-xxxx','tel')}</td>
-      <td style="padding:4px;">${inp('tax_expiry',v.tax_expiry,'','date','font-family:var(--font);')}</td>
-      <td style="padding:4px;">${inp('prb_expiry',v.prb_expiry,'','date','font-family:var(--font);')}</td>
-      <td style="padding:4px;">
-        <div style="display:flex;gap:4px;align-items:center;">
-          ${inp('oil_date',v.oil_date,'','date','font-family:var(--font);flex:1;')}
-          <button onclick="_vehOilToday('${rt.id}')" title="ถ่ายน้ำมันวันนี้" style="flex-shrink:0;font-size:16px;padding:3px 6px;background:transparent;border:1px solid var(--border);border-radius:5px;cursor:pointer;line-height:1;">🛢️</button>
+  const sections=_vehOwners().map(o=>{
+    const vs=_vehFor(o.type,o.id);
+    return`<div style="margin-bottom:18px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;">
+        <div style="display:flex;align-items:center;gap:7px;">
+          <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${o.color};"></span>
+          <span style="font-size:14px;font-weight:700;">${o.name}</span>
+          <span style="font-size:11px;color:var(--text3);">${vs.length} คัน</span>
         </div>
-      </td>
-    </tr>`;
+        <button onclick="_vehAdd('${o.type}','${o.id}')" style="font-size:12px;padding:5px 12px;background:transparent;border:1px dashed var(--border2);color:var(--text2);border-radius:6px;cursor:pointer;">+ เพิ่มรถ</button>
+      </div>
+      ${vs.length?vs.map(_vehCard).join(''):`<div style="font-size:12px;color:var(--text3);padding:6px 2px;">ยังไม่มีรถ</div>`}
+    </div>`;
   }).join('');
+  const migrateBtn=isAdmin()?`<div style="margin-bottom:14px;text-align:right;"><button onclick="_migrateVehicles()" style="font-size:11px;padding:4px 10px;background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:6px;cursor:pointer;">📥 นำเข้าข้อมูลรถเดิม (1 สาย=1คัน)</button></div>`:'';
   OM('🚐 ประวัติรถทั้งหมด',
-    `<div style="overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;">
-        <thead>
-          <tr style="border-bottom:2px solid var(--border);background:var(--bg3);">
-            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;white-space:nowrap;">สาย</th>
-            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:100px;">ทะเบียน</th>
-            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:130px;">เลขครัสซี</th>
-            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:120px;">ประกันของ</th>
-            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:120px;">ประกันหมดอายุ</th>
-            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:110px;">เบอร์ประกัน</th>
-            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:120px;">อายุภาษี</th>
-            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:120px;">อายุพรบ.</th>
-            <th style="padding:8px;font-size:12px;color:var(--text3);text-align:left;min-width:120px;">ถ่ายน้ำมันล่าสุด</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`,
+    `<div>${migrateBtn}${sections}</div>`,
     `<button class="btn btn-x" onclick="CMask()">ปิด</button>`
   );
 }
-async function _vehOilToday(routeId){
-  const d=today();
-  // อัปเดต input ใน DOM
-  const input=document.querySelector(`input[data-rt="${routeId}"][data-f="oil_date"]`);
-  if(input)input.value=d;
-  await _allVehField(routeId,'oil_date',d);
+async function _vehField(id,field,val){
+  const v=S.vehicles.find(x=>x.id===id);if(!v)return;
+  let nv=(val||'').trim();
+  if(['plate','chassis'].includes(field))nv=nv.toUpperCase();
+  v[field]=nv||null;
+  try{await sbUpsert('vehicles',[v]);toast('บันทึกแล้ว ✓');}
+  catch(e){toast('บันทึกไม่สำเร็จ: '+e.message);}
 }
-async function _allVehField(routeId,field,val){
-  const shop=S.shops.find(s=>s.id===routeId);if(!shop)return;
-  if(!shop.vehicle)shop.vehicle={};
-  shop.vehicle[field]=val.trim().toUpperCase&&['plate','chassis'].includes(field)?val.trim().toUpperCase():val.trim()||null;
+async function _vehOilToday(id){
+  const d=today();
+  const input=document.querySelector(`input[data-vid="${id}"][data-f="oil_date"]`);
+  if(input)input.value=d;
+  await _vehField(id,'oil_date',d);
+}
+async function _vehAdd(ownerType,ownerId){
+  const oid=ownerType==='office'?null:ownerId;
+  const v={id:uid(),owner_type:ownerType,owner_id:oid,name:null,plate:null,chassis:null,
+    insurance:null,ins_tel:null,ins_expiry:null,tax_expiry:null,prb_expiry:null,oil_date:null,
+    sort_order:_vehFor(ownerType,oid===null?'':oid).length};
+  try{await sbUpsert('vehicles',[v]);S.vehicles.push(v);openAllVehicles();}
+  catch(e){toast('เพิ่มไม่สำเร็จ: '+e.message);}
+}
+async function _vehDel(id){
+  if(!confirm('ลบรถคันนี้?'))return;
+  try{await sbDelete('vehicles',`id=eq.${id}`);S.vehicles=S.vehicles.filter(v=>v.id!==id);openAllVehicles();}
+  catch(e){toast('ลบไม่สำเร็จ: '+e.message);}
+}
+async function _migrateVehicles(){
+  if(!isAdmin())return;
+  if(!confirm('นำเข้าข้อมูลรถเดิม (1 สาย = 1 คัน) เข้าตารางใหม่? (ข้ามสายที่นำเข้าแล้ว)'))return;
   try{
-    await sbUpsert('routes',[{id:shop.id,name:shop.name,color:shop.color,tab_flags:shop.tab_flags,sort_order:shop.sort_order,vehicle:shop.vehicle}]);
-    toast('บันทึกแล้ว ✓');
-  }catch(e){toast('บันทึกไม่สำเร็จ: '+e.message);}
+    const routes=await sbGet('routes','select=id,name,vehicle');
+    let n=0;
+    for(const r of routes){
+      const veh=r.vehicle;
+      if(!veh||typeof veh!=='object')continue;
+      if(!(veh.plate||veh.chassis||veh.insurance||veh.ins_tel||veh.ins_expiry||veh.tax_expiry||veh.prb_expiry||veh.oil_date))continue;
+      if(S.vehicles.some(v=>v.owner_type==='route'&&v.owner_id===r.id))continue;
+      const v={id:uid(),owner_type:'route',owner_id:r.id,name:r.name,
+        plate:veh.plate||null,chassis:veh.chassis||null,insurance:veh.insurance||null,ins_tel:veh.ins_tel||null,
+        ins_expiry:veh.ins_expiry||null,tax_expiry:veh.tax_expiry||null,prb_expiry:veh.prb_expiry||null,
+        oil_date:veh.oil_date||null,sort_order:0};
+      await sbUpsert('vehicles',[v]);S.vehicles.push(v);n++;
+    }
+    toast(`นำเข้า ${n} คัน ✓`);openAllVehicles();
+  }catch(e){toast('นำเข้าไม่สำเร็จ: '+e.message);}
 }
 function openEditEmployee(empId){
   const emp=PR.employees.find(e=>e.id===empId);if(!emp)return;
