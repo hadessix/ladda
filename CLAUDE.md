@@ -325,8 +325,11 @@ employees_salary (
 | `OM/CM/CMask/toast` | modal open/close/confirm-close, notification |
 | `_sbGearToggle(id,e)` | toggle sidebar gear สำหรับกลุ่ม (admin only) |
 | `_sbDragStart/_sbDragEnd` | drag-to-reorder สมาชิกในกลุ่ม (sidebar, admin+gear active) |
-| `openAllVehicles()` | modal จัดการรถ; กลุ่มแสดงเป็น header 📁 แล้วแตก section ราย**สายย่อย** (รถผูกกับสายย่อย ไม่กองรวมที่กลุ่ม) → สายเดี่ยว → ออฟฟิศ; แต่ละ section มีปุ่ม "+ เพิ่มรถ"; การ์ดต่อคันมี inline edit + 🗑 ลบ + 🛢️ oil-today; admin มีปุ่ม 📥 นำเข้าข้อมูลรถเดิม |
-| `_vehSection(o,indent)` | render 1 section ต่อเจ้าของ (สายย่อย/สายเดี่ยว/ออฟฟิศ); indent=true = สายในกลุ่ม (เยื้อง + เส้นซ้าย) |
+| `openAllVehicles()` | modal รถ**ทั้งหมด** (ปุ่ม 🚐 ด้านบน); กลุ่มเป็น header 📁 แตก section รายสายย่อย → สายเดี่ยว → ออฟฟิศ; กล่องสายอยู่ซ้าย (แบบหน้าพนักงาน), รถเรียงขวาเป็นแถว compact (1 แถว/คัน); set `_vehCtx=null` |
+| `openRouteVehicles(routeId)` | modal รถ**เฉพาะสายเดียว** (ปุ่ม 🚐 ที่สายย่อย + ปุ่ม ✏️ ในหน้าสาย); ใช้การ์ดเต็ม `_vehCardFull` (label + 2 คอลัมน์); set `_vehCtx=routeId` |
+| `_vehSection(o)` | render 1 section ต่อเจ้าของใน openAllVehicles; กล่องสายซ้าย + การ์ด compact `_vehCard` ขวา |
+| `_vehCardFull(v)` / `_vehCard(v)` | การ์ดเต็ม (รายสาย) / การ์ด compact 1 แถว (ทั้งหมด) |
+| `_vehCtx` / `_vehRerender()` | `null`=ดูทั้งหมด, routeId=ดูรายสาย; `_vehAdd`/`_vehDel` เรียก `_vehRerender()` เพื่อ re-render โมดัลที่เปิดอยู่ให้ถูกตัว |
 | `_vehFor(type,id)` | คืน vehicles ของเจ้าของนั้น (office: owner_type==='office') |
 | `_vehCard(v)` | render การ์ดรถ 1 คัน (name + grid fields + 🗑/🛢️) |
 | `_vehField(id,field,val)` | save field onchange → upsert vehicles แถวเต็ม; toUpperCase plate/chassis |

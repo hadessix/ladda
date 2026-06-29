@@ -876,7 +876,7 @@ function renderShopContent(){
         ${veh.oil_date?`<div style="grid-column:1/-1;"><span style="color:var(--text3);">ถ่ายน้ำมันล่าสุด:</span> ${veh.oil_date}</div>`:''}
       </div>`).join(''):`<div style="color:var(--text3);font-size:13px;">ยังไม่มีข้อมูลรถ</div>`}
     </div>
-    ${(isAdmin()||isHR())?`<button onclick="openAllVehicles()" style="flex-shrink:0;font-size:12px;padding:4px 10px;background:transparent;border:1px dashed var(--border2);color:var(--text3);border-radius:6px;cursor:pointer;">✏️ จัดการ</button>`:''}
+    ${(isAdmin()||isHR())?`<button onclick="openRouteVehicles('${sid}')" style="flex-shrink:0;font-size:12px;padding:4px 10px;background:transparent;border:1px dashed var(--border2);color:var(--text3);border-radius:6px;cursor:pointer;">✏️ จัดการ</button>`:''}
   </div>`;
   if(sess){
     const sessTotal=sess.subs.reduce((s,e)=>s+bv(e.bills||eb()),0);
@@ -3193,7 +3193,7 @@ function renderPrEmployees(){
         <div style="font-size:11px;font-weight:600;text-align:center;color:var(--text);line-height:1.3;">${rt.name}</div>
         <div style="font-size:10px;color:var(--text3);">${emps.length} คน</div>
         ${arrowBtns}
-        <button onclick="openAllVehicles()" title="ข้อมูลรถ" style="font-size:10px;padding:2px 6px;background:transparent;border:1px dashed var(--border2);color:var(--text3);border-radius:5px;cursor:pointer;line-height:1.4;margin-top:2px;">🚐</button>
+        <button onclick="openRouteVehicles('${rt.id}')" title="ข้อมูลรถ" style="font-size:10px;padding:2px 6px;background:transparent;border:1px dashed var(--border2);color:var(--text3);border-radius:5px;cursor:pointer;line-height:1.4;margin-top:2px;">🚐</button>
       </div>
       <div data-drop-route="${rt.id}" style="flex:1;display:flex;flex-wrap:wrap;align-items:center;gap:5px;padding:8px 10px;transition:background .15s;">${chips}</div>
     </div>`;
@@ -3895,6 +3895,29 @@ function _vehCard(v){
     <button onclick="_vehDel('${v.id}')" title="ลบรถคันนี้" style="flex-shrink:0;font-size:13px;padding:5px 7px;background:transparent;border:1px solid var(--border);border-radius:5px;cursor:pointer;line-height:1;height:29px;">🗑</button>
   </div>`;
 }
+// การ์ดเต็ม (label + ช่อง 2 คอลัมน์) — ใช้ในโมดัลรายสาย ที่มีรถน้อย ไม่ต้องย่อ
+function _vehFldFull(label,inner){return`<div><div style="font-size:11px;color:var(--text3);margin-bottom:3px;">${label}</div>${inner}</div>`;}
+function _vehCardFull(v){
+  return`<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--bg2);">
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
+      ${_vehInp(v,'name','ชื่อ/ป้ายรถ เช่น รถ 1','text','flex:1;font-weight:600;font-size:13px;')}
+      <button onclick="_vehDel('${v.id}')" title="ลบรถคันนี้" style="flex-shrink:0;font-size:14px;padding:5px 8px;background:transparent;border:1px solid var(--border);border-radius:5px;cursor:pointer;line-height:1;">🗑</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;">
+      ${_vehFldFull('ทะเบียน',_vehInp(v,'plate','กข 1234','text','font-family:var(--mono);text-transform:uppercase;'))}
+      ${_vehFldFull('เลขครัสซี',_vehInp(v,'chassis','17 หลัก','text','font-family:var(--mono);text-transform:uppercase;'))}
+      ${_vehFldFull('ประกันของ',_vehInp(v,'insurance','บริษัทประกัน','text','font-family:var(--font);'))}
+      ${_vehFldFull('เบอร์ประกัน',_vehInp(v,'ins_tel','02-xxx-xxxx','tel','font-family:var(--mono);'))}
+      ${_vehFldFull('ประกันหมดอายุ',_vehInp(v,'ins_expiry','','date','font-family:var(--font);'))}
+      ${_vehFldFull('อายุภาษี',_vehInp(v,'tax_expiry','','date','font-family:var(--font);'))}
+      ${_vehFldFull('อายุพรบ.',_vehInp(v,'prb_expiry','','date','font-family:var(--font);'))}
+      ${_vehFldFull('ถ่ายน้ำมันล่าสุด',`<div style="display:flex;gap:4px;align-items:center;">
+        ${_vehInp(v,'oil_date','','date','font-family:var(--font);flex:1;')}
+        <button onclick="_vehOilToday('${v.id}')" title="ถ่ายน้ำมันวันนี้" style="flex-shrink:0;font-size:15px;padding:4px 6px;background:transparent;border:1px solid var(--border);border-radius:5px;cursor:pointer;line-height:1;">🛢️</button>
+      </div>`)}
+    </div>
+  </div>`;
+}
 function _vehFor(type,id){
   return S.vehicles.filter(v=>type==='office'?v.owner_type==='office':(v.owner_type===type&&v.owner_id===id))
     .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
@@ -3912,7 +3935,26 @@ function _vehSection(o){
     <div style="flex:1;min-width:0;">${vs.length?vs.map(_vehCard).join(''):`<div style="font-size:12px;color:var(--text3);padding:14px 12px;">ยังไม่มีรถ</div>`}</div>
   </div>`;
 }
+let _vehCtx=null; // null = ดูทุกสาย (compact); routeId = ดูเฉพาะสายนั้น (การ์ดเต็ม)
+function _vehRerender(){ if(_vehCtx)openRouteVehicles(_vehCtx); else openAllVehicles(); }
+// โมดัลรถเฉพาะสายเดียว — เปิดจากปุ่ม 🚐 ที่สายย่อย/หน้าสาย; แสดงการ์ดเต็มแบบภาพที่ 1
+function openRouteVehicles(routeId){
+  _vehCtx=routeId;
+  const r=S.shops.find(s=>s.id===routeId);if(!r)return;
+  const vs=_vehFor('route',routeId);
+  OM('🚐 ข้อมูลรถ — '+r.name,
+    `<div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <span style="font-size:12px;color:var(--text3);">${vs.length} คัน</span>
+        <button onclick="_vehAdd('route','${routeId}')" style="font-size:12px;padding:5px 12px;background:transparent;border:1px dashed var(--border2);color:var(--text2);border-radius:6px;cursor:pointer;">+ เพิ่มรถ</button>
+      </div>
+      ${vs.length?vs.map(_vehCardFull).join(''):`<div style="font-size:13px;color:var(--text3);padding:10px 2px;">ยังไม่มีข้อมูลรถ</div>`}
+    </div>`,
+    `<button class="btn btn-x" onclick="CMask()">ปิด</button>`
+  );
+}
 function openAllVehicles(){
+  _vehCtx=null;
   const grouped=groupedRouteIds();
   const byId=id=>S.shops.find(s=>s.id===id);
   let body='';
@@ -3953,12 +3995,12 @@ async function _vehAdd(ownerType,ownerId){
   const v={id:uid(),owner_type:ownerType,owner_id:oid,name:null,plate:null,chassis:null,
     insurance:null,ins_tel:null,ins_expiry:null,tax_expiry:null,prb_expiry:null,oil_date:null,
     sort_order:_vehFor(ownerType,oid===null?'':oid).length};
-  try{await sbUpsert('vehicles',[v]);S.vehicles.push(v);openAllVehicles();}
+  try{await sbUpsert('vehicles',[v]);S.vehicles.push(v);_vehRerender();}
   catch(e){toast('เพิ่มไม่สำเร็จ: '+e.message);}
 }
 async function _vehDel(id){
   if(!confirm('ลบรถคันนี้?'))return;
-  try{await sbDelete('vehicles',`id=eq.${id}`);S.vehicles=S.vehicles.filter(v=>v.id!==id);openAllVehicles();}
+  try{await sbDelete('vehicles',`id=eq.${id}`);S.vehicles=S.vehicles.filter(v=>v.id!==id);_vehRerender();}
   catch(e){toast('ลบไม่สำเร็จ: '+e.message);}
 }
 async function _migrateVehicles(){
