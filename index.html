@@ -3876,45 +3876,40 @@ function _vehInp(v,f,ph,type='text',extra=''){
     onchange="_vehField('${v.id}','${f}',this.value)"
     style="background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:5px 7px;font-size:12px;width:100%;box-sizing:border-box;${extra}">`;
 }
-function _vehFld(label,inner){return`<div><div style="font-size:11px;color:var(--text3);margin-bottom:3px;">${label}</div>${inner}</div>`;}
+// ช่อง label เล็ก + input กว้างคงที่ (compact 1 แถว/คัน)
+function _vehFldC(label,inner,w){return`<div style="width:${w}px;flex-shrink:0;"><div style="font-size:10px;color:var(--text3);margin-bottom:2px;white-space:nowrap;">${label}</div>${inner}</div>`;}
 function _vehCard(v){
-  return`<div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--bg2);">
-    <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">
-      ${_vehInp(v,'name','ชื่อ/ป้ายรถ เช่น รถบูรชัย 1','text','flex:1;font-weight:600;font-size:13px;')}
-      <button onclick="_vehDel('${v.id}')" title="ลบรถคันนี้" style="flex-shrink:0;font-size:14px;padding:5px 8px;background:transparent;border:1px solid var(--border);border-radius:5px;cursor:pointer;line-height:1;">🗑</button>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;">
-      ${_vehFld('ทะเบียน',_vehInp(v,'plate','กข 1234','text','font-family:var(--mono);text-transform:uppercase;'))}
-      ${_vehFld('เลขครัสซี',_vehInp(v,'chassis','17 หลัก','text','font-family:var(--mono);text-transform:uppercase;'))}
-      ${_vehFld('ประกันของ',_vehInp(v,'insurance','บริษัทประกัน','text','font-family:var(--font);'))}
-      ${_vehFld('เบอร์ประกัน',_vehInp(v,'ins_tel','02-xxx-xxxx','tel','font-family:var(--mono);'))}
-      ${_vehFld('ประกันหมดอายุ',_vehInp(v,'ins_expiry','','date','font-family:var(--font);'))}
-      ${_vehFld('อายุภาษี',_vehInp(v,'tax_expiry','','date','font-family:var(--font);'))}
-      ${_vehFld('อายุพรบ.',_vehInp(v,'prb_expiry','','date','font-family:var(--font);'))}
-      ${_vehFld('ถ่ายน้ำมันล่าสุด',`<div style="display:flex;gap:4px;align-items:center;">
-        ${_vehInp(v,'oil_date','','date','font-family:var(--font);flex:1;')}
-        <button onclick="_vehOilToday('${v.id}')" title="ถ่ายน้ำมันวันนี้" style="flex-shrink:0;font-size:15px;padding:4px 6px;background:transparent;border:1px solid var(--border);border-radius:5px;cursor:pointer;line-height:1;">🛢️</button>
-      </div>`)}
-    </div>
+  return`<div style="display:flex;flex-wrap:wrap;gap:5px 8px;align-items:flex-end;padding:8px 10px;border-bottom:1px solid var(--border);">
+    ${_vehFldC('ชื่อรถ',_vehInp(v,'name','รถ 1','text','font-weight:600;'),96)}
+    ${_vehFldC('ทะเบียน',_vehInp(v,'plate','กข1234','text','font-family:var(--mono);text-transform:uppercase;'),92)}
+    ${_vehFldC('เลขครัสซี',_vehInp(v,'chassis','17 หลัก','text','font-family:var(--mono);text-transform:uppercase;'),150)}
+    ${_vehFldC('ประกันของ',_vehInp(v,'insurance','บริษัท','text','font-family:var(--font);'),110)}
+    ${_vehFldC('เบอร์ประกัน',_vehInp(v,'ins_tel','02-xxx','tel','font-family:var(--mono);'),100)}
+    ${_vehFldC('ประกันหมด',_vehInp(v,'ins_expiry','','date','font-family:var(--font);'),128)}
+    ${_vehFldC('ภาษี',_vehInp(v,'tax_expiry','','date','font-family:var(--font);'),128)}
+    ${_vehFldC('พรบ.',_vehInp(v,'prb_expiry','','date','font-family:var(--font);'),128)}
+    ${_vehFldC('ถ่ายน้ำมัน',`<div style="display:flex;gap:3px;align-items:center;">
+      ${_vehInp(v,'oil_date','','date','font-family:var(--font);flex:1;')}
+      <button onclick="_vehOilToday('${v.id}')" title="ถ่ายน้ำมันวันนี้" style="flex-shrink:0;font-size:13px;padding:4px 5px;background:transparent;border:1px solid var(--border);border-radius:5px;cursor:pointer;line-height:1;">🛢️</button>
+    </div>`,150)}
+    <button onclick="_vehDel('${v.id}')" title="ลบรถคันนี้" style="flex-shrink:0;font-size:13px;padding:5px 7px;background:transparent;border:1px solid var(--border);border-radius:5px;cursor:pointer;line-height:1;height:29px;">🗑</button>
   </div>`;
 }
 function _vehFor(type,id){
   return S.vehicles.filter(v=>type==='office'?v.owner_type==='office':(v.owner_type===type&&v.owner_id===id))
     .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
 }
-// section ต่อ "เจ้าของ" 1 ราย (สายย่อย / สายเดี่ยว / ออฟฟิศ) — indent ถ้าเป็นสายในกลุ่ม
-function _vehSection(o,indent){
+// section ต่อ "เจ้าของ" 1 ราย — กล่องสายอยู่ซ้าย (แบบหน้าพนักงาน), รถเรียงขวา
+function _vehSection(o){
   const vs=_vehFor(o.type,o.id);
-  return`<div style="margin-bottom:14px;${indent?'padding-left:14px;border-left:2px solid var(--border);margin-left:3px;':''}">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;">
-      <div style="display:flex;align-items:center;gap:7px;">
-        <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${o.color};"></span>
-        <span style="font-size:14px;font-weight:700;">${o.name}</span>
-        <span style="font-size:11px;color:var(--text3);">${vs.length} คัน</span>
-      </div>
-      <button onclick="_vehAdd('${o.type}','${o.id}')" style="font-size:12px;padding:5px 12px;background:transparent;border:1px dashed var(--border2);color:var(--text2);border-radius:6px;cursor:pointer;">+ เพิ่มรถ</button>
+  return`<div style="display:flex;align-items:stretch;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:8px;background:var(--bg2);">
+    <div style="flex:0 0 92px;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:4px;padding:8px 6px;background:${o.color}18;border-right:3px solid ${o.color};">
+      <div style="width:8px;height:8px;border-radius:50%;background:${o.color};"></div>
+      <div style="font-size:12px;font-weight:700;text-align:center;line-height:1.3;">${o.name}</div>
+      <div style="font-size:10px;color:var(--text3);">${vs.length} คัน</div>
+      <button onclick="_vehAdd('${o.type}','${o.id}')" style="font-size:11px;padding:3px 8px;margin-top:2px;background:transparent;border:1px dashed var(--border2);color:var(--text2);border-radius:6px;cursor:pointer;white-space:nowrap;">+ เพิ่มรถ</button>
     </div>
-    ${vs.length?vs.map(_vehCard).join(''):`<div style="font-size:12px;color:var(--text3);padding:6px 2px;">ยังไม่มีรถ</div>`}
+    <div style="flex:1;min-width:0;">${vs.length?vs.map(_vehCard).join(''):`<div style="font-size:12px;color:var(--text3);padding:14px 12px;">ยังไม่มีรถ</div>`}</div>
   </div>`;
 }
 function openAllVehicles(){
@@ -3925,14 +3920,14 @@ function openAllVehicles(){
   [...S.groups].sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).forEach(g=>{
     const members=(S.groupMembers[g.id]||[]).map(byId).filter(Boolean);
     if(!members.length)return;
-    body+=`<div style="font-size:13px;font-weight:700;color:var(--text2);margin:4px 0 8px;display:flex;align-items:center;gap:6px;">📁 ${g.name}</div>`;
-    members.forEach(r=>body+=_vehSection({type:'route',id:r.id,name:r.name,color:r.color||'#22c55e'},true));
+    body+=`<div style="font-size:13px;font-weight:700;color:var(--text2);margin:6px 0 8px;display:flex;align-items:center;gap:6px;">📁 ${g.name}</div>`;
+    members.forEach(r=>body+=_vehSection({type:'route',id:r.id,name:r.name,color:r.color||'#22c55e'}));
   });
   // สายเดี่ยว (ไม่อยู่ในกลุ่ม)
   [...S.shops].filter(s=>!grouped.has(s.id)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))
-    .forEach(r=>body+=_vehSection({type:'route',id:r.id,name:r.name,color:r.color||'#22c55e'},false));
+    .forEach(r=>body+=_vehSection({type:'route',id:r.id,name:r.name,color:r.color||'#22c55e'}));
   // ออฟฟิศ
-  body+=_vehSection({type:'office',id:'',name:'ออฟฟิศ',color:'#64748b'},false);
+  body+=_vehSection({type:'office',id:'',name:'ออฟฟิศ',color:'#64748b'});
   const migrateBtn=isAdmin()?`<div style="margin-bottom:14px;text-align:right;"><button onclick="_migrateVehicles()" style="font-size:11px;padding:4px 10px;background:transparent;border:1px solid var(--border);color:var(--text3);border-radius:6px;cursor:pointer;">📥 นำเข้าข้อมูลรถเดิม (1 สาย=1คัน)</button></div>`:'';
   OM('🚐 ประวัติรถทั้งหมด',
     `<div>${migrateBtn}${body}</div>`,
