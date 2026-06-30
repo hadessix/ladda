@@ -2331,6 +2331,7 @@ function prMonthNow(){const d=new Date();return`${d.getFullYear()+543}-${String(
 function prMonthLbl(m){const[y,mo]=m.split('-').map(Number);return['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][mo-1]+' '+y;}
 function prMonthAdj(m,d){let[y,mo]=m.split('-').map(Number);mo+=d;if(mo>12){mo=1;y++;}if(mo<1){mo=12;y--;}return`${y}-${String(mo).padStart(2,'0')}`;}
 function prBeToDate(beYM,day){const[y,m]=beYM.split('-').map(Number);const ce=y-543;return`${ce}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`;}
+function prSlotLbl(beYM,slot){if(slot==='A')return'1–10';if(slot==='B')return'11–20';const[y,m]=beYM.split('-').map(Number);const last=new Date(y-543,m,0).getDate();return`21–${last}`;}
 
 function showPayroll(){
   document.getElementById('app').style.display='none';
@@ -2431,7 +2432,7 @@ function renderPrPeriods(){
     </div>`;
   }).join('');
   const cols=Math.min(validYears.length,6);
-  const slots=[{k:'A',lbl:'1–10'},{k:'B',lbl:'11–20'},{k:'C',lbl:'21–31'}];
+  const slots=[{k:'A',lbl:'1–10'},{k:'B',lbl:'11–20'},{k:'C',lbl:prSlotLbl(m,'C')}];
   let html=`<div style="margin-bottom:16px;padding:12px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;">
     <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:4px;margin-bottom:8px;">${yearCells}</div>
     <div style="display:flex;gap:4px;">${monthCells}</div>
@@ -2571,8 +2572,8 @@ function openPeriod(periodId){
   _openPeriodId=periodId;
   const period=PR.periods.find(p=>p.id===periodId);if(!period)return;
   const slot=period.period_key.split('-')[2];
-  const slotLbl={A:'1–10',B:'11–20',C:'21–31'}[slot];
   const[y,mo]=period.period_key.split('-');
+  const slotLbl=prSlotLbl(`${y}-${mo}`,slot);
   const mLbl=prMonthLbl(`${y}-${mo}`);
   const isPaid=period.status==='paid';
   const _hiddenPos=new Set([...(_prSettings.hideManager?['ผู้จัดการ']:[]),...(_prSettings.hideTopManager?['ผู้จัดการใหญ่']:[])]);
@@ -2726,8 +2727,8 @@ function openPeriod(periodId){
 async function sharePeriod(periodId){
   const period=PR.periods.find(p=>p.id===periodId);if(!period)return;
   const slot=period.period_key.split('-')[2];
-  const slotLbl={A:'1–10',B:'11–20',C:'21–31'}[slot];
   const[y,mo]=period.period_key.split('-');
+  const slotLbl=prSlotLbl(`${y}-${mo}`,slot);
   const mLbl=prMonthLbl(`${y}-${mo}`);
   const ents=PR.entries.filter(e=>e.period_id===periodId);
   const hr=_prSettings.hideRates;
@@ -2765,10 +2766,16 @@ async function sharePeriod(periodId){
     const k=emp.route_id||'__none__';
     if(!byRoute1[k])byRoute1[k]=[];byRoute1[k].push({e,emp});
   });
-  const sortedRoutes=Object.keys(byRoute1).sort((a,b)=>{
-    if(a==='__none__')return 1;if(b==='__none__')return -1;
-    return (S.shops.find(s=>s.id===a)?.sort_order||0)-(S.shops.find(s=>s.id===b)?.sort_order||0);
+  // เรียงสายตามลำดับเดียวกับที่อื่น (กลุ่ม→สมาชิกในกลุ่ม→standalone→ไม่มีสาย) แล้วข้ามสายที่ไม่มีคนในเฮียรวย
+  const _grpIds1=new Set(Object.values(S.groupMembers).flat());
+  const _ord1=[];
+  [...S.groups].sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).forEach(grp=>{
+    (S.groupMembers[grp.id]||[]).map(id=>S.shops.find(s=>s.id===id)).filter(Boolean)
+      .sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).forEach(r=>_ord1.push(r.id));
   });
+  [...S.shops].filter(s=>!_grpIds1.has(s.id)).sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).forEach(r=>_ord1.push(r.id));
+  _ord1.push('__none__');
+  const sortedRoutes=_ord1.filter(id=>byRoute1[id]);
   let lines1=[`💼 งวด ${slotLbl} ${mLbl}`,'─'.repeat(32),''];
   let tot1Main=0,tot1F1=0,cnt1=0;
   sortedRoutes.forEach(rid=>{
