@@ -2761,7 +2761,7 @@ async function sharePeriod(periodId){
   ents.forEach(e=>{
     const emp=PR.employees.find(x=>x.id===e.employee_id);if(!emp)return;
     if(emp.payment_type&&emp.payment_type!=='เงินสดW')return; // เฉพาะเงินสดW
-    if(burachaiMemberIds.has(emp.route_id))return; // บูรชัยแยกส่งต่างหาก ไม่รวมในเฮียรวย
+    if(burachaiMemberIds.has(emp.route_id)&&emp.route_id!==f1Id)return; // บูรชัยแยกส่งต่างหาก (ยกเว้น F1 ยังอยู่ฝั่งเฮียรวย)
     const k=emp.route_id||'__none__';
     if(!byRoute1[k])byRoute1[k]=[];byRoute1[k].push({e,emp});
   });
