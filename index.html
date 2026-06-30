@@ -2471,7 +2471,8 @@ function renderPrPeriods(){
         else if(pt==='เงินสดW')cMain+=net;
       });
       const isPaid=period.status==='paid';
-      html+=`<div class="pr-period-card ${isPaid?'paid':'draft'}" onclick="openPeriod('${period.id}')">
+      html+=`<div class="pr-period-card ${isPaid?'paid':'draft'}" style="position:relative;" onclick="openPeriod('${period.id}')">
+        ${isAdmin()?`<button onclick="event.stopPropagation();deletePeriod('${period.id}','${lbl}')" title="ลบงวด" style="position:absolute;top:8px;right:8px;background:var(--bg3);border:1px solid var(--border);color:var(--text3);border-radius:6px;width:26px;height:26px;line-height:1;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;">🗑</button>`:''}
         <div class="pr-period-title">${lbl}</div>
         <div class="pr-period-sub">${prMonthLbl(m)}</div>
         <div style="margin:8px 0;font-family:var(--mono);font-size:16px;color:${isPaid?'var(--green)':'var(--amber)'};">${fmt(total)}</div>
@@ -2494,6 +2495,22 @@ function prAdjMonth(d){PR.month=prMonthAdj(PR.month,d);renderPayroll();}
 function prSetYear(yr){const mo=PR.month.split('-')[1];PR.month=`${yr}-${mo}`;renderPayroll();}
 function prSetMonth(mn){const yr=PR.month.split('-')[0];PR.month=`${yr}-${String(mn).padStart(2,'0')}`;renderPayroll();}
 function prAdjYear(d){const[yr,mo]=PR.month.split('-');PR.month=`${Number(yr)+d}-${mo}`;renderPayroll();}
+async function deletePeriod(periodId,lbl){
+  if(!isAdmin())return;
+  const period=PR.periods.find(p=>p.id===periodId);if(!period)return;
+  const entIds=PR.entries.filter(e=>e.period_id===periodId).map(e=>e.id);
+  if(!confirm(`ลบงวด "${lbl||''}" ทั้งหมด?\nสลิป ${entIds.length} คน + รายการหักจะถูกลบถาวร`))return;
+  try{
+    for(const eid of entIds){try{await sbDelete('payroll_deductions','entry_id=eq.'+eid);}catch(_){}}
+    if(entIds.length)try{await sbDelete('payroll_entries','period_id=eq.'+periodId);}catch(_){}
+    await sbDelete('payroll_periods','id=eq.'+periodId);
+    PR.deductions=PR.deductions.filter(d=>!entIds.includes(d.entry_id));
+    PR.entries=PR.entries.filter(e=>e.period_id!==periodId);
+    PR.periods=PR.periods.filter(p=>p.id!==periodId);
+    toast('ลบงวดแล้ว');
+    renderPayroll();
+  }catch(e){toast('ลบไม่สำเร็จ: '+e.message);}
+}
 
 async function generatePeriod(beYM,slot){
   if(!PR._loaded){toast('กำลังโหลดข้อมูล กรุณารอสักครู่…');return;}
