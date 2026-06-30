@@ -2500,16 +2500,17 @@ async function deletePeriod(periodId,lbl){
   const period=PR.periods.find(p=>p.id===periodId);if(!period)return;
   const entIds=PR.entries.filter(e=>e.period_id===periodId).map(e=>e.id);
   if(!confirm(`ลบงวด "${lbl||''}" ทั้งหมด?\nสลิป ${entIds.length} คน + รายการหักจะถูกลบถาวร`))return;
+  // อัปเดต UI ทันที (optimistic) แล้วค่อยลบใน DB
+  PR.deductions=PR.deductions.filter(d=>!entIds.includes(d.entry_id));
+  PR.entries=PR.entries.filter(e=>e.period_id!==periodId);
+  PR.periods=PR.periods.filter(p=>p.id!==periodId);
+  renderPayroll();
   try{
     for(const eid of entIds){try{await sbDelete('payroll_deductions','entry_id=eq.'+eid);}catch(_){}}
     if(entIds.length)try{await sbDelete('payroll_entries','period_id=eq.'+periodId);}catch(_){}
     await sbDelete('payroll_periods','id=eq.'+periodId);
-    PR.deductions=PR.deductions.filter(d=>!entIds.includes(d.entry_id));
-    PR.entries=PR.entries.filter(e=>e.period_id!==periodId);
-    PR.periods=PR.periods.filter(p=>p.id!==periodId);
     toast('ลบงวดแล้ว');
-    renderPayroll();
-  }catch(e){toast('ลบไม่สำเร็จ: '+e.message);}
+  }catch(e){toast('ลบไม่สำเร็จ: '+e.message+' (รีเฟรชหน้าเพื่อโหลดใหม่)');}
 }
 
 async function generatePeriod(beYM,slot){
