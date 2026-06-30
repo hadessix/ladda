@@ -2817,7 +2817,7 @@ async function sharePeriod(periodId){
     lines2.push('');
   });
   lines2.push('─'.repeat(32));
-  lines2.push(`รวม ${cnt2} คน  ฿${fmtN(tot2)}`);
+  lines2.push(`รวม ${cnt2} คน · เงินสด ฿${fmtN(tot2Cash)}`);
 
   const hasLines2=Object.keys(byRoute2Bur).length>0;
 
