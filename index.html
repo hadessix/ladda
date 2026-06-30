@@ -2467,7 +2467,7 @@ function renderPrPeriods(){
         const pt=emp.payment_type||'เงินสดW';
         const inBur=_burIds.has(emp.route_id);
         if(emp.route_id===_f1Id&&pt==='เงินสดW')cF1+=net;
-        else if(inBur&&(pt==='เงินสดW'||pt==='โอนจ่ายM'))cBur+=net;
+        else if(inBur&&pt==='เงินสดW')cBur+=net;
         else if(pt==='เงินสดW')cMain+=net;
       });
       const isPaid=period.status==='paid';
@@ -2686,7 +2686,7 @@ function openPeriod(periodId){
     const pt=emp.payment_type||'เงินสดW';
     const inBur=_burIds.has(emp.route_id);
     if(emp.route_id===_f1Id&&pt==='เงินสดW')_tot1F1+=net;
-    else if(inBur&&(pt==='เงินสดW'||pt==='โอนจ่ายM'))_tot2+=net;
+    else if(inBur&&pt==='เงินสดW')_tot2+=net;
     else if(pt==='เงินสดW')_tot1Main+=net;
   });
   OM(`งวด ${slotLbl} ${mLbl}`,
@@ -2761,6 +2761,7 @@ async function sharePeriod(periodId){
   ents.forEach(e=>{
     const emp=PR.employees.find(x=>x.id===e.employee_id);if(!emp)return;
     if(emp.payment_type&&emp.payment_type!=='เงินสดW')return; // เฉพาะเงินสดW
+    if(burachaiMemberIds.has(emp.route_id))return; // บูรชัยแยกส่งต่างหาก ไม่รวมในเฮียรวย
     const k=emp.route_id||'__none__';
     if(!byRoute1[k])byRoute1[k]=[];byRoute1[k].push({e,emp});
   });
@@ -2801,7 +2802,7 @@ async function sharePeriod(periodId){
     else{const k=emp.route_id||'__none__';if(!byRoute2Bur[k])byRoute2Bur[k]=[];byRoute2Bur[k].push({e,emp});}
   });
   let lines2=[``,`${'─'.repeat(32)}`,`💼 ${burachaiGrp?burachaiGrp.name:'บูรชัย'} — งวด ${slotLbl} ${mLbl}`,'─'.repeat(32),''];
-  let tot2=0,cnt2=0;
+  let tot2=0,tot2Cash=0,cnt2=0;
   // บูรชัย เท่านั้น (ไม่รวม F1)
   Object.keys(byRoute2Bur).forEach(rid=>{
     const rt=S.shops.find(s=>s.id===rid);
@@ -2811,6 +2812,7 @@ async function sharePeriod(periodId){
       const pt=emp.payment_type||'เงินสดW';
       lines2.push(line+(pt!=='เงินสดW'?` [${pt}]`:''));
       tot2+=net;cnt2++;
+      if(pt==='เงินสดW')tot2Cash+=net; // ยอดเงินสดบูรชัย (ไม่รวมโอนจ่ายM) สำหรับสรุปน้องลัดดา
     });
     lines2.push('');
   });
@@ -2827,7 +2829,7 @@ async function sharePeriod(periodId){
     '─'.repeat(24),
     `${ownerName}  ฿${fmtN(tot1Main)}`,
     `F1  ฿${fmtN(tot1F1)}`,
-    `${burachaiGrp?burachaiGrp.name:'บูรชัย'}  ฿${fmtN(tot2)}`,
+    `${burachaiGrp?burachaiGrp.name:'บูรชัย'}  ฿${fmtN(tot2Cash)}`,
   ];
 
   // ── เลือกว่าจะส่งชุดไหน ──
@@ -2934,7 +2936,7 @@ async function prUpdateEntry(entryId,field,value){
     const inBur=_burIds.has(xemp.route_id);
     _grand+=xnet;
     if(xemp.route_id===_f1Id&&pt==='เงินสดW')_f1+=xnet;
-    else if(inBur&&(pt==='เงินสดW'||pt==='โอนจ่ายM'))_bur+=xnet;
+    else if(inBur&&pt==='เงินสดW')_bur+=xnet;
     else if(pt==='เงินสดW')_main+=xnet;
   });
   const _g=document.getElementById('pr-hdr-grand');if(_g)_g.textContent=fmt(_grand);
