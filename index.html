@@ -505,7 +505,7 @@ const fmtMk=k=>{if(k===cpk())return'เดือนนี้';const[,m]=k.split(
 const fmt=n=>'฿'+(Math.round(n)).toLocaleString('th-TH');
 const fN=n=>(Math.round(n)).toLocaleString('th-TH');
 const uid=()=>crypto.randomUUID().replace(/-/g,'');
-const today=()=>new Date().toISOString().split('T')[0];
+const today=()=>{const n=new Date();return`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;};
 
 // ─── Worker API helpers (no Supabase keys in source) ───
 function _wToken(){return localStorage.getItem('ladda_token')||'';}
@@ -963,7 +963,14 @@ function renderEntriesList(entries){
     if(used.has(i))return;
     if(e.type==='exout'||e.type==='exin'){
       const matchType=e.type==='exout'?'exin':'exout';
-      const j=entries.findIndex((e2,i2)=>!used.has(i2)&&i2!==i&&e2.type===matchType&&e2.oid===e.oid&&e2.df===e.df);
+      const tok=_xpTok(e);
+      const j=entries.findIndex((e2,i2)=>{
+        if(used.has(i2)||i2===i||e2.type!==matchType)return false;
+        const tok2=_xpTok(e2);
+        if(tok&&tok2)return tok===tok2;      // รายการใหม่: จับคู่ด้วย pair-token เป๊ะ
+        if(tok||tok2)return false;            // อย่าจับคู่ข้ามระหว่าง token กับ non-token
+        return e2.oid===e.oid&&e2.df===e.df;  // รายการเก่า: fallback oid+df
+      });
       if(j>=0){
         used.add(i);used.add(j);
         const exout=e.type==='exout'?e:entries[j];
@@ -1032,7 +1039,8 @@ function renderExchangePair(exout,exin){
   body+=`<div><div style="font-size:12px;color:var(--text3);margin-bottom:6px;">ให้ออก</div>${billTbl(exout.bills||eb(),exout.amount||0)}</div>`;
   body+=`<div><div style="font-size:12px;color:var(--text3);margin-bottom:6px;">รับเข้า</div>${billTbl(exin.bills||eb(),exin.amount||0)}</div>`;
   body+=`</div>`;
-  const delBtn=isAdmin()?`<button class="delbtn" onclick="delExPair(event,'${exout.id}','${exin.id}')">ลบ</button>`:'';
+  const tok=_xpTok(exout)||_xpTok(exin);
+  const delBtn=isAdmin()?`<button class="delbtn" onclick="delExPair(event,'${exout.id}','${exin.id}','${tok}')">ลบ</button>`:'';
   return`<div class="ecard">
     <div class="ehd" onclick="toggleE('${pairId}')">
       <span class="badge bexin">แลกเงิน</span>
@@ -1045,10 +1053,17 @@ function renderExchangePair(exout,exin){
   </div>`;
 }
 
-async function delExPair(ev,id1,id2){
+async function delExPair(ev,id1,id2,tok){
   ev.stopPropagation();
-  if(!confirm('ลบรายการแลกเงินนี้? (ทั้ง 2 ฝั่ง)'))return;
-  const ids=[id1,id2].filter(Boolean);
+  if(!confirm('ลบรายการแลกเงินนี้? (ทุกฝั่งของการแลกครั้งนี้)'))return;
+  // ถ้ามี pair-token ลบทุกขาที่ผูก token เดียวกัน (รองรับการแลกที่กระจายหลายสาย)
+  let ids=[id1,id2].filter(Boolean);
+  if(tok){
+    const full='#xp:'+tok;
+    const set=new Set();
+    for(const rid of Object.keys(S.entries)){(ge(rid,S.month)||[]).forEach(e=>{if((e.note||'')===full)set.add(e.id);});}
+    if(set.size)ids=[...set];
+  }
   try{
     for(const id of ids){
       await sbDelete('entries',`id=eq.${id}`);
@@ -1086,7 +1101,9 @@ function renderEntry(e){
     body=`<p style="font-size:13px;color:var(--text2);">${e.type==='exout'?'ให้ไปยัง':'รับจาก'}: <strong style="color:var(--purple);">${os?.name||'?'}</strong> — ${fmt(amt)}</p>`;
     if(e.bills&&BT.some(t=>e.bills[t]>0))body+=`<div style="margin-top:8px;">${billTbl(e.bills,amt)}</div>`;
   }
-  if(e.note)body+=`<div class="notetxt">📝 ${e.note}</div>`;
+  if(e.note&&!e.note.startsWith('#xp:'))body+=`<div class="notetxt">📝 ${e.note}</div>`;
+  const _xtok=_xpTok(e);
+  const _delCall=((e.type==='exin'||e.type==='exout')&&_xtok)?`delExPair(event,'${e.id}','','${_xtok}')`:`delE(event,'${e.id}')`;
   return `<div class="ecard">
     <div class="ehd" onclick="toggleE('${e.id}')">
       <span class="badge ${bclass[e.type]}">${labels[e.type]}</span>
@@ -1094,7 +1111,7 @@ function renderEntry(e){
       <span class="ett">${e.title||''}${e.type==='count'&&e.ca?` <span style="font-size:11px;color:var(--text3);font-weight:400;">(${(d=>d.getDate()+' · '+String(d.getHours()).padStart(2,'0')+'.'+String(d.getMinutes()).padStart(2,'0'))(new Date(new Date(e.ca).toLocaleString('en-US',{timeZone:'Asia/Bangkok'})))})</span>`:''}</span>
       <span class="eam ${aclass[e.type]}">${sign[e.type]}${fmt(Math.abs(amt))}</span>
       ${e.type==='count'?`<button class="delbtn" style="background:var(--blue);border-color:var(--bbr);color:#fff;margin-right:4px;" onclick="event.stopPropagation();openEditCount('${e.id}')">แก้ไข</button>`:''}
-      <button class="delbtn" onclick="delE(event,'${e.id}')" style="${isAdmin()?'':'display:none'}">ลบ</button>
+      <button class="delbtn" onclick="${_delCall}" style="${isAdmin()?'':'display:none'}">ลบ</button>
     </div>
     <div class="ebody" id="eb-${e.id}">${body}</div>
   </div>`;
@@ -1116,6 +1133,23 @@ function CMask(){
   const inPayroll=document.getElementById('payroll-screen')?.style.display!=='none';
   if(inPayroll){CM();return;}
   if(confirm('ต้องการยกเลิกใช่ไหม?\nข้อมูลที่กรอกไว้จะหายไป')){CM();window._returnToGroup=null;}
+}
+
+// ─── save guard: กันกดซ้ำ + ล็อก/หมุนปุ่มระหว่างบันทึก ───
+function _lockSave(){
+  if(window._saving)return false;
+  window._saving=true;
+  const btns=document.querySelectorAll('#mfoot .btn');
+  btns.forEach(b=>{b.disabled=true;b.style.opacity='0.55';b.style.pointerEvents='none';});
+  const sb=document.querySelector('#mfoot .btn-g,#mfoot .btn-p,#mfoot .btn-a,#mfoot .btn-b');
+  if(sb){sb.dataset._txt=sb.textContent;sb.textContent='กำลังบันทึก…';}
+  return true;
+}
+function _unlockSave(){
+  window._saving=false;
+  document.querySelectorAll('#mfoot .btn').forEach(b=>{b.disabled=false;b.style.opacity='';b.style.pointerEvents='';});
+  const sb=document.querySelector('#mfoot .btn-g,#mfoot .btn-p,#mfoot .btn-a,#mfoot .btn-b');
+  if(sb&&sb.dataset._txt){sb.textContent=sb.dataset._txt;delete sb.dataset._txt;}
 }
 
 
@@ -1262,11 +1296,13 @@ async function saveCountDirect(){
   if(total===0){toast('กรุณาใส่จำนวนแบงค์ที่นับได้');return;}
   const prevRounds=ge(S.shop,S.month).filter(e=>e.type==='count').length;
   const entry={id:uid(),type:'count',df,dt,total,subs:[{df,dt,bills}],title:`รอบ ${prevRounds+1}`};
+  if(!_lockSave())return;
   try{
     await sbUpsert('entries',entryToRow(entry,S.shop,S.month));
     ge(S.shop,S.month).push(entry);
     CM();render();toast(`บันทึกนับเงินรอบ ${prevRounds+1} รวม ${fmt(total)} ✓`);
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
+  finally{_unlockSave();}
 }
 function openEditCount(entryId){
   let entry=null,sid=null;
@@ -1294,11 +1330,13 @@ async function saveEditCount(entryId){
   const entry=list.find(e=>e.id===entryId);
   if(!entry){toast('ไม่พบรายการ');return;}
   const updated={...entry,df,dt,total,subs:[{df,dt,bills}]};
+  if(!_lockSave())return;
   try{
     await sbUpsert('entries',entryToRow(updated,sid,S.month));
     Object.assign(entry,updated);
     CM();render();toast(`แก้ไข${entry.title||'นับเงิน'}แล้ว ✓`);
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
+  finally{_unlockSave();}
 }
 function addSubCount(){}
 async function saveSubHandler(){
@@ -1551,11 +1589,13 @@ async function saveIncome(){
   if(!d){toast('กรุณาเลือกวันที่');return;}
   if(amount===0){toast('กรุณาใส่แบงค์ที่รับ');return;}
   const entry={id:uid(),type:'income',df:d,dt:d,amount,title:t,note:n,bills};
+  if(!_lockSave())return;
   try{
     await sbUpsert('entries',entryToRow(entry,S.shop,S.month));
     ge(S.shop,S.month).push(entry);
     CM();render();toast(`บันทึกรายรับ ${fmt(amount)} แล้ว ✓`);
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
+  finally{_unlockSave();}
 }
 
 // ─── คำนวณแบงค์คงเหลือของสาย (sid) ในเดือน (mk) ───
@@ -1614,11 +1654,13 @@ async function saveExpense(){
   const over=BT.find(tt=>bills[tt]>(cb[tt]||0));
   if(over){toast(`แบงค์ ฿${BL[over]} เกินจำนวนที่มีในกล่อง (มี ${fN(cb[over]||0)} ใบ)`);return;}
   const entry={id:uid(),type:'expense',df:d,dt:d,amount,title:t,note:null,bills};
+  if(!_lockSave())return;
   try{
     await sbUpsert('entries',entryToRow(entry,S.shop,S.month));
     ge(S.shop,S.month).push(entry);
     CM();render();toast(`บันทึกรายจ่าย ${fmt(amount)} แล้ว ✓`);
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
+  finally{_unlockSave();}
 }
 
 // ─── EXCHANGE between shops — two-column UI ───
@@ -1726,6 +1768,26 @@ function firstRouteWithMoney(gid,mk){
   const ids=S.groupMembers[gid]||[];
   return ids.find(id=>bv(calcCB(id,mk))>0)||ids[0];
 }
+// อ่าน pair-token ของรายการแลกเงิน (เก็บใน note เป็น "#xp:<id>")
+const _xpTok=e=>{const n=e.note||'';return n.startsWith('#xp:')?n.slice(4):'';};
+// กระจายการหักแบงค์ (bills) ไปหลาย route ที่มีชนิดแบงค์นั้นจริง — กันแบงค์ติดลบรายชนิด
+// คืน { [sid]: billsPart } หรือ null ถ้ารวมทั้งชุด route มีไม่พอ
+function _distBills(routeIds,bills,mk){
+  const rem=Object.assign(eb(),bills);
+  const dist={};
+  for(const sid of routeIds){
+    const cb=calcCB(sid,mk);
+    BT.forEach(t=>{
+      if(rem[t]>0&&(cb[t]||0)>0){
+        const take=Math.min(rem[t],cb[t]);
+        (dist[sid]=dist[sid]||eb())[t]+=take;
+        rem[t]-=take;
+      }
+    });
+  }
+  if(BT.some(t=>rem[t]>0))return null;
+  return dist;
+}
 
 function refreshExchangeCB(fromShop){
   const Lval=document.getElementById('xc_L').value;
@@ -1755,8 +1817,8 @@ function refreshExchangeCB(fromShop){
 }
 
 async function saveExchange(fromShop){
-  if(window._exSaving)return;
   const d=today();
+  const mk2=S.month;
   const Lval=document.getElementById('xc_L').value;
   const Rval=document.getElementById('xc_R').value;
   const isLGroup=Lval?.startsWith('g:');
@@ -1771,54 +1833,39 @@ async function saveExchange(fromShop){
   const Rblls=gb('xR');
   const La=bv(Lblls), Ra=bv(Rblls);
   if(La===0&&Ra===0){toast('กรุณาใส่แบงค์อย่างน้อยฝั่งเดียว');return;}
-  const LrouteId=isLGroup?firstRouteWithMoney(Lid,S.month):Lid;
-  const cbL=isLGroup?calcCBGroup(Lid,S.month):calcCB(Lid,S.month);
-  const overL=BT.find(t=>Lblls[t]>(cbL[t]||0));
-  if(overL){toast(`ฝั่งซ้าย: แบงค์ ฿${BL[overL]} เกินจำนวนที่มี (มี ${fN(cbL[overL]||0)} ใบ)`);return;}
-  if(!isRGroup){
-    const cbR=calcCB(Rid,S.month);
-    const overR=BT.find(t=>Rblls[t]>(cbR[t]||0));
-    if(overR){toast(`ฝั่งขวา: แบงค์ ฿${BL[overR]} เกินจำนวนที่มี (มี ${fN(cbR[overR]||0)} ใบ)`);return;}
-  }
-  const Lgrp=isLGroup?S.groups.find(g=>g.id===Lid):null;
-  const Lname=isLGroup?(Lgrp?.name||'?'):(S.shops.find(s=>s.id===Lid)?.name||'?');
-  const mk2=S.month;
+
+  // ราย route ของแต่ละฝั่ง + ตัวอ้างชื่อ (route id หรือ group id เพื่อให้ oid โชว์ชื่อถูก)
+  const leftRoutes  = isLGroup?(S.groupMembers[Lid]||[]):[Lid];
+  const rightRoutes = isRGroup?(S.groupMembers[Rid]||[]):[Rid];
+  const LeftRef  = Lid; // ใช้เป็น oid บน entry ฝั่งขวา
+  const RightRef = Rid; // ใช้เป็น oid บน entry ฝั่งซ้าย
+  const leftReceiver  = isLGroup?firstRouteWithMoney(Lid,mk2):Lid;
+  const rightReceiver = isRGroup?firstRouteWithMoney(Rid,mk2):Rid;
+  const Lname = isLGroup?(S.groups.find(g=>g.id===Lid)?.name||'?'):(S.shops.find(s=>s.id===Lid)?.name||'?');
+  const Rname = isRGroup?(S.groups.find(g=>g.id===Rid)?.name||'?'):(S.shops.find(s=>s.id===Rid)?.name||'?');
+
+  // กระจายแบงค์ที่ "ให้ออก" ไปหลาย route ที่มีชนิดนั้นจริง (กันติดลบรายชนิด)
+  let distL=null,distR=null;
+  if(La>0){distL=_distBills(leftRoutes,Lblls,mk2);if(!distL){const bad=BT.find(t=>_distBills(leftRoutes,{[t]:Lblls[t]},mk2)===null);toast(`ฝั่งซ้าย: แบงค์${bad?' ฿'+BL[bad]:''} ไม่พอในสาย/กลุ่ม`);return;}}
+  if(Ra>0){distR=_distBills(rightRoutes,Rblls,mk2);if(!distR){const bad=BT.find(t=>_distBills(rightRoutes,{[t]:Rblls[t]},mk2)===null);toast(`ฝั่งขวา: แบงค์${bad?' ฿'+BL[bad]:''} ไม่พอในสาย/กลุ่ม`);return;}}
+
+  const tok='#xp:'+uid(); // pair-token ผูกทุกขาของการแลกครั้งนี้
   const entriesToSave=[];
   const localEntries=[];
+  const add=(sid,e)=>{entriesToSave.push(entryToRow(e,sid,mk2));localEntries.push({sid,e});};
 
-  if(isRGroup){
-    const Rgrp=S.groups.find(g=>g.id===Rid);
-    const RfirstId=(S.groupMembers[Rid]||[])[0];
-    const Rname=Rgrp?.name||'?';
-    if(La>0){
-      const e={id:uid(),type:'exout',df:d,dt:d,amount:La,title:`แลกออก → ${Rname}`,note:'',bills:Lblls,oid:RfirstId||Rid};
-      entriesToSave.push(entryToRow(e,LrouteId,mk2));localEntries.push({sid:LrouteId,e});
-    }
-    if(Ra>0){
-      const cbRgrp=calcCBGroup(Rid,S.month);
-      const overR=BT.find(t=>Rblls[t]>(cbRgrp[t]||0));
-      if(overR){toast(`ฝั่งขวา: แบงค์ ฿${BL[overR]} เกินจำนวนที่มี`);return;}
-      const RexId=firstRouteWithMoney(Rid,S.month);
-      const e={id:uid(),type:'exout',df:d,dt:d,amount:Ra,title:`แลกออก → ${Lname}`,note:'',bills:Rblls,oid:LrouteId};
-      entriesToSave.push(entryToRow(e,RexId,mk2));localEntries.push({sid:RexId,e});
-    }
-    if(La>0&&RfirstId){
-      const e={id:uid(),type:'exin',df:d,dt:d,amount:La,title:`รับแลก ← ${Lname}`,note:'',bills:Lblls,oid:LrouteId};
-      entriesToSave.push(entryToRow(e,RfirstId,mk2));localEntries.push({sid:RfirstId,e});
-    }
-    if(Ra>0){
-      const e={id:uid(),type:'exin',df:d,dt:d,amount:Ra,title:`รับแลก ← ${Rname}`,note:'',bills:Rblls,oid:RfirstId||Rid};
-      entriesToSave.push(entryToRow(e,LrouteId,mk2));localEntries.push({sid:LrouteId,e});
-    }
-  } else {
-    const Rshop=S.shops.find(s=>s.id===Rid);
-    const Rname=Rshop?.name||'?';
-    if(La>0){const e={id:uid(),type:'exout',df:d,dt:d,amount:La,title:`แลกออก → ${Rname}`,note:'',bills:Lblls,oid:Rid};entriesToSave.push(entryToRow(e,LrouteId,mk2));localEntries.push({sid:LrouteId,e});}
-    if(Ra>0){const e={id:uid(),type:'exin',df:d,dt:d,amount:Ra,title:`รับแลก ← ${Rname}`,note:'',bills:Rblls,oid:Rid};entriesToSave.push(entryToRow(e,LrouteId,mk2));localEntries.push({sid:LrouteId,e});}
-    if(Ra>0){const e={id:uid(),type:'exout',df:d,dt:d,amount:Ra,title:`แลกออก → ${Lname}`,note:'',bills:Rblls,oid:LrouteId};entriesToSave.push(entryToRow(e,Rid,mk2));localEntries.push({sid:Rid,e});}
-    if(La>0){const e={id:uid(),type:'exin',df:d,dt:d,amount:La,title:`รับแลก ← ${Lname}`,note:'',bills:Lblls,oid:LrouteId};entriesToSave.push(entryToRow(e,Rid,mk2));localEntries.push({sid:Rid,e});}
+  // ซ้ายให้ออก (กระจาย) → ขวารับเข้า (รวมที่ผู้รับ)
+  if(La>0){
+    Object.entries(distL).forEach(([sid,part])=>add(sid,{id:uid(),type:'exout',df:d,dt:d,amount:bv(part),title:`แลกออก → ${Rname}`,note:tok,bills:part,oid:RightRef}));
+    add(rightReceiver,{id:uid(),type:'exin',df:d,dt:d,amount:La,title:`รับแลก ← ${Lname}`,note:tok,bills:Lblls,oid:LeftRef});
   }
-  window._exSaving=true;
+  // ขวาให้ออก (กระจาย) → ซ้ายรับเข้า (รวมที่ผู้รับ)
+  if(Ra>0){
+    Object.entries(distR).forEach(([sid,part])=>add(sid,{id:uid(),type:'exout',df:d,dt:d,amount:bv(part),title:`แลกออก → ${Lname}`,note:tok,bills:part,oid:LeftRef}));
+    add(leftReceiver,{id:uid(),type:'exin',df:d,dt:d,amount:Ra,title:`รับแลก ← ${Rname}`,note:tok,bills:Rblls,oid:RightRef});
+  }
+
+  if(!_lockSave())return;
   try{
     await sbUpsert('entries',entriesToSave);
     localEntries.forEach(({sid,e})=>ge(sid,mk2).push(e));
@@ -1826,7 +1873,7 @@ async function saveExchange(fromShop){
     const diff=Math.abs(La-Ra);
     toast(diff>0?`บันทึกแล้ว (ยอดต่างกัน ${fmt(diff)} — ตรวจสอบด้วย)`:'แลกเงินบันทึกแล้ว ✓');
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
-  finally{window._exSaving=false;}
+  finally{_unlockSave();}
 }
 
 // ─── จ่ายเฮียรวย (shop view) ───
@@ -1873,12 +1920,14 @@ async function savePayOwner(fromSid,ownerGid,ownerFirstId){
   const d=today();const mk2=S.month;
   const eOut={id:uid(),type:'exout',df:d,dt:d,amount,title:`จ่ายเฮียรวย → ${ownerGrp?.name}`,note:'',bills,oid:ownerFirstId};
   const eIn={id:uid(),type:'exin',df:d,dt:d,amount,title:`รับจาก ${fromShop?.name}`,note:'',bills,oid:fromSid};
+  if(!_lockSave())return;
   try{
     await sbUpsert('entries',[entryToRow(eOut,fromSid,mk2),entryToRow(eIn,ownerFirstId,mk2)]);
     ge(fromSid,mk2).push(eOut);
     ge(ownerFirstId,mk2).push(eIn);
     CM();render();toast(`จ่ายเฮียรวย ${fmt(amount)} แล้ว ✓`);
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
+  finally{_unlockSave();}
 }
 
 
@@ -2143,6 +2192,7 @@ async function saveExpenseGroup(gid){
   }
   const deficit=BT.find(tk=>rem[tk]>0);
   if(deficit){toast(`แบงค์ ฿${BL[deficit]} ไม่พอในกลุ่ม`);return;}
+  if(!_lockSave())return;
   try{
     const batchId=uid();
     const entries=Object.entries(dist).map(([sid,rb])=>({id:uid(),sid,rb}));
@@ -2151,6 +2201,7 @@ async function saveExpenseGroup(gid){
     entries.forEach(({id,sid,rb})=>ge(sid,S.month).push({id,type:'expense',df:d,dt:d,amount:bv(rb),title:t,note:null,bills:rb,oid:batchId}));
     CM();render();toast(`บันทึกรายจ่าย ${fmt(amount)} แล้ว ✓`);
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
+  finally{_unlockSave();}
 }
 function pickShopThen(members,label,fn,type){
   const colorMap={count:'btn-g',income:'btn-b',expense:'btn-a'};
