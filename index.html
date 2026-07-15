@@ -536,8 +536,13 @@ function entryToRow(e,route_id,month_key){
     bills:e.bills??null,subs:e.subs??null,other_route_id:e.oid??null};
 }
 function rowToEntry(r){
-  return{id:r.id,type:r.type,title:r.title,note:r.note,df:r.date_from,dt:r.date_to,
+  const e={id:r.id,type:r.type,title:r.title,note:r.note,df:r.date_from,dt:r.date_to,
     amount:r.amount,total:r.total,bills:r.bills,subs:r.subs,oid:r.other_route_id,ca:r.created_at};
+  // ยอดนับเงิน = ผลรวมแบงค์จริงในทุกครั้งเสมอ → การ์ด "ยอดนับได้" กับ "แบงค์ในกล่อง" ตรงกันแน่นอน
+  if(e.type==='count'&&Array.isArray(e.subs)&&e.subs.length){
+    e.total=e.subs.reduce((a,s)=>a+bv(s.bills||eb()),0);
+  }
+  return e;
 }
 
 // ─── state ───
@@ -1171,6 +1176,7 @@ function updBLimit(p){
     const inp=document.getElementById(`${p}_${t}`);
     if(!inp)return;
     let v=parseInt(inp.value)||0;
+    if(v<0){v=0;inp.value=0;}
     const max=cb[t]??0;
     if(v>max){v=max;inp.value=max;inp.style.color='var(--red)';over=true;}
     else inp.style.color='var(--text)';
@@ -1189,10 +1195,10 @@ function billInp(p,cols,init){
 }
 function updB(p){
   let tot=0;
-  BT.forEach(t=>{const v=parseInt(document.getElementById(`${p}_${t}`)?.value)||0;const val=(t==='coin'?1:t)*v;tot+=val;const s=document.getElementById(`${p}s_${t}`);if(s)s.textContent=`= ฿${fN(val)}`;});
+  BT.forEach(t=>{const inp=document.getElementById(`${p}_${t}`);let v=parseInt(inp?.value)||0;if(v<0){v=0;if(inp)inp.value=0;}const val=(t==='coin'?1:t)*v;tot+=val;const s=document.getElementById(`${p}s_${t}`);if(s)s.textContent=`= ฿${fN(val)}`;});
   const tb=document.getElementById(`${p}_tot`);if(tb)tb.textContent=fmt(tot);
 }
-function gb(p){const b={};BT.forEach(t=>b[t]=parseInt(document.getElementById(`${p}_${t}`)?.value)||0);return b;}
+function gb(p){const b={};BT.forEach(t=>{const v=parseInt(document.getElementById(`${p}_${t}`)?.value);b[t]=v>0?v:0;});return b;}
 
 // ─── DATE GRID (count period picker) ───
 let _dcSel={start:null,end:null};
@@ -1308,12 +1314,20 @@ function openEditCount(entryId){
   let entry=null,sid=null;
   for(const rid of Object.keys(S.entries)){const f=(S.entries[rid][S.month]||[]).find(e=>e.id===entryId);if(f){entry=f;sid=rid;break;}}
   if(!entry){toast('ไม่พบรายการ');return;}
-  const sub=(entry.subs||[])[0]||{};
-  const bills=sub.bills||eb();
-  _dcSel={start:sub.df||entry.df||null,end:sub.dt&&sub.dt!==(sub.df||entry.df)?sub.dt:null};
+  const subs=entry.subs||[];
+  // รวมแบงค์จาก "ทุกครั้ง" (ไม่ใช่แค่ครั้งแรก) เพื่อไม่ให้เงินหายตอนแก้รายการที่นับหลายครั้ง
+  const bills=eb();
+  if(subs.length)subs.forEach(s=>BT.forEach(t=>bills[t]+=(s.bills?.[t]||0)));
+  else if(entry.bills)BT.forEach(t=>bills[t]+=(entry.bills[t]||0));
+  const allDf=subs.map(s=>s.df).filter(Boolean).sort();
+  const allDt=subs.map(s=>s.dt||s.df).filter(Boolean).sort();
+  const start=allDf[0]||entry.df||null;
+  const end=allDt[allDt.length-1]||entry.dt||start;
+  _dcSel={start,end:(end&&end!==start)?end:null};
+  const warn=subs.length>1?`<div style="padding:8px 12px;background:var(--adim);border:1px solid var(--amber);border-radius:6px;margin-bottom:12px;font-size:12px;color:var(--amber);">⚠️ รายการนี้รวมจาก ${subs.length} ครั้ง — แก้ไขแล้วจะรวมเป็นครั้งเดียว (ยอดเงินรวมเท่าเดิม)</div>`:'';
   const body=`
     <input type="hidden" id="ec_sid" value="${sid}">
-    ${renderDateGrid(S.month,sid,entryId)}
+    ${warn}${renderDateGrid(S.month,sid,entryId)}
     <div class="tbar"><span class="tl">ยอดที่นับได้</span><span class="tv" id="sf_tot">฿0</span></div>
     ${billInp('sf',null,bills)}`;
   OM(`แก้ไข ${entry.title||'นับเงิน'}`,body,`<button class="btn btn-x" onclick="CMask()">ยกเลิก</button><button class="btn btn-g" onclick="saveEditCount('${entryId}')">บันทึก</button>`);
@@ -1329,7 +1343,8 @@ async function saveEditCount(entryId){
   const list=ge(sid,S.month);
   const entry=list.find(e=>e.id===entryId);
   if(!entry){toast('ไม่พบรายการ');return;}
-  const updated={...entry,df,dt,total,subs:[{df,dt,bills}]};
+  const newTitle=(entry.title||'').replace(/\s*\(\d+\s*ครั้ง\)/,'');
+  const updated={...entry,df,dt,total,subs:[{df,dt,bills}],title:newTitle||entry.title};
   if(!_lockSave())return;
   try{
     await sbUpsert('entries',entryToRow(updated,sid,S.month));
