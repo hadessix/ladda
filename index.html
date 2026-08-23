@@ -428,6 +428,15 @@ function _isStandalone(){
   return window.navigator.standalone===true || window.matchMedia('(display-mode: standalone)').matches;
 }
 function _isIOS(){return /iPad|iPhone|iPod/.test(navigator.userAgent);}
+// เปิดอยู่ในเบราว์เซอร์ในแอปอื่นหรือเปล่า (LINE/Messenger มีที่เก็บข้อมูลแยกจาก Safari/Chrome)
+function _inApp(){
+  const u=navigator.userAgent||'';
+  if(/Line\//i.test(u))return 'LINE';
+  if(/Messenger/i.test(u))return 'Messenger';
+  if(/FBAN|FBAV|FB_IAB/i.test(u))return 'Facebook';
+  if(/Instagram/i.test(u))return 'Instagram';
+  return '';
+}
 
 // ═══════════════════════════════════════════════════════════
 // 🌐 แปลภาษาหน้าพนักงาน — ไทย / ລາວ / မြန်မာ
@@ -646,7 +655,7 @@ async function attTap(pointId,manual){
     _attScreen(_attCard(`
       <div style="font-size:46px;margin-bottom:10px;">📵</div>
       <div style="font-size:17px;font-weight:700;margin-bottom:8px;">เครื่องนี้ยังไม่ได้ลงทะเบียน</div>
-      <p style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:18px;">ให้หัวหน้างานเปิดหน้าลงทะเบียนในเครื่องนี้ แล้วเลือกชื่อของคุณ</p>
+      ${_inApp()?`<div style="background:var(--adim);border:1px solid var(--abr);border-radius:11px;padding:12px;font-size:13px;color:var(--amber);line-height:1.85;text-align:left;margin-bottom:14px;"><strong>เปิดผิดที่</strong><br>ตอนนี้เปิดอยู่ในแอป ${_inApp()} ซึ่งเก็บข้อมูลแยกจากเบราว์เซอร์<br>กดปุ่ม <strong>⋯</strong> มุมขวาบน แล้วเลือก <strong>เปิดในเบราว์เซอร์</strong></div>`:'<p style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:18px;">ให้หัวหน้างานเปิดหน้าลงทะเบียนในเครื่องนี้ แล้วเลือกชื่อของคุณ</p>'}
       <button class="btn btn-b" style="width:100%;" onclick="attEnroll()">ลงทะเบียนเครื่องนี้</button>`,'var(--abr)'));
     return;
   }
