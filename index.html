@@ -816,9 +816,25 @@ async function _renderQR(elId,text){
   }
 }
 
+// ── ไอคอนหน้าจอโฮมบน iPhone มีที่เก็บข้อมูลแยกจาก Safari (บัตรประจำตัวอยู่ฝั่ง Safari)
+// → ไอคอนทำหน้าที่เป็นทางลัด กดแล้วเด้งไปเปิดในเบราว์เซอร์แทน
+function _attBounce(){
+  const url=location.origin+'/?me=1';
+  _attScreen(`<div style="width:100%;max-width:400px;margin:auto;padding:24px;box-sizing:border-box;text-align:center;">
+    <img src="icon-192.png" style="width:76px;height:76px;border-radius:20px;">
+    <div style="font-size:20px;font-weight:800;margin:14px 0 6px;">ลงเวลาเข้างาน</div>
+    <p style="font-size:13px;color:var(--text2);line-height:1.8;margin-bottom:20px;">แตะปุ่มด้านล่างเพื่อเปิดข้อมูลของคุณ</p>
+    <a href="${url}" target="_blank" rel="noopener" style="display:block;padding:15px;background:var(--green);border-radius:13px;color:#06210f;font-size:17px;font-weight:800;text-decoration:none;">เปิดข้อมูลของฉัน →</a>
+    <div style="font-size:11px;color:var(--text3);margin-top:18px;line-height:1.75;">การแตะสติ๊กเกอร์ NFC ใช้งานได้ตามปกติ<br>ไม่ต้องเปิดจากไอคอนนี้</div>
+    <div style="margin-top:26px;"><a href="?work=1" style="font-size:11px;color:var(--text3);">เข้าแอปงาน (สำหรับหัวหน้างาน)</a></div>
+  </div>`);
+}
+
 // ── router: เรียกจาก authInit ──
 function attRoute(){
   const q=new URLSearchParams(location.search);
+  // เปิดจากไอคอนหน้าจอโฮมแต่ไม่มีบัตรประจำตัวในบริบทนี้ → ทางลัดเปิดในเบราว์เซอร์
+  if(_isStandalone()&&!_devTok()&&!q.has('work')&&!q.has('tap')){_attBounce();return true;}
   if(q.has('tap')){attTap(q.get('tap'));return true;}
   if(q.has('enroll')){attEnroll();return true;}
   if(q.has('bind')){attBind();return true;}
