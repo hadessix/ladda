@@ -577,7 +577,7 @@ async function attBindGo(){
   const empId=sel?.value;
   if(!empId){err.textContent='เลือกชื่อพนักงานก่อน';return;}
   const name=sel.options[sel.selectedIndex].textContent;
-  if(!confirm(`ลงทะเบียนเครื่องนี้ให้:\n\n${name}\n\nเครื่องเก่าของคนนี้ (ถ้ามี) จะใช้ไม่ได้ทันที`))return;
+  if(!confirm(`ลงทะเบียนเครื่องนี้ให้:\n\n${name}\n\nเครื่องเดิมของคนนี้ยังใช้ได้ (สูงสุด 3 เครื่อง)`))return;
   err.textContent='กำลังลงทะเบียน…';
   try{
     const res=await fetch(WORKER_URL+'/att/bind',{method:'POST',
@@ -600,18 +600,13 @@ async function attBindGo(){
 function _meUrl(){try{history.replaceState({},'',location.pathname+'?me=1');}catch(e){}}
 function _homeTip(){
   if(_isStandalone())return'';
-  if(_isIOS()){
-    return`<div style="background:var(--bdim);border:1px solid var(--bbr);border-radius:11px;padding:11px 13px;font-size:12px;color:var(--text2);line-height:1.8;text-align:left;">
-      <div style="font-weight:700;color:var(--blue);margin-bottom:4px;">📖 เปิดหน้านี้อีกครั้งยังไง</div>
-      แตะสติ๊กเกอร์ NFC ได้เลย หรือกดปุ่มแชร์ <strong>⬆️</strong> → <strong>"เพิ่มบุ๊กมาร์ก"</strong>
-      <div style="font-size:11px;color:var(--text3);margin-top:5px;">อย่าใช้ "เพิ่มไปยังหน้าจอโฮม" — iPhone จะถือว่าเป็นคนละเครื่อง แล้วต้องลงทะเบียนใหม่</div>
-    </div>`;
-  }
-  return`<div style="background:var(--bdim);border:1px solid var(--bbr);border-radius:11px;padding:11px 13px;font-size:12px;color:var(--text2);line-height:1.8;text-align:left;">
-    <div style="font-weight:700;color:var(--blue);margin-bottom:4px;">📌 เพิ่มลงหน้าจอหลัก (ถ้าต้องการ)</div>
-    <button id="inst-btn" style="display:none;width:100%;margin:6px 0 2px;padding:11px;background:var(--green);border:none;border-radius:10px;color:#06210f;font-size:15px;font-weight:800;font-family:var(--font);cursor:pointer;" onclick="_doInstall()">📲 ติดตั้ง</button>
-    <span id="inst-manual">กดปุ่ม <strong>⋮</strong> มุมขวาบน → <strong>"เพิ่มลงในหน้าจอหลัก"</strong></span>
-    <div style="font-size:11px;color:var(--text3);margin-top:5px;">ไม่ติดตั้งก็ใช้ได้ปกติ — แตะสติ๊กเกอร์เข้ามาได้ตลอด</div>
+  const ios=_isIOS();
+  return`<div style="background:var(--bdim);border:1px solid var(--bbr);border-radius:11px;padding:12px 13px;font-size:12px;color:var(--text2);line-height:1.85;text-align:left;">
+    <div style="font-weight:700;color:var(--blue);margin-bottom:5px;">📌 เพิ่มลงหน้าจอหลัก — เปิดง่ายเหมือนแอป</div>
+    ${ios
+      ?'กดปุ่มแชร์ <strong>⬆️</strong> ด้านล่างจอ → เลื่อนหา <strong>"เพิ่มไปยังหน้าจอโฮม"</strong> → กด <strong>เพิ่ม</strong>'
+      :'<button id="inst-btn" style="display:none;width:100%;margin:4px 0;padding:11px;background:var(--green);border:none;border-radius:10px;color:#06210f;font-size:15px;font-weight:800;font-family:var(--font);cursor:pointer;" onclick="_doInstall()">📲 ติดตั้งเลย</button><span id="inst-manual">กดปุ่ม <strong>⋮</strong> มุมขวาบน → <strong>"เพิ่มลงในหน้าจอหลัก"</strong></span>'}
+    ${ios?'<div style="font-size:11px;color:var(--amber);margin-top:6px;line-height:1.7;">iPhone ถือว่าไอคอนเป็นคนละเครื่อง — เปิดจากไอคอนครั้งแรกจะขอรหัสอีกรอบ ให้หัวหน้าอนุมัติอีกครั้งแล้วจบ ทั้งสองทางใช้ได้พร้อมกัน</div>':''}
   </div>`;
 }
 
@@ -731,18 +726,6 @@ function _enrStop(){if(_enrPoll){clearInterval(_enrPoll);_enrPoll=null;}}
 
 async function attEnroll(force){
   _enrStop();
-  // iPhone: ไอคอนหน้าจอหลักมีที่เก็บข้อมูลแยกจาก Safari และการแตะ NFC เปิดใน Safari เสมอ
-  // → ต้องลงทะเบียนใน Safari เท่านั้น ไม่งั้นแตะสติ๊กเกอร์แล้วจะไม่รู้จักเครื่อง
-  if(_isIOS()&&_isStandalone()){
-    _attScreen(_attCard(`
-      <div style="font-size:44px;margin-bottom:8px;">🌐</div>
-      <div style="font-size:17px;font-weight:800;margin-bottom:8px;">เปิดจาก Safari แทน</div>
-      <p style="font-size:13px;color:var(--text2);line-height:1.85;">ลงทะเบียนจากไอคอนนี้ไม่ได้<br>ให้เปิด <strong style="color:var(--text);">Safari</strong> แล้วสแกน QR อีกครั้ง</p>
-      <div style="background:var(--adim);border:1px solid var(--abr);border-radius:11px;padding:11px;margin-top:14px;font-size:12px;color:var(--amber);line-height:1.75;">
-        เพราะเวลาแตะสติ๊กเกอร์ NFC มือถือจะเปิด Safari เสมอ<br>บัตรประจำตัวจึงต้องอยู่ใน Safari
-      </div>`,'var(--abr)'));
-    return;
-  }
   if(_devTok()&&!force){
     _meUrl();
     _attScreen(_attCard(`<div style="font-size:44px;margin-bottom:8px;">✅</div>
@@ -840,9 +823,7 @@ function attRoute(){
 }
 
 function authInit(){
-  // iOS: ถอด manifest ออก ไม่ให้ Safari ชวนติดตั้ง (ไอคอนหน้าจอโฮมทำให้บัตรประจำตัวหาย)
-  if(/iPad|iPhone|iPod/.test(navigator.userAgent))document.querySelector('link[rel=manifest]')?.remove();
-  else if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
+  if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
   if(attRoute())return;
   const saved=localStorage.getItem('ladda_role');
   const token=localStorage.getItem('ladda_token');
@@ -3277,9 +3258,17 @@ function _shToggleDay(rid,n){
 }
 
 // ─── จัดการเครื่องพนักงาน (QR ลงทะเบียน / อนุมัติรหัส / ถอน) ───
-function _devOf(empId){
-  return (PR.devices||[]).filter(d=>d.employee_id===empId&&d.status!=='pending')
-    .sort((a,b)=>new Date(b.bound_at||0)-new Date(a.bound_at||0))[0]||null;
+function _devsOf(empId){
+  return (PR.devices||[]).filter(d=>d.employee_id===empId&&d.status==='active')
+    .sort((a,b)=>new Date(b.bound_at||0)-new Date(a.bound_at||0));
+}
+function _devOf(empId){return _devsOf(empId)[0]||null;}
+// ชื่อเครื่องแบบสั้นจาก user agent
+function _devKind(d){
+  const u=d.label||d.ua||'';
+  if(/iPhone|iPad|iPod/.test(u))return'iPhone';
+  if(/Android/.test(u))return'Android';
+  return'เครื่อง';
 }
 function _devAgo(ts){
   if(!ts)return'ยังไม่เคยแตะ';
@@ -3293,7 +3282,7 @@ function openAttDevices(){
   const active=PR.employees.filter(e=>e.status==='active');
   const pending=(PR.devices||[]).filter(d=>d.status==='pending'&&(!d.expires_at||new Date(d.expires_at)>new Date()));
   const bound=[],unbound=[];
-  active.forEach(e=>{const d=_devOf(e.id);(d&&d.status==='active'?bound:unbound).push({e,d});});
+  active.forEach(e=>{(_devsOf(e.id).length?bound:unbound).push({e});});
   const empOpts=active.map(e=>{const rt=S.shops.find(s=>s.id===e.route_id);
     return`<option value="${e.id}">${e.name}${rt?' — '+rt.name:''}</option>`;}).join('');
 
@@ -3312,16 +3301,25 @@ function openAttDevices(){
       </div>
     </div>`;}).join(''):`<div style="padding:14px;text-align:center;color:var(--text3);font-size:12px;">ยังไม่มีใครขอรหัสเข้ามา<br><span style="font-size:11px;">ให้ลูกน้องสแกน QR ด้านบน แล้วกดรีเฟรช</span></div>`;
 
-  const row=({e,d})=>{
+  const row=({e})=>{
     const rt=S.shops.find(s=>s.id===e.route_id);
-    const on=d&&d.status==='active';
-    return`<div style="display:flex;align-items:center;gap:9px;padding:9px 11px;border-bottom:1px solid var(--border);">
-      <span style="width:8px;height:8px;border-radius:50%;background:${on?'var(--green)':(d?'var(--red)':'var(--border2)')};flex-shrink:0;"></span>
+    const list=_devsOf(e.id);
+    const on=list.length>0;
+    const devLines=list.map(d=>`<div style="display:flex;align-items:center;gap:7px;margin-top:4px;padding-left:2px;">
+        <span style="font-size:10px;color:var(--text3);background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:1px 6px;">${_devKind(d)}</span>
+        <span style="font-size:10px;color:var(--text3);flex:1;">แตะล่าสุด ${_devAgo(d.last_seen)}</span>
+        <button class="delbtn" style="font-size:10px;padding:1px 7px;" onclick="_devRevoke('${d.id}','${(e.name||'').replace(/'/g,'')}')">ถอน</button>
+      </div>`).join('');
+    return `<div style="display:flex;align-items:flex-start;gap:9px;padding:9px 11px;border-bottom:1px solid var(--border);">
+      <span style="width:8px;height:8px;border-radius:50%;background:${on?'var(--green)':'var(--border2)'};flex-shrink:0;margin-top:5px;"></span>
       <div style="flex:1;min-width:0;">
-        <div style="font-size:13px;font-weight:500;">${e.name}</div>
-        <div style="font-size:10px;color:var(--text3);">${rt?rt.name+' · ':''}${on?'แตะล่าสุด '+_devAgo(d.last_seen):(d?'ถูกถอนแล้ว':'ยังไม่ได้ลงทะเบียน')}</div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:13px;font-weight:500;">${e.name}</span>
+          ${list.length>1?`<span style="font-size:10px;color:var(--amber);background:var(--adim);border:1px solid var(--abr);border-radius:9px;padding:0 6px;">${list.length} เครื่อง</span>`:''}
+        </div>
+        <div style="font-size:10px;color:var(--text3);">${rt?rt.name:'ไม่มีสาย'}${on?'':' · ยังไม่ได้ลงทะเบียน'}</div>
+        ${devLines}
       </div>
-      ${on?`<button class="delbtn" onclick="_devRevoke('${d.id}','${(e.name||'').replace(/'/g,'')}')">ถอน</button>`:''}
     </div>`;
   };
 
@@ -3331,6 +3329,7 @@ function openAttDevices(){
       <div style="font-size:11px;color:var(--text2);margin-bottom:10px;">เปิดกล้องมือถือส่องได้เลย ไม่ต้องลงแอป</div>
       <div id="enr-qr" style="display:inline-block;background:#fff;padding:10px;border-radius:12px;min-height:60px;"></div>
       <div style="font-size:11px;color:var(--text3);margin-top:9px;line-height:1.7;">
+        <span style="color:var(--amber);">1 คนมีได้สูงสุด 3 เครื่อง</span> — iPhone นับ Safari กับไอคอนหน้าจอโฮมเป็นคนละเครื่อง<br>
         ลูกน้องจะได้รหัส 7 หลัก เช่น <span style="font-family:var(--mono);color:var(--green);">BC37041</span><br>
         แล้วรหัสนั้นจะเด้งมาให้คุณเลือกชื่อด้านล่าง
       </div>
@@ -3368,7 +3367,7 @@ async function _devApprove(devId,code){
   const empId=sel?.value;
   if(!empId){toast('เลือกชื่อพนักงานก่อน');return;}
   const name=sel.options[sel.selectedIndex].textContent;
-  if(!confirm(`อนุมัติรหัส ${code} ให้:\n\n${name}\n\nเครื่องเก่าของคนนี้ (ถ้ามี) จะใช้ไม่ได้ทันที`))return;
+  if(!confirm(`อนุมัติรหัส ${code} ให้:\n\n${name}\n\nเครื่องเดิมของคนนี้ยังใช้ได้ (สูงสุด 3 เครื่อง)`))return;
   try{
     const res=await fetch(WORKER_URL+'/att/approve',{method:'POST',
       headers:{'Content-Type':'application/json',Authorization:'Bearer '+_wToken()},
