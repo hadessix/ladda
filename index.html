@@ -642,6 +642,16 @@ function _expChip(label,date){
     <span style="font-size:12px;font-weight:600;color:${col};">${txt}</span>
   </div>`;
 }
+function _slipShow(){
+  const l=document.getElementById('slip-lock'),b=document.getElementById('slip-body');
+  if(l)l.style.display='none';
+  if(b)b.style.display='';
+}
+function _slipHide(){
+  const l=document.getElementById('slip-lock'),b=document.getElementById('slip-body');
+  if(l)l.style.display='';
+  if(b)b.style.display='none';
+}
 async function attMe(){
   _grabKey();
   _attScreen(_attCard(`<div style="font-size:15px;color:var(--text2);">กำลังโหลด…</div>`));
@@ -670,7 +680,7 @@ async function attMe(){
       <div style="font-size:10px;color:var(--text3);margin-top:3px;">${p.l}</div></div>`).join('')}
   </div>`:`<div style="font-size:12px;color:var(--text3);padding:8px;">ยังไม่มีรูปเอกสาร</div>`;
 
-  let slipHtml=`<div style="font-size:12px;color:var(--text3);padding:8px;">ยังไม่มีสลิป</div>`;
+  let slipHtml=`<div style="font-size:12px;color:var(--text3);padding:8px;">ยังไม่มีสลิปงวดที่จ่ายแล้ว</div>`;
   if(ps&&ps.entry){
     const en=ps.entry;
     const dedTot=(ps.deductions||[]).reduce((s,d)=>s+Number(d.amount||0),0);
@@ -706,7 +716,18 @@ async function attMe(){
     </div>
     ${sec('⏰ เอกสารที่ต้องต่ออายุ',expiries)}
     ${sec('📇 เอกสารของฉัน',photoHtml)}
-    ${sec('💰 สลิปงวดล่าสุด',slipHtml)}
+    ${ps&&ps.entry?`<div style="margin-top:16px;text-align:left;">
+      <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:7px;">💰 สลิปเงินเดือน</div>
+      <div id="slip-lock" onclick="_slipShow()" style="cursor:pointer;background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:15px;text-align:center;">
+        <div style="font-size:26px;margin-bottom:4px;">🔒</div>
+        <div style="font-size:13px;font-weight:600;">แตะเพื่อดูสลิป</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px;">งวด ${ps.period?.period_key||'-'}</div>
+      </div>
+      <div id="slip-body" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:13px;">
+        ${slipHtml}
+        <button onclick="_slipHide()" style="width:100%;margin-top:10px;padding:8px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text3);font-size:12px;font-family:var(--font);cursor:pointer;">ซ่อน</button>
+      </div>
+    </div>`:sec('💰 สลิปเงินเดือน',slipHtml)}
     ${sec('📅 เวลาเข้างาน 7 วันล่าสุด',evHtml)}
     <div style="margin-top:18px;">${_homeTip()}</div>
   </div>`);

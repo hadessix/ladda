@@ -441,14 +441,16 @@ export default {
         const from = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
         const events = await sb(env, `att_events?employee_id=eq.${empId}&work_date=gte.${from}&select=work_date,ts,seq,point_id,flags&order=ts.desc&limit=80`);
 
-        // สลิปงวดล่าสุดของตัวเอง
+        // สลิป = งวดล่าสุดที่ "จ่ายแล้ว" เท่านั้น (ไม่โชว์งวดที่กำลังทำอยู่ ซึ่งวันทำงานยังเป็น 0)
         let payslip = null;
-        const entries = await sb(env, `payroll_entries?employee_id=eq.${empId}&select=*&order=created_at.desc&limit=1`);
-        if (entries && entries[0]) {
-          const en = entries[0];
-          const deds = await sb(env, `payroll_deductions?entry_id=eq.${en.id}&select=*`);
-          const periods = await sb(env, `payroll_periods?id=eq.${en.period_id}&select=id,period_key,status,pay_date`);
-          payslip = { entry: en, deductions: deds || [], period: (periods && periods[0]) || null };
+        const paid = await sb(env, `payroll_periods?status=eq.paid&select=id,period_key,status,pay_date&order=period_key.desc&limit=12`);
+        for (const p of (paid || [])) {
+          const ents = await sb(env, `payroll_entries?employee_id=eq.${empId}&period_id=eq.${p.id}&select=*&limit=1`);
+          if (ents && ents[0]) {
+            const deds = await sb(env, `payroll_deductions?entry_id=eq.${ents[0].id}&select=*`);
+            payslip = { entry: ents[0], deductions: deds || [], period: p };
+            break;
+          }
         }
         return jsonRes({ ok: true, employee: emp, today: wd, events: events || [], payslip });
       } catch (e) {
