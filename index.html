@@ -642,6 +642,15 @@ function _expChip(label,date){
     <span style="font-size:12px;font-weight:600;color:${col};">${txt}</span>
   </div>`;
 }
+// "2569-08-B" → "11-20 ส.ค. 2569"
+function _perLbl(k){
+  if(!k)return'-';
+  const m=String(k).split('-');
+  if(m.length<3)return k;
+  const mo=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][Number(m[1])-1]||'';
+  const d={A:'1-10',B:'11-20',C:'21-31'}[m[2]]||m[2];
+  return `${d} ${mo} ${m[0]}`;
+}
 function _slipShow(){
   const l=document.getElementById('slip-lock'),b=document.getElementById('slip-body');
   if(l)l.style.display='none';
@@ -684,14 +693,15 @@ async function attMe(){
   if(ps&&ps.entry){
     const en=ps.entry;
     const dedTot=(ps.deductions||[]).reduce((s,d)=>s+Number(d.amount||0),0);
-    const gross=Number(en.daily_rate||0)*Number(en.days_worked||0)+Number(en.bonus||0);
+    const rate=Number(ps.daily_rate||0);
+    const gross=rate*Number(en.days_worked||0)+Number(en.bonus||0);
     slipHtml=`<div style="text-align:left;font-size:13px;">
-      <div style="display:flex;justify-content:space-between;padding:5px 0;"><span style="color:var(--text2);">ค่าแรง ${en.days_worked||0} วัน</span><span style="font-family:var(--mono);">${fmt(Number(en.daily_rate||0)*Number(en.days_worked||0))}</span></div>
+      <div style="display:flex;justify-content:space-between;padding:5px 0;"><span style="color:var(--text2);">ค่าแรง ${en.days_worked||0} วัน × ${fmt(rate)}</span><span style="font-family:var(--mono);">${fmt(rate*Number(en.days_worked||0))}</span></div>
       ${Number(en.bonus)?`<div style="display:flex;justify-content:space-between;padding:5px 0;"><span style="color:var(--text2);">โบนัส</span><span style="font-family:var(--mono);color:var(--green);">+${fmt(en.bonus)}</span></div>`:''}
       ${(ps.deductions||[]).map(d=>`<div style="display:flex;justify-content:space-between;padding:5px 0;"><span style="color:var(--text2);">${d.label||d.kind||'หัก'}</span><span style="font-family:var(--mono);color:var(--amber);">-${fmt(d.amount)}</span></div>`).join('')}
       ${Number(en.advance)?`<div style="display:flex;justify-content:space-between;padding:5px 0;"><span style="color:var(--text2);">เบิกล่วงหน้า</span><span style="font-family:var(--mono);color:var(--amber);">-${fmt(en.advance)}</span></div>`:''}
       <div style="display:flex;justify-content:space-between;padding:9px 0 0;margin-top:6px;border-top:1px solid var(--border);font-weight:700;"><span>สุทธิ</span><span style="font-family:var(--mono);color:var(--green);font-size:17px;">${fmt(gross-dedTot-Number(en.advance||0))}</span></div>
-      <div style="font-size:11px;color:var(--text3);margin-top:6px;">งวด ${ps.period?.period_key||'-'} · ${ps.period?.status==='paid'?'จ่ายแล้ว':'ยังไม่จ่าย'}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px;">งวด ${_perLbl(ps.period?.period_key)} · จ่ายแล้ว</div>
     </div>`;
   }
 
@@ -721,7 +731,8 @@ async function attMe(){
       <div id="slip-lock" onclick="_slipShow()" style="cursor:pointer;background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:15px;text-align:center;">
         <div style="font-size:26px;margin-bottom:4px;">🔒</div>
         <div style="font-size:13px;font-weight:600;">แตะเพื่อดูสลิป</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:3px;">งวด ${ps.period?.period_key||'-'}</div>
+        <div style="font-size:12px;color:var(--green);margin-top:4px;font-weight:600;">งวด ${_perLbl(ps.period?.period_key)}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:2px;">จ่ายแล้ว</div>
       </div>
       <div id="slip-body" style="display:none;background:var(--bg2);border:1px solid var(--border);border-radius:11px;padding:13px;">
         ${slipHtml}

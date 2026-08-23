@@ -448,7 +448,9 @@ export default {
           const ents = await sb(env, `payroll_entries?employee_id=eq.${empId}&period_id=eq.${p.id}&select=*&limit=1`);
           if (ents && ents[0]) {
             const deds = await sb(env, `payroll_deductions?entry_id=eq.${ents[0].id}&select=*`);
-            payslip = { entry: ents[0], deductions: deds || [], period: p };
+            // daily_rate อยู่ใน employees_salary ไม่ได้อยู่ในสลิป — ของตัวเองเท่านั้น
+            const sal = await sb(env, `employees_salary?employee_id=eq.${empId}&select=daily_rate`).catch(() => null);
+            payslip = { entry: ents[0], deductions: deds || [], period: p, daily_rate: (sal && sal[0] && sal[0].daily_rate) || 0 };
             break;
           }
         }
