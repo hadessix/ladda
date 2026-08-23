@@ -440,6 +440,9 @@ const LANGS=[['th','ไทย'],['lo','ລາວ'],['my','မြန်မာ']];
 
 const I18N={
  lo:{
+  'เข้างานครบแล้ววันนี้':'ເຂົ້າວຽກຄົບແລ້ວມື້ນີ້','ยังเข้างานไม่ครบ':'ຍັງເຂົ້າວຽກບໍ່ຄົບ',
+  'กดลงเวลาในแอป':'ກົດລົງເວລາໃນແອັບ','แตะสติ๊กเกอร์ที่รถ':'ແຕະສະຕິກເກີທີ່ລົດ',
+  'ต้องทำครบทั้ง 2 อย่างถึงจะนับว่าเข้างาน':'ຕ້ອງເຮັດຄົບທັງ 2 ຢ່າງຈຶ່ງນັບວ່າເຂົ້າວຽກ',
   'ลงเวลาเข้างาน':'ລົງເວລາເຂົ້າວຽກ','ยืนยันลงเวลา':'ຢືນຢັນລົງເວລາ',
   'ระบบจะบันทึกเวลาและตำแหน่งปัจจุบัน':'ລະບົບຈະບັນທຶກເວລາແລະຕຳແໜ່ງປັດຈຸບັນ','ต้องยืนยันตัวตนก่อน':'ຕ້ອງຢືນຢັນຕົວຕົນກ່ອນ',
   'แจ้งรถเสีย / ขอความช่วยเหลือ':'ແຈ້ງລົດເສຍ / ຂໍຄວາມຊ່ວຍເຫຼືອ','ยืนยันแจ้งรถเสีย':'ຢືນຢັນແຈ້ງລົດເສຍ',
@@ -489,6 +492,9 @@ const I18N={
   'ไม่พบสาย/กลุ่มต้นทาง':'ບໍ່ພົບສາຍ/ກຸ່ມຕົ້ນທາງ',
  },
  my:{
+  'เข้างานครบแล้ววันนี้':'ယနေ့ အလုပ်ဆင်းချိန်ပြည့်စုံပြီ','ยังเข้างานไม่ครบ':'အလုပ်ဆင်းချိန် မပြည့်စုံသေးပါ',
+  'กดลงเวลาในแอป':'အက်ပ်တွင် အချိန်မှတ်ရန်','แตะสติ๊กเกอร์ที่รถ':'ကားပေါ်ရှိ စတစ်ကာကို တို့ရန်',
+  'ต้องทำครบทั้ง 2 อย่างถึงจะนับว่าเข้างาน':'နှစ်ခုလုံးပြီးမှ အလုပ်ဆင်းသည်ဟု သတ်မှတ်ပါမည်',
   'ลงเวลาเข้างาน':'အလုပ်ဆင်းချိန်မှတ်ရန်','ยืนยันลงเวลา':'အချိန်မှတ်ရန် အတည်ပြုပါ',
   'ระบบจะบันทึกเวลาและตำแหน่งปัจจุบัน':'လက်ရှိအချိန်နှင့်တည်နေရာကို မှတ်တမ်းတင်ပါမည်','ต้องยืนยันตัวตนก่อน':'အထောက်အထားအရင်အတည်ပြုပါ',
   'แจ้งรถเสีย / ขอความช่วยเหลือ':'ကားပျက် / အကူအညီတောင်းရန်','ยืนยันแจ้งรถเสีย':'ကားပျက်ကြောင်း အတည်ပြုပါ',
@@ -673,6 +679,11 @@ async function attTap(pointId,manual){
   _meUrl();
   const t=new Date(d.ts);
   const hhmm=String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
+  // อัปเดตข้อมูลในเครื่องเพื่อคำนวณสถานะใหม่
+  if(_meData&&d.work_date){
+    (_meData.events=_meData.events||[]).unshift({work_date:d.work_date,ts:d.ts,seq:d.seq,flags:d.flags||{}});
+    _meData.today=d.work_date;
+  }
   const warn=[];
   if(d.flags?.noloc)warn.push('ไม่ได้เปิดตำแหน่ง — เปิด GPS แล้วแตะใหม่ครั้งหน้า');
   if(d.flags?.far)warn.push(`อยู่ห่างจุดแตะ ${d.flags.far} เมตร`);
@@ -684,7 +695,8 @@ async function attTap(pointId,manual){
     ${d.employee?.photo_url?`<img src="${d.employee.photo_url}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;margin-bottom:8px;">`:''}
     <div style="font-size:16px;font-weight:600;margin-bottom:14px;">${d.employee?.name||''}</div>
     ${warn.length?`<div style="background:var(--adim);border:1px solid var(--abr);border-radius:9px;padding:9px 11px;font-size:12px;color:var(--amber);line-height:1.6;margin-bottom:12px;">${warn.join('<br>')}</div>`:''}
-    <button class="btn btn-b" style="width:100%;" onclick="attMe()">ดูข้อมูลของฉัน</button>`,'var(--gbr)'));
+    ${_meData?_statusCard():''}
+    <button class="btn btn-b" style="width:100%;margin-top:12px;" onclick="attMe()">ดูข้อมูลของฉัน</button>`,'var(--gbr)'));
 }
 
 // ── หน้าลงทะเบียนเครื่อง (หัวหน้างาน) ──
@@ -767,7 +779,8 @@ async function attBindGo(){
       <div style="font-size:19px;font-weight:800;color:var(--green);margin-bottom:6px;">ลงทะเบียนเรียบร้อย</div>
       <div style="font-size:16px;font-weight:600;margin-bottom:12px;">${d.employee?.name||''}</div>
       <p style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:18px;">ต่อไปแค่เอามือถือแตะสติ๊กเกอร์ ไม่ต้องกรอกอะไรอีก</p>
-      <button class="btn btn-b" style="width:100%;" onclick="attMe()">ดูข้อมูลของฉัน</button>`,'var(--gbr)'));
+      ${_meData?_statusCard():''}
+    <button class="btn btn-b" style="width:100%;margin-top:12px;" onclick="attMe()">ดูข้อมูลของฉัน</button>`,'var(--gbr)'));
   }catch(e){err.textContent='เชื่อมต่อไม่ได้: '+e.message;}
 }
 
@@ -876,6 +889,36 @@ async function attMe(){
   _meRender();
 }
 
+// เข้างานวันนี้ครบหรือยัง — ต้องมีทั้ง "กดในแอป" และ "แตะสติ๊กเกอร์"
+function _todayStatus(){
+  const d=_meData;if(!d)return{app:false,tag:false};
+  const today=d.today;
+  const list=(d.events||[]).filter(v=>v.work_date===today);
+  return{
+    app:list.some(v=>v.flags&&v.flags.manual),
+    tag:list.some(v=>!(v.flags&&v.flags.manual)),
+    n:list.length
+  };
+}
+function _stepRow(done,label){
+  return`<div style="display:flex;align-items:center;gap:9px;padding:8px 0;">
+    <span style="width:24px;height:24px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;background:${done?'var(--green)':'var(--bg3)'};color:${done?'#06210f':'var(--text3)'};border:1px solid ${done?'var(--green)':'var(--border2)'};">${done?'✓':''}</span>
+    <span style="font-size:13px;color:${done?'var(--text)':'var(--text3)'};font-weight:${done?'600':'400'};">${label}</span>
+  </div>`;
+}
+function _statusCard(){
+  const st=_todayStatus();
+  const full=st.app&&st.tag;
+  return`<div style="margin-top:16px;background:${full?'var(--gdim)':'var(--adim)'};border:1px solid ${full?'var(--gbr)':'var(--abr)'};border-radius:13px;padding:14px;text-align:left;">
+    <div style="font-size:14px;font-weight:800;color:${full?'var(--green)':'var(--amber)'};margin-bottom:4px;">
+      ${full?'✅ เข้างานครบแล้ววันนี้':'⚠️ ยังเข้างานไม่ครบ'}
+    </div>
+    ${_stepRow(st.app,'กดลงเวลาในแอป')}
+    ${_stepRow(st.tag,'แตะสติ๊กเกอร์ที่รถ')}
+    ${full?'':'<div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.7;">ต้องทำครบทั้ง 2 อย่างถึงจะนับว่าเข้างาน</div>'}
+  </div>`;
+}
+
 // ── หน้าหลัก: ชื่อ + รูป + เอกสาร + เวลาเข้างาน (ไม่มีเรื่องเงินและวันหมดอายุ) ──
 function _meRender(){
   const d=_meData;if(!d)return;
@@ -913,7 +956,8 @@ function _meRender(){
       <div style="font-size:23px;font-weight:800;margin-top:12px;">${e.name}</div>
       <div style="font-size:13px;color:var(--text3);">${e.nationality||''}</div>
     </div>
-    <button onclick="_checkIn()" style="width:100%;margin-top:18px;padding:16px;background:var(--green);border:none;border-radius:14px;color:#06210f;font-size:18px;font-weight:800;font-family:var(--font);cursor:pointer;">⏱ ลงเวลาเข้างาน</button>
+    ${_todayStatus().app?'':'<button onclick="_checkIn()" style="width:100%;margin-top:18px;padding:16px;background:var(--green);border:none;border-radius:14px;color:#06210f;font-size:18px;font-weight:800;font-family:var(--font);cursor:pointer;">⏱ ลงเวลาเข้างาน</button>'}
+    ${_statusCard()}
     ${sec('📇 เอกสารของฉัน',photoHtml)}
     ${sec('📅 เวลาเข้างาน 7 วันล่าสุด',evHtml)}
     <div style="margin-top:18px;">${_homeTip()}</div>
@@ -3342,7 +3386,7 @@ function renderPrAtt(){
   const byEmp={};evs.forEach(e=>{(byEmp[e.employee_id]=byEmp[e.employee_id]||[]).push(e);});
 
   // พนักงานที่ต้องตอกเวลา จัดกลุ่มตามสาย
-  let nIn=0,nLate=0,nMiss=0,nFlag=0;
+  let nIn=0,nLate=0,nMiss=0,nFlag=0,nPartial=0;
   const groups=_shiftOrderedGroups();
   let body='';
 
@@ -3378,6 +3422,10 @@ function renderPrAtt(){
             else{lateTxt=`ก่อนเวลา ${-diff} นาที`;lateCol='var(--green)';}
           } else lateTxt='—';
         }
+        const hasTag=list.some(v=>!(v.flags&&v.flags.manual));
+        const hasApp=list.some(v=>v.flags&&v.flags.manual);
+        const partial=hasApp&&!hasTag;
+        if(partial)nPartial++;
         const flags=list.reduce((a,v)=>{const f=v.flags||{};Object.keys(f).forEach(k=>{if(f[k])a[k]=f[k];});return a;},{});
         const fchips=[];
         if(flags.noloc)fchips.push('<span title="ไม่ได้เปิด GPS" style="font-size:10px;color:var(--amber);">📍✕</span>');
@@ -3399,6 +3447,7 @@ function renderPrAtt(){
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
               <span style="font-size:13px;font-weight:500;">${e.name}</span>
               ${e.position?`<span style="font-size:10px;color:var(--text3);">${e.position}</span>`:''}
+              ${partial?'<span title="กดในแอปแล้วแต่ยังไม่แตะสติ๊กเกอร์ที่รถ" style="font-size:10px;color:var(--amber);background:var(--adim);border:1px solid var(--abr);border-radius:9px;padding:0 6px;">ยังไม่แตะสติ๊กเกอร์</span>':''}
               ${fchips.join(' ')}
             </div>
             <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">${times||'<span style="font-size:11px;color:var(--text3);">ไม่มีการแตะ</span>'}</div>
@@ -3446,6 +3495,7 @@ function renderPrAtt(){
       ${card('มาแล้ว',nIn,'var(--green)')}
       ${card('สาย',nLate,nLate?'var(--red)':'var(--text3)')}
       ${card('ยังไม่มา',nMiss,nMiss?'var(--amber)':'var(--text3)')}
+      ${card('ยังไม่แตะสติ๊กเกอร์',nPartial,nPartial?'var(--amber)':'var(--text3)')}
       ${card('ต้องตรวจ',nFlag,nFlag?'var(--red)':'var(--text3)')}
     </div>
     ${body||`<div class="empty"><div class="ei">📭</div><p>ยังไม่มีสายที่เปิดใช้ระบบลงเวลา<br><span style="font-size:12px;">ไปที่ ⚙️ ตั้งค่า เพื่อกำหนดเวลาแต่ละสาย</span></p></div>`}
