@@ -1187,7 +1187,28 @@ function updBLimit(p){
     if(s)s.textContent=`= ฿${fN(val)}`;
   });
   const tb=document.getElementById(`${p}_tot`);if(tb)tb.textContent=fmt(tot);
+  if(p==='xL'||p==='xR')_xcDiff();
   if(over)toast('ไม่สามารถใส่แบงค์เกินจำนวนที่มีในกล่องได้');
+}
+// ─── แลกเงิน: ยอดสองฝั่งต้องเท่ากันเป๊ะ ───
+function _xcSum(pre){
+  let tot=0;
+  BT.forEach(t=>{const inp=document.getElementById(`${pre}_${t}`);const v=parseInt(inp?.value)||0;tot+=(t==='coin'?1:t)*v;});
+  return tot;
+}
+function _xcDiff(){
+  const st=document.getElementById('xc_status');
+  if(!st)return;
+  const btn=document.getElementById('xc_save');
+  const hasR=!!(document.getElementById('xc_R')?.value);
+  const L=_xcSum('xL'), R=_xcSum('xR');
+  let ok=false,msg='',col='var(--text3)';
+  if(!hasR){msg='เลือกสาย/กลุ่มฝั่งขวาก่อน';}
+  else if(L===0&&R===0){msg='ใส่แบงค์ทั้งสองฝั่งให้ยอดเท่ากัน';}
+  else if(L!==R){msg=`ยอดไม่เท่ากัน — ต่างกัน ${fmt(Math.abs(L-R))} (ซ้าย ${fmt(L)} / ขวา ${fmt(R)})`;col='var(--red)';}
+  else {ok=true;msg=`ยอดตรงกัน ${fmt(L)} ✓`;col='var(--green)';}
+  st.textContent=msg;st.style.color=col;
+  if(btn){btn.disabled=!ok;btn.style.opacity=ok?'1':'.4';btn.style.pointerEvents=ok?'auto':'none';}
 }
 function billInp(p,cols,init){
   const g=cols===2?'bgrid2':'bgrid';
@@ -1742,12 +1763,13 @@ function openExchange(lockedVal){
       <span style="color:var(--amber);">${leftName}</span>
       <span style="color:var(--purple);margin:0 8px;">⇄</span>
       <span id="xc_rname" style="color:var(--text3);font-weight:500;">ยังไม่ได้เลือกฝั่งขวา</span>
+      <div id="xc_status" style="margin-top:6px;font-size:12px;font-weight:500;color:var(--text3);">เลือกสาย/กลุ่มฝั่งขวาก่อน</div>
     </div>
     <p style="font-size:13px;color:var(--text2);margin-bottom:14px;">แต่ละฝั่งระบุแบงค์ที่ให้ออก — แบงค์จะสลับไปอีกฝั่งอัตโนมัติ</p>
     <div style="display:grid;grid-template-columns:1fr 36px 1fr;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
       ${hdrRow}${denomRows}${totRow}
     </div>`;
-  OM('แลกเงินระหว่างสาย',body,`<button class="btn btn-x" onclick="CMask()">ยกเลิก</button><button class="btn btn-p" onclick="saveExchange()">บันทึกการแลก</button>`);
+  OM('แลกเงินระหว่างสาย',body,`<button class="btn btn-x" onclick="CMask()">ยกเลิก</button><button class="btn btn-p" id="xc_save" disabled style="opacity:.4;pointer-events:none;" onclick="saveExchange()">บันทึกการแลก</button>`);
   _cbMap['xL']=cbL;
   _cbMap['xR']=eb();
 }
@@ -1822,6 +1844,7 @@ function refreshExchangeCB(){
   });
   const tL=document.getElementById('xL_tot');if(tL)tL.textContent='฿0';
   const tR=document.getElementById('xR_tot');if(tR)tR.textContent='฿0';
+  _xcDiff();
 }
 
 async function saveExchange(){
@@ -1842,7 +1865,8 @@ async function saveExchange(){
   const Lblls=gb('xL');
   const Rblls=gb('xR');
   const La=bv(Lblls), Ra=bv(Rblls);
-  if(La===0&&Ra===0){toast('กรุณาใส่แบงค์อย่างน้อยฝั่งเดียว');return;}
+  if(La===0||Ra===0){toast('ต้องใส่แบงค์ทั้งสองฝั่ง — การแลกต้องมีทั้งให้และรับ');return;}
+  if(La!==Ra){toast(`ยอดสองฝั่งไม่เท่ากัน (ซ้าย ${fmt(La)} / ขวา ${fmt(Ra)}) — แก้ให้เท่ากันก่อน`);return;}
 
   // ราย route ของแต่ละฝั่ง + ตัวอ้างชื่อ (route id หรือ group id เพื่อให้ oid โชว์ชื่อถูก)
   const leftRoutes  = isLGroup?(S.groupMembers[Lid]||[]):[Lid];
@@ -1880,8 +1904,7 @@ async function saveExchange(){
     await sbUpsert('entries',entriesToSave);
     localEntries.forEach(({sid,e})=>ge(sid,mk2).push(e));
     CM();render();
-    const diff=Math.abs(La-Ra);
-    toast(diff>0?`บันทึกแล้ว (ยอดต่างกัน ${fmt(diff)} — ตรวจสอบด้วย)`:'แลกเงินบันทึกแล้ว ✓');
+    toast(`แลกเงิน ${fmt(La)} สำเร็จ ✓`);
   }catch(err){toast('บันทึกไม่สำเร็จ: '+err.message);console.error(err);}
   finally{_unlockSave();}
 }
