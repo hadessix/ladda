@@ -410,6 +410,25 @@ const WORKER_URL='https://ladda-api.hades-six.workers.dev';
 async function sha256(str){const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');}
 let AUTH={role:null}; // role: 'user' | 'admin'
 
+// ── ติดตั้งลงหน้าจอหลัก (Android/Chrome มีปุ่มติดตั้งจริง) ──
+let _bip=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();_bip=e;
+  const b=document.getElementById('inst-btn');if(b)b.style.display='';
+  const h=document.getElementById('inst-manual');if(h)h.style.display='none';
+});
+window.addEventListener('appinstalled',()=>{_bip=null;});
+async function _doInstall(){
+  if(!_bip)return;
+  _bip.prompt();
+  await _bip.userChoice.catch(()=>null);
+  _bip=null;
+}
+// เปิดจากไอคอนหน้าจอโฮมหรือยัง (iOS เก็บข้อมูลแยกจาก Safari)
+function _isStandalone(){
+  return window.navigator.standalone===true || window.matchMedia('(display-mode: standalone)').matches;
+}
+function _isIOS(){return /iPad|iPhone|iPod/.test(navigator.userAgent);}
+
 // ═══════════════════════════════════════════════════════════
 // 🌐 แปลภาษาหน้าพนักงาน — ไทย / ລາວ / မြန်မာ
 // ═══════════════════════════════════════════════════════════
