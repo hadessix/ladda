@@ -852,7 +852,7 @@ function renderShopContent(){
       ${tf.count?`<button class="btn btn-g" onclick="openCount()">+ นับเงิน</button>`:''}
       ${tf.income?`<button class="btn btn-b" onclick="openIncome()">+ รายรับ</button>`:''}
       ${tf.expense?`<button class="btn btn-a" onclick="openExpense()">+ รายจ่าย</button>`:''}
-      ${tf.exchange?`<button class="btn btn-p" onclick="openExchange(true,'${sid}')">⇄ แลกระหว่างสาย</button>`:''}
+      ${tf.exchange?`<button class="btn btn-p" onclick="openExchange('r:${sid}')">⇄ แลกระหว่างสาย</button>`:''}
       ${tf.payowner?`<button class="btn btn-a" onclick="openPayOwner('${sid}')">💸 จ่ายเฮียรวย</button>`:''}
     </div>
   </div>
@@ -922,7 +922,7 @@ function renderGroupContent(){
       ${tf.count?`<button class="btn btn-g" onclick="openCountGroup()">+ นับเงิน</button>`:''}
       ${tf.income?`<button class="btn btn-b" onclick="openIncomeGroup()">+ รายรับ</button>`:''}
       ${tf.expense?`<button class="btn btn-a" onclick="openExpenseGroup()">+ รายจ่าย</button>`:''}
-      ${tf.exchange?`<button class="btn btn-p" onclick="openExchange(false,null)">⇄ แลกระหว่างสาย</button>`:''}
+      ${tf.exchange?`<button class="btn btn-p" onclick="openExchange('g:${gid}')">⇄ แลกระหว่างสาย</button>`:''}
       ${tf.payowner?`<button class="btn btn-a" onclick="openPayOwnerGroup('${gid}')">💸 จ่ายเฮียรวย</button>`:''}
     </div>
   </div>
@@ -1681,63 +1681,41 @@ async function saveExpense(){
 // ─── EXCHANGE between shops — two-column UI ───
 // fromShop=true → ฝั่งซ้าย lock เป็น lockedId, ฝั่งขวาเลือกได้ (standalone routes + groups, ยกเว้นกลุ่มของตัวเอง)
 // fromShop=false → ทั้ง 2 ฝั่งเลือกได้ (group view เดิม)
-function openExchange(fromShop,lockedId){
-  // หา group ที่ lockedId อยู่
-  const myGroupId=fromShop?Object.keys(S.groupMembers).find(gid=>S.groupMembers[gid].includes(lockedId)):null;
-  // สร้าง options ฝั่งขวา: standalone routes + groups (ยกเว้น route ที่อยู่ใน group ใดก็ตาม และยกเว้น group ของตัวเอง)
+function openExchange(lockedVal){
+  // lockedVal = 'r:<routeId>' | 'g:<groupId>' — ฝั่งซ้ายล็อคเป็นสาย/กลุ่มที่เปิดหน้าอยู่เสมอ
+  const isLGroup=String(lockedVal||'').startsWith('g:');
+  const Lid=String(lockedVal||'').slice(2);
+  if(!Lid){toast('ไม่พบสาย/กลุ่มต้นทาง');return;}
   const groupedIds=groupedRouteIds();
-  if(fromShop&&bv(calcCB(lockedId,S.month))===0){toast('ไม่มีเงินในกล่อง ไม่สามารถแลกได้');return;}
-  const rightRoutes=S.shops.filter(s=>!groupedIds.has(s.id)&&s.id!==lockedId&&bv(calcCB(s.id,S.month))>0);
-  const rightGroups=fromShop
-    ?S.groups.filter(g=>g.id!==myGroupId&&bv(calcCBGroup(g.id,S.month))>0)
-    :S.groups.filter(g=>bv(calcCBGroup(g.id,S.month))>0);
+  const myGroupId=isLGroup?Lid:Object.keys(S.groupMembers).find(gid=>S.groupMembers[gid].includes(Lid));
+  const cbL=isLGroup?calcCBGroup(Lid,S.month):calcCB(Lid,S.month);
+  if(bv(cbL)===0){toast('ไม่มีเงินในกล่อง ไม่สามารถแลกได้');return;}
+  const leftName=isLGroup?('📁 '+(S.groups.find(g=>g.id===Lid)?.name||'?')):(S.shops.find(s=>s.id===Lid)?.name||'?');
+
+  // ฝั่งขวา: standalone routes + groups ที่มีเงิน (ยกเว้นตัวเอง/กลุ่มตัวเอง) — ต้องเลือกเองทุกครั้ง ไม่มี default
+  const rightRoutes=S.shops.filter(s=>!groupedIds.has(s.id)&&s.id!==Lid&&bv(calcCB(s.id,S.month))>0);
+  const rightGroups=S.groups.filter(g=>g.id!==myGroupId&&bv(calcCBGroup(g.id,S.month))>0);
   if(rightRoutes.length===0&&rightGroups.length===0){toast('ไม่มีกลุ่มหรือสายที่มีเงินสำหรับแลก');return;}
-
-  // left options (ถ้า fromShop ล็อค)
-  const leftShop=fromShop?S.shops.find(s=>s.id===lockedId):null;
-  const leftName=leftShop?.name||'';
-
-  // right options: standalone routes ก่อน แล้ว groups
-  const rightOpts=[
+  const rightOpts=`<option value="">— แตะเพื่อเลือกสาย/กลุ่ม —</option>`+[
     ...rightRoutes.map(s=>`<option value="r:${s.id}">${s.name}</option>`),
     ...rightGroups.map(g=>`<option value="g:${g.id}">📁 ${g.name}</option>`)
   ].join('');
 
-  // left options (กรณี fromShop=false เลือกได้ — standalone routes + groups ที่มีเงิน)
-  const cashShops=S.shops.filter(s=>!groupedIds.has(s.id)&&bv(calcCB(s.id,S.month))>0);
-  const cashGroupsLeft=S.groups.filter(g=>bv(calcCBGroup(g.id,S.month))>0);
-  const leftAllOpts=[
-    ...cashShops.map(s=>`<option value="r:${s.id}">${s.name}</option>`),
-    ...cashGroupsLeft.map(g=>`<option value="g:${g.id}">📁 ${g.name}</option>`)
-  ].join('');
-
-  const leftDefaultVal=fromShop?`r:${lockedId}`:(cashShops[0]?`r:${cashShops[0].id}`:(cashGroupsLeft[0]?`g:${cashGroupsLeft[0].id}`:''));
-  const leftDefault=fromShop?lockedId:(leftDefaultVal.startsWith('g:')?leftDefaultVal.slice(2):leftDefaultVal.replace(/^r:/,''));
-  const rightDefault=fromShop?(rightRoutes[0]?`r:${rightRoutes[0].id}`:(rightGroups[0]?`g:${rightGroups[0].id}`:'')):
-    (rightRoutes[0]?`r:${rightRoutes[0].id}`:(rightGroups[0]?`g:${rightGroups[0].id}`:''));
-
-  const isLGroup=leftDefaultVal.startsWith('g:');
-  const cbL=isLGroup?calcCBGroup(leftDefault,S.month):calcCB(leftDefault,S.month);
-  const cbR=rightDefault?.startsWith('g:')
-    ?calcCBGroup(rightDefault.slice(2),S.month)
-    :calcCB(rightDefault?.replace(/^r:/,'')||'',S.month);
-
   const hdrRow=`<div style="display:contents;">
     <div style="padding:10px 12px;background:var(--adim);border-bottom:1px solid var(--border);">
       <div style="font-size:13px;font-weight:600;color:var(--amber);margin-bottom:6px;">ฝั่งซ้าย — ให้ออก</div>
-      ${fromShop
-        ?`<div style="font-size:14px;font-weight:600;color:var(--text);padding:6px 0;">${leftName}</div><input type="hidden" id="xc_L" value="r:${leftDefault}">`
-        :`<select class="fsel" id="xc_L" style="font-size:14px;width:100%;" onchange="refreshExchangeCB(false)">${leftAllOpts}</select>`}
+      <div style="font-size:15px;font-weight:700;color:var(--text);padding:6px 0;">${leftName}</div>
+      <input type="hidden" id="xc_L" value="${isLGroup?'g:':'r:'}${Lid}">
     </div>
     <div style="background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--purple);">⇄</div>
     <div style="padding:10px 12px;background:var(--gdim);border-bottom:1px solid var(--border);">
       <div style="font-size:13px;font-weight:600;color:var(--green);margin-bottom:6px;">ฝั่งขวา — รับ</div>
-      <select class="fsel" id="xc_R" style="font-size:14px;width:100%;" onchange="refreshExchangeCB(${fromShop})">${rightOpts}</select>
+      <select class="fsel" id="xc_R" style="font-size:14px;width:100%;" onchange="refreshExchangeCB()">${rightOpts}</select>
     </div>
   </div>`;
 
   const denomRows=BT.map(t=>{
-    const maxL=cbL[t]||0, maxR=cbR[t]||0;
+    const maxL=cbL[t]||0;
     return`<div style="display:contents;">
       <div style="padding:10px 12px;border-bottom:1px solid var(--border);border-right:1px solid var(--border);">
         <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span class="pill ${BC[t]}">฿${BL[t]}</span><span id="xlbl_L_${t}" style="font-size:11px;color:var(--text3);">มี ${fN(maxL)} ใบ</span></label>
@@ -1746,8 +1724,8 @@ function openExchange(fromShop,lockedId){
       </div>
       <div style="background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--border2);font-size:12px;">—</div>
       <div style="padding:10px 12px;border-bottom:1px solid var(--border);border-left:1px solid var(--border);">
-        <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span class="pill ${BC[t]}">฿${BL[t]}</span><span id="xlbl_R_${t}" style="font-size:11px;color:var(--text3);">มี ${fN(maxR)} ใบ</span></label>
-        <input type="number" min="0" max="${maxR}" value="0" id="xR_${t}" oninput="updBLimit('xR')" inputmode="numeric" style="font-size:20px;width:100%;background:transparent;border:none;color:var(--text);font-family:var(--mono);font-weight:500;">
+        <label style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span class="pill ${BC[t]}">฿${BL[t]}</span><span id="xlbl_R_${t}" style="font-size:11px;color:var(--text3);">—</span></label>
+        <input type="number" min="0" max="0" value="0" id="xR_${t}" oninput="updBLimit('xR')" inputmode="numeric" disabled style="font-size:20px;width:100%;background:transparent;border:none;color:var(--text);font-family:var(--mono);font-weight:500;opacity:.4;">
         <div style="font-size:15px;color:var(--text);margin-top:2px;font-family:var(--mono);" id="xRs_${t}">= ฿0</div>
       </div>
     </div>`;
@@ -1760,15 +1738,18 @@ function openExchange(fromShop,lockedId){
   </div>`;
 
   const body=`
+    <div id="xc_banner" style="position:sticky;top:0;z-index:5;margin:-4px 0 12px;padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;font-size:14px;font-weight:600;text-align:center;">
+      <span style="color:var(--amber);">${leftName}</span>
+      <span style="color:var(--purple);margin:0 8px;">⇄</span>
+      <span id="xc_rname" style="color:var(--text3);font-weight:500;">ยังไม่ได้เลือกฝั่งขวา</span>
+    </div>
     <p style="font-size:13px;color:var(--text2);margin-bottom:14px;">แต่ละฝั่งระบุแบงค์ที่ให้ออก — แบงค์จะสลับไปอีกฝั่งอัตโนมัติ</p>
     <div style="display:grid;grid-template-columns:1fr 36px 1fr;border:1px solid var(--border);border-radius:10px;overflow:hidden;">
       ${hdrRow}${denomRows}${totRow}
     </div>`;
-  OM('แลกเงินระหว่างสาย',body,`<button class="btn btn-x" onclick="CMask()">ยกเลิก</button><button class="btn btn-p" onclick="saveExchange(${fromShop})">บันทึกการแลก</button>`);
-  if(!fromShop)document.getElementById('xc_L').value=leftDefaultVal;
-  document.getElementById('xc_R').value=rightDefault||'';
+  OM('แลกเงินระหว่างสาย',body,`<button class="btn btn-x" onclick="CMask()">ยกเลิก</button><button class="btn btn-p" onclick="saveExchange()">บันทึกการแลก</button>`);
   _cbMap['xL']=cbL;
-  _cbMap['xR']=cbR;
+  _cbMap['xR']=eb();
 }
 
 // คำนวณ CB รวมของ group (รวมทุก route ในกลุ่ม)
@@ -1804,26 +1785,38 @@ function _distBills(routeIds,bills,mk){
   return dist;
 }
 
-function refreshExchangeCB(fromShop){
+function refreshExchangeCB(){
   const Lval=document.getElementById('xc_L').value;
   const Rval=document.getElementById('xc_R').value;
   const isLGroup=Lval?.startsWith('g:');
-  const Lid=(isLGroup||Lval?.startsWith('r:'))?Lval.slice(2):Lval;
+  const Lid=Lval.slice(2);
   const cbL=isLGroup?calcCBGroup(Lid,S.month):calcCB(Lid,S.month);
   const isRGroup=Rval?.startsWith('g:');
-  const Rid=(isRGroup||Rval?.startsWith('r:'))?Rval.slice(2):Rval;
-  const cbR=isRGroup?calcCBGroup(Rid,S.month):calcCB(Rid,S.month);
+  const Rid=Rval?Rval.slice(2):'';
+  const cbR=!Rid?eb():(isRGroup?calcCBGroup(Rid,S.month):calcCB(Rid,S.month));
   _cbMap['xL']=cbL;
   _cbMap['xR']=cbR;
+  const rn=document.getElementById('xc_rname');
+  if(rn){
+    if(!Rid){rn.textContent='ยังไม่ได้เลือกฝั่งขวา';rn.style.color='var(--text3)';rn.style.fontWeight='500';}
+    else{
+      const nm=isRGroup?('📁 '+(S.groups.find(g=>g.id===Rid)?.name||'?')):(S.shops.find(s=>s.id===Rid)?.name||'?');
+      rn.textContent=nm;rn.style.color='var(--green)';rn.style.fontWeight='700';
+    }
+  }
   BT.forEach(t=>{
     const inpL=document.getElementById(`xL_${t}`);
     const inpR=document.getElementById(`xR_${t}`);
     if(inpL){inpL.max=cbL[t]||0;inpL.value=0;}
-    if(inpR){inpR.max=cbR[t]||0;inpR.value=0;}
+    if(inpR){
+      inpR.max=cbR[t]||0;inpR.value=0;
+      inpR.disabled=!Rid;
+      inpR.style.opacity=Rid?'1':'.4';
+    }
     const lblL=document.getElementById(`xlbl_L_${t}`);
     const lblR=document.getElementById(`xlbl_R_${t}`);
     if(lblL)lblL.textContent=`มี ${fN(cbL[t]||0)} ใบ`;
-    if(lblR)lblR.textContent=`มี ${fN(cbR[t]||0)} ใบ`;
+    if(lblR)lblR.textContent=Rid?`มี ${fN(cbR[t]||0)} ใบ`:'—';
     const sL=document.getElementById(`xLs_${t}`);if(sL)sL.textContent='= ฿0';
     const sR=document.getElementById(`xRs_${t}`);if(sR)sR.textContent='= ฿0';
   });
@@ -1831,15 +1824,17 @@ function refreshExchangeCB(fromShop){
   const tR=document.getElementById('xR_tot');if(tR)tR.textContent='฿0';
 }
 
-async function saveExchange(fromShop){
+async function saveExchange(){
   const d=today();
   const mk2=S.month;
   const Lval=document.getElementById('xc_L').value;
   const Rval=document.getElementById('xc_R').value;
+  if(!Rval){toast('กรุณาเลือกสาย/กลุ่มฝั่งขวาก่อน');return;}
   const isLGroup=Lval?.startsWith('g:');
   const isRGroup=Rval?.startsWith('g:');
   const Lid=(isLGroup||Lval?.startsWith('r:'))?Lval.slice(2):Lval;
   const Rid=(isRGroup||Rval?.startsWith('r:'))?Rval.slice(2):Rval;
+  if(isLGroup&&isRGroup&&Lid===Rid){toast('ไม่สามารถแลกเงินกับกลุ่มเดียวกันได้');return;}
   if(!isLGroup&&!isRGroup&&Lid===Rid){toast('กรุณาเลือกสายที่ต่างกัน');return;}
   if(isRGroup&&(S.groupMembers[Rid]||[]).includes(Lid)){toast('ไม่สามารถแลกเงินกับกลุ่มของตัวเองได้');return;}
   if(isLGroup&&(S.groupMembers[Lid]||[]).includes(Rid)){toast('ไม่สามารถแลกเงินกับกลุ่มของตัวเองได้');return;}
