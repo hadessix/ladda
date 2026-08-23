@@ -452,6 +452,9 @@ const I18N={
   'เข้างานครบแล้ววันนี้':'ເຂົ້າວຽກຄົບແລ້ວມື້ນີ້','ยังเข้างานไม่ครบ':'ຍັງເຂົ້າວຽກບໍ່ຄົບ',
   'กดลงเวลาในแอป':'ກົດລົງເວລາໃນແອັບ','แตะสติ๊กเกอร์ที่รถ':'ແຕະສະຕິກເກີທີ່ລົດ',
   'ต้องทำครบทั้ง 2 อย่างถึงจะนับว่าเข้างาน':'ຕ້ອງເຮັດຄົບທັງ 2 ຢ່າງຈຶ່ງນັບວ່າເຂົ້າວຽກ',
+  'ไม่ได้อนุญาตให้ใช้ตำแหน่ง — เปิดในตั้งค่าแล้วแตะใหม่':'ບໍ່ໄດ້ອະນຸຍາດໃຫ້ໃຊ້ຕຳແໜ່ງ — ເປີດໃນຕັ້ງຄ່າແລ້ວແຕະໃໝ່',
+  'หาตำแหน่งไม่ได้ — ออกไปที่โล่งแล้วแตะใหม่':'ຫາຕຳແໜ່ງບໍ່ໄດ້ — ອອກໄປບ່ອນໂລ່ງແລ້ວແຕະໃໝ່',
+  'แตะใหม่พร้อมตำแหน่ง':'ແຕະໃໝ່ພ້ອມຕຳແໜ່ງ',
   'ลงเวลาเข้างาน':'ລົງເວລາເຂົ້າວຽກ','ยืนยันลงเวลา':'ຢືນຢັນລົງເວລາ',
   'ระบบจะบันทึกเวลาและตำแหน่งปัจจุบัน':'ລະບົບຈະບັນທຶກເວລາແລະຕຳແໜ່ງປັດຈຸບັນ','ต้องยืนยันตัวตนก่อน':'ຕ້ອງຢືນຢັນຕົວຕົນກ່ອນ',
   'แจ้งรถเสีย / ขอความช่วยเหลือ':'ແຈ້ງລົດເສຍ / ຂໍຄວາມຊ່ວຍເຫຼືອ','ยืนยันแจ้งรถเสีย':'ຢືນຢັນແຈ້ງລົດເສຍ',
@@ -504,6 +507,9 @@ const I18N={
   'เข้างานครบแล้ววันนี้':'ယနေ့ အလုပ်ဆင်းချိန်ပြည့်စုံပြီ','ยังเข้างานไม่ครบ':'အလုပ်ဆင်းချိန် မပြည့်စုံသေးပါ',
   'กดลงเวลาในแอป':'အက်ပ်တွင် အချိန်မှတ်ရန်','แตะสติ๊กเกอร์ที่รถ':'ကားပေါ်ရှိ စတစ်ကာကို တို့ရန်',
   'ต้องทำครบทั้ง 2 อย่างถึงจะนับว่าเข้างาน':'နှစ်ခုလုံးပြီးမှ အလုပ်ဆင်းသည်ဟု သတ်မှတ်ပါမည်',
+  'ไม่ได้อนุญาตให้ใช้ตำแหน่ง — เปิดในตั้งค่าแล้วแตะใหม่':'တည်နေရာသုံးခွင့်မပေးထားပါ — ဆက်တင်တွင်ဖွင့်ပြီး ထပ်တို့ပါ',
+  'หาตำแหน่งไม่ได้ — ออกไปที่โล่งแล้วแตะใหม่':'တည်နေရာမတွေ့ပါ — ကွင်းပြင်သို့ထွက်ပြီး ထပ်တို့ပါ',
+  'แตะใหม่พร้อมตำแหน่ง':'တည်နေရာနှင့်အတူ ထပ်တို့ရန်',
   'ลงเวลาเข้างาน':'အလုပ်ဆင်းချိန်မှတ်ရန်','ยืนยันลงเวลา':'အချိန်မှတ်ရန် အတည်ပြုပါ',
   'ระบบจะบันทึกเวลาและตำแหน่งปัจจุบัน':'လက်ရှိအချိန်နှင့်တည်နေရာကို မှတ်တမ်းတင်ပါမည်','ต้องยืนยันตัวตนก่อน':'အထောက်အထားအရင်အတည်ပြုပါ',
   'แจ้งรถเสีย / ขอความช่วยเหลือ':'ကားပျက် / အကူအညီတောင်းရန်','ยืนยันแจ้งรถเสีย':'ကားပျက်ကြောင်း အတည်ပြုပါ',
@@ -635,18 +641,26 @@ async function _devFetch(path,opts={}){
 }
 
 // ── ขอพิกัด (ไม่บล็อกนานเกิน 8 วิ) ──
-function _getLoc(){
+// สถานะสิทธิ์ตำแหน่งล่าสุด: '' | 'denied' | 'timeout'
+let _locErr='';
+function _once(opts){
   return new Promise(resolve=>{
-    if(!navigator.geolocation)return resolve(null);
-    let done=false;
-    const t=setTimeout(()=>{if(!done){done=true;resolve(null);}},8000);
     navigator.geolocation.getCurrentPosition(
-      pos=>{if(done)return;done=true;clearTimeout(t);
-        resolve({lat:pos.coords.latitude,lng:pos.coords.longitude,accuracy:Math.round(pos.coords.accuracy||0)});},
-      ()=>{if(done)return;done=true;clearTimeout(t);resolve(null);},
-      {enableHighAccuracy:true,timeout:8000,maximumAge:0}
-    );
+      pos=>resolve({lat:pos.coords.latitude,lng:pos.coords.longitude,accuracy:Math.round(pos.coords.accuracy||0)}),
+      err=>{if(err&&err.code===1)_locErr='denied';else if(!_locErr)_locErr='timeout';resolve(null);},
+      opts);
   });
+}
+async function _getLoc(){
+  _locErr='';
+  if(!navigator.geolocation){_locErr='denied';return null;}
+  // 1) แม่นยำสูง (GPS) รอ 12 วิ
+  let p=await _once({enableHighAccuracy:true,timeout:12000,maximumAge:0});
+  if(p)return p;
+  if(_locErr==='denied')return null;
+  // 2) ถ้าไม่ทัน ใช้แบบเร็ว (เสาสัญญาณ/WiFi) ยอมรับค่าที่เก็บไว้ไม่เกิน 5 นาที
+  p=await _once({enableHighAccuracy:false,timeout:8000,maximumAge:300000});
+  return p;
 }
 
 // ── หน้าแตะ ──
@@ -694,7 +708,9 @@ async function attTap(pointId,manual){
     _meData.today=d.work_date;
   }
   const warn=[];
-  if(d.flags?.noloc)warn.push('ไม่ได้เปิดตำแหน่ง — เปิด GPS แล้วแตะใหม่ครั้งหน้า');
+  if(d.flags?.noloc)warn.push(_locErr==='denied'
+    ?'ไม่ได้อนุญาตให้ใช้ตำแหน่ง — เปิดในตั้งค่าแล้วแตะใหม่'
+    :'หาตำแหน่งไม่ได้ — ออกไปที่โล่งแล้วแตะใหม่');
   if(d.flags?.far)warn.push(`อยู่ห่างจุดแตะ ${d.flags.far} เมตร`);
   _attScreen(_attCard(`
     <div style="font-size:52px;margin-bottom:6px;">${d.dup?'👌':'✅'}</div>
@@ -704,6 +720,7 @@ async function attTap(pointId,manual){
     ${d.employee?.photo_url?`<img src="${d.employee.photo_url}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;margin-bottom:8px;">`:''}
     <div style="font-size:16px;font-weight:600;margin-bottom:14px;">${d.employee?.name||''}</div>
     ${warn.length?`<div style="background:var(--adim);border:1px solid var(--abr);border-radius:9px;padding:9px 11px;font-size:12px;color:var(--amber);line-height:1.6;margin-bottom:12px;">${warn.join('<br>')}</div>`:''}
+    ${d.flags?.noloc?`<button onclick="attTap('${pointId||''}',${manual?'true':'false'})" style="width:100%;padding:12px;background:var(--amber);border:none;border-radius:11px;color:#3d2700;font-size:14px;font-weight:800;font-family:var(--font);cursor:pointer;margin-bottom:10px;">แตะใหม่พร้อมตำแหน่ง</button>`:''}
     ${_meData?_statusCard():''}
     <button class="btn btn-b" style="width:100%;margin-top:12px;" onclick="attMe()">ดูข้อมูลของฉัน</button>`,'var(--gbr)'));
 }
@@ -788,7 +805,8 @@ async function attBindGo(){
       <div style="font-size:19px;font-weight:800;color:var(--green);margin-bottom:6px;">ลงทะเบียนเรียบร้อย</div>
       <div style="font-size:16px;font-weight:600;margin-bottom:12px;">${d.employee?.name||''}</div>
       <p style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:18px;">ต่อไปแค่เอามือถือแตะสติ๊กเกอร์ ไม่ต้องกรอกอะไรอีก</p>
-      ${_meData?_statusCard():''}
+      ${d.flags?.noloc?`<button onclick="attTap('${pointId||''}',${manual?'true':'false'})" style="width:100%;padding:12px;background:var(--amber);border:none;border-radius:11px;color:#3d2700;font-size:14px;font-weight:800;font-family:var(--font);cursor:pointer;margin-bottom:10px;">แตะใหม่พร้อมตำแหน่ง</button>`:''}
+    ${_meData?_statusCard():''}
     <button class="btn btn-b" style="width:100%;margin-top:12px;" onclick="attMe()">ดูข้อมูลของฉัน</button>`,'var(--gbr)'));
   }catch(e){err.textContent='เชื่อมต่อไม่ได้: '+e.message;}
 }
