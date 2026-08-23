@@ -19,7 +19,7 @@ const CLOCK_SKEW_SEC   = 300; // เวลาเครื่องต่าง�
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization,Prefer',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization,Prefer,X-View-Key',
 };
 
 function jsonRes(data, status = 200) {
@@ -187,7 +187,7 @@ export default {
           return jsonRes({ status: 'pending', code: dev.code });
         }
         if (dev.status === 'active' && dev.claim_token) {
-          const token = dev.claim_token;
+          const [token, viewKey] = dev.claim_token.split('~');
           // ให้ token แค่ครั้งเดียว แล้วล้างทิ้งจากฐานข้อมูล
           await sb(env, `att_devices?id=eq.${devId}`, { method: 'PATCH', body: { claim_token: null } });
           let name = '';
@@ -195,7 +195,7 @@ export default {
             const emps = await sb(env, `employees?id=eq.${dev.employee_id}&select=name`);
             name = (emps && emps[0] && emps[0].name) || '';
           }
-          return jsonRes({ status: 'approved', token, employee: { id: dev.employee_id, name } });
+          return jsonRes({ status: 'approved', token, view_key: viewKey || null, employee: { id: dev.employee_id, name } });
         }
         if (dev.status === 'active') return jsonRes({ status: 'claimed' });
         return jsonRes({ status: 'revoked' });
@@ -237,10 +237,13 @@ export default {
         });
 
         const token = await makeToken('device', env.JWT_SECRET, `${dev.id}|${empId}`, 3650);
+        // กุญแจดูข้อมูลตัวเอง (สำหรับไอคอนหน้าจอโฮม) — สุ่ม 32 ตัวอักษร เก็บเฉพาะ hash
+        const viewKey = crypto.randomUUID().replace(/-/g, '') + crypto.randomUUID().replace(/-/g, '').slice(0, 8);
         await sb(env, `att_devices?id=eq.${dev.id}`, {
           method: 'PATCH',
           body: {
-            employee_id: empId, status: 'active', claim_token: token,
+            employee_id: empId, status: 'active', claim_token: token + '~' + viewKey,
+            view_hash: await sha256hex(viewKey),
             secret_hash: token.slice(token.lastIndexOf('.') + 1),
             bound_by: payload.role, bound_at: new Date().toISOString(), code: null,
           },
@@ -396,23 +399,43 @@ export default {
       }
     }
 
-    // ── GET /me — ข้อมูลของตัวเอง (device token เท่านั้น, อ่านอย่างเดียว) ──
+    // ── GET /me — ข้อมูลของตัวเอง (อ่านอย่างเดียว) ──
+    // เข้าได้ 2 ทาง: device token (Bearer) หรือกุญแจดูข้อมูล (X-View-Key)
+    // ทั้งสองทางดึงได้เฉพาะข้อมูลของเจ้าของเท่านั้น — ส่ง id คนอื่นมาไม่ได้
     if (url.pathname === '/me' && request.method === 'GET') {
-      const auth = request.headers.get('Authorization') || '';
-      const payload = await verifyToken(auth.startsWith('Bearer ') ? auth.slice(7) : '', env.JWT_SECRET);
-      if (!payload || payload.role !== 'device') return jsonRes({ error: 'unauthorized' }, 401);
+      const viewKey = request.headers.get('X-View-Key') || '';
+      let empId = null, devRow = null;
 
-      try {
+      if (viewKey) {
+        if (viewKey.length < 24) return jsonRes({ error: 'unauthorized' }, 401);
+        const rows = await sb(env, `att_devices?view_hash=eq.${await sha256hex(viewKey)}&select=id,employee_id,status`);
+        devRow = rows && rows[0];
+        if (!devRow || devRow.status !== 'active') return jsonRes({ error: 'ลิงก์นี้ใช้ไม่ได้แล้ว — ติดต่อหัวหน้างาน', code: 'revoked' }, 403);
+        empId = devRow.employee_id;
+      } else {
+        const auth = request.headers.get('Authorization') || '';
+        const payload = await verifyToken(auth.startsWith('Bearer ') ? auth.slice(7) : '', env.JWT_SECRET);
+        if (!payload || payload.role !== 'device') return jsonRes({ error: 'unauthorized' }, 401);
         const devs = await sb(env, `att_devices?id=eq.${payload.deviceId}&select=id,status`);
         if (!devs || !devs[0] || devs[0].status !== 'active') return jsonRes({ error: 'เครื่องนี้ถูกถอนแล้ว', code: 'revoked' }, 403);
+        empId = payload.employeeId;
+      }
 
-        const empId = payload.employeeId;
+      try {
         // เฉพาะฟิลด์ที่ให้ลูกน้องเห็นได้ — ไม่มีค่าแรง ไม่มีของคนอื่น
         const emps = await sb(env, `employees?id=eq.${empId}&select=id,name,route_id,nationality,status,photo_url,permit_photos,license_photo,tel,permit_expiry,visa_expiry,passport_expiry`);
         const emp = emps && emps[0];
         if (!emp) return jsonRes({ error: 'ไม่พบพนักงาน' }, 404);
 
         const wd = workDate();
+        // กุญแจดูข้อมูล: ใช้กฎ 3 วันเดียวกับการแตะบัตร — หยุดนานแล้วต้องไปหาหัวหน้างาน
+        if (viewKey) {
+          const last = await sb(env, `att_events?employee_id=eq.${empId}&select=work_date&order=ts.desc&limit=1`);
+          if (last && last[0]) {
+            const gap = Math.floor((new Date(wd) - new Date(last[0].work_date)) / 86400000);
+            if (gap > AUTO_REVOKE_DAYS) return jsonRes({ error: `หยุดงานเกิน ${AUTO_REVOKE_DAYS} วัน — ติดต่อหัวหน้างาน`, code: 'stale' }, 403);
+          }
+        }
         const from = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
         const events = await sb(env, `att_events?employee_id=eq.${empId}&work_date=gte.${from}&select=work_date,ts,seq,point_id,flags&order=ts.desc&limit=80`);
 

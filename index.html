@@ -434,9 +434,12 @@ function _attCard(inner,accent){
 
 // ── เรียก Worker ด้วย device token ──
 async function _devFetch(path,opts={}){
+  const h={'Content-Type':'application/json'};
+  if(_devTok())h.Authorization='Bearer '+_devTok();
+  else if(_viewKey())h['X-View-Key']=_viewKey();
   const res=await fetch(WORKER_URL+path,{
     method:opts.method||'GET',
-    headers:{'Content-Type':'application/json',Authorization:'Bearer '+_devTok()},
+    headers:h,
     body:opts.body?JSON.stringify(opts.body):undefined
   });
   const data=await res.json().catch(()=>({}));
@@ -595,17 +598,32 @@ async function attBindGo(){
   }catch(e){err.textContent='เชื่อมต่อไม่ได้: '+e.message;}
 }
 
-// เปลี่ยน URL ให้เป็นลิงก์ประจำตัวพนักงาน — เวลากด "เพิ่มลงหน้าจอหลัก" จะได้ลิงก์ที่ถูก
-function _meUrl(){try{history.replaceState({},'',location.pathname+'?me=1');}catch(e){}}
+const VK_KEY='ladda_vk';
+const _viewKey=()=>localStorage.getItem(VK_KEY)||'';
+// URL ประจำตัว: กุญแจอยู่หลัง # → ไม่ถูกส่งไปเซิร์ฟเวอร์ ไม่โผล่ใน log
+function _meUrl(){
+  try{
+    const k=_viewKey();
+    history.replaceState({},'',location.pathname+'?me=1'+(k?'#k='+k:''));
+  }catch(e){}
+}
+// อ่านกุญแจจาก # แล้วเก็บไว้ในเครื่องนี้ (ไอคอนหน้าจอโฮมจะได้ใช้ได้เองครั้งต่อไป)
+function _grabKey(){
+  const m=(location.hash||'').match(/k=([A-Za-z0-9]{24,})/);
+  if(m){localStorage.setItem(VK_KEY,m[1]);return m[1];}
+  return _viewKey();
+}
+
 function _homeTip(){
   if(_isStandalone())return'';
+  if(!_viewKey())return'';
   const ios=_isIOS();
   return`<div style="background:var(--bdim);border:1px solid var(--bbr);border-radius:11px;padding:12px 13px;font-size:12px;color:var(--text2);line-height:1.85;text-align:left;">
     <div style="font-weight:700;color:var(--blue);margin-bottom:5px;">📌 เพิ่มลงหน้าจอหลัก — เปิดง่ายเหมือนแอป</div>
     ${ios
       ?'กดปุ่มแชร์ <strong>⬆️</strong> ด้านล่างจอ → เลื่อนหา <strong>"เพิ่มไปยังหน้าจอโฮม"</strong> → กด <strong>เพิ่ม</strong>'
       :'<button id="inst-btn" style="display:none;width:100%;margin:4px 0;padding:11px;background:var(--green);border:none;border-radius:10px;color:#06210f;font-size:15px;font-weight:800;font-family:var(--font);cursor:pointer;" onclick="_doInstall()">📲 ติดตั้งเลย</button><span id="inst-manual">กดปุ่ม <strong>⋮</strong> มุมขวาบน → <strong>"เพิ่มลงในหน้าจอหลัก"</strong></span>'}
-    <div style="font-size:11px;color:var(--green);margin-top:6px;">✓ ไม่ต้องลงทะเบียนใหม่ ไอคอนใช้บัตรประจำตัวเดิม</div>
+    <div style="font-size:11px;color:var(--green);margin-top:6px;">✓ กดไอคอนแล้วเข้าหน้านี้ได้เลย ไม่ต้องลงทะเบียนใหม่</div>
   </div>`;
 }
 
@@ -625,10 +643,11 @@ function _expChip(label,date){
   </div>`;
 }
 async function attMe(){
+  _grabKey();
   _attScreen(_attCard(`<div style="font-size:15px;color:var(--text2);">กำลังโหลด…</div>`));
   const r=await _devFetch('/me');
   if(!r.ok){
-    if(['revoked'].includes(r.data?.code))localStorage.removeItem(DEV_KEY);
+    if(r.data?.code==='revoked'){localStorage.removeItem(DEV_KEY);localStorage.removeItem(VK_KEY);}
     _attScreen(_attCard(`<div style="font-size:40px;">🔒</div>
       <div style="font-size:15px;color:var(--red);margin:10px 0;">${r.data?.error||'เปิดไม่ได้'}</div>
       <button class="btn btn-b" style="width:100%;" onclick="attEnroll()">ลงทะเบียนเครื่องนี้</button>`,'var(--rbr)'));
@@ -777,6 +796,7 @@ async function _enrCheck(devId,secret){
     if(d.status==='approved'&&d.token){
       _enrStop();
       localStorage.setItem(DEV_KEY,d.token);
+      if(d.view_key)localStorage.setItem(VK_KEY,d.view_key);
       sessionStorage.removeItem('ladda_enr');
       _meUrl();
       _attScreen(_attCard(`
@@ -816,31 +836,20 @@ async function _renderQR(elId,text){
   }
 }
 
-// ── ไอคอนหน้าจอโฮมบน iPhone มีที่เก็บข้อมูลแยกจาก Safari (บัตรประจำตัวอยู่ฝั่ง Safari)
-// → ไอคอนทำหน้าที่เป็นทางลัด กดแล้วเด้งไปเปิดในเบราว์เซอร์แทน
-function _attBounce(){
-  const url=location.origin+'/?me=1';
-  _attScreen(`<div style="width:100%;max-width:400px;margin:auto;padding:24px;box-sizing:border-box;text-align:center;">
-    <img src="icon-192.png" style="width:76px;height:76px;border-radius:20px;">
-    <div style="font-size:20px;font-weight:800;margin:14px 0 6px;">ลงเวลาเข้างาน</div>
-    <p style="font-size:13px;color:var(--text2);line-height:1.8;margin-bottom:20px;">แตะปุ่มด้านล่างเพื่อเปิดข้อมูลของคุณ</p>
-    <a href="${url}" target="_blank" rel="noopener" style="display:block;padding:15px;background:var(--green);border-radius:13px;color:#06210f;font-size:17px;font-weight:800;text-decoration:none;">เปิดข้อมูลของฉัน →</a>
-    <div style="font-size:11px;color:var(--text3);margin-top:18px;line-height:1.75;">การแตะสติ๊กเกอร์ NFC ใช้งานได้ตามปกติ<br>ไม่ต้องเปิดจากไอคอนนี้</div>
-    <div style="margin-top:26px;"><a href="?work=1" style="font-size:11px;color:var(--text3);">เข้าแอปงาน (สำหรับหัวหน้างาน)</a></div>
-  </div>`);
-}
-
 // ── router: เรียกจาก authInit ──
 function attRoute(){
   const q=new URLSearchParams(location.search);
-  // เปิดจากไอคอนหน้าจอโฮมแต่ไม่มีบัตรประจำตัวในบริบทนี้ → ทางลัดเปิดในเบราว์เซอร์
-  if(_isStandalone()&&!_devTok()&&!q.has('work')&&!q.has('tap')){_attBounce();return true;}
-  if(q.has('tap')){attTap(q.get('tap'));return true;}
-  if(q.has('enroll')){attEnroll();return true;}
-  if(q.has('bind')){attBind();return true;}
-  if(q.has('me')){if(_devTok()){attMe();return true;}}
-  // เครื่องที่ผูกแล้ว เปิดเว็บเปล่าๆ → เข้าหน้าข้อมูลตัวเอง ไม่ต้องเห็นหน้า login
-  if(_devTok()&&!localStorage.getItem('ladda_role')){attMe();return true;}
+  _grabKey();
+  if(q.has('work'))return false;                       // หัวหน้างานเข้าแอปงาน
+  if(q.has('tap')){attTap(q.get('tap'));return true;}  // แตะสติ๊กเกอร์
+  if(q.has('enroll')){attEnroll();return true;}        // ลงทะเบียนเครื่อง
+  if(q.has('me')){
+    if(_devTok()||_viewKey()){attMe();return true;}
+    return false;
+  }
+  // เปิดจากไอคอนหน้าจอโฮม หรือเปิดเว็บเปล่าในเครื่องพนักงาน
+  if((_devTok()||_viewKey())&&!localStorage.getItem('ladda_role')){attMe();return true;}
+  if(_isStandalone()&&_viewKey()){attMe();return true;}
   return false;
 }
 
@@ -3407,7 +3416,7 @@ async function _devRevoke(devId,name){
   if(!confirm(`ถอนเครื่องของ ${name}?\n\nเครื่องนั้นจะแตะเวลาไม่ได้ทันที และดูข้อมูลตัวเองไม่ได้\nประวัติเก่ายังอยู่ครบ`))return;
   try{
     const d=(PR.devices||[]).find(x=>x.id===devId);
-    await sbUpsert('att_devices',{...d,status:'revoked',revoked_at:new Date().toISOString(),claim_token:null});
+    await sbUpsert('att_devices',{...d,status:'revoked',revoked_at:new Date().toISOString(),claim_token:null,view_hash:null});
     if(d){d.status='revoked';}
     openAttDevices();toast('ถอนเครื่องแล้ว ✓');
   }catch(e){toast('ถอนไม่สำเร็จ: '+e.message);}
