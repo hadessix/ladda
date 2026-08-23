@@ -2490,23 +2490,33 @@ function _prSyncTabs(){
 // ═══════════════════════════════════════════════════════════
 // ⏱ เวลาเข้างาน — ตั้งค่าต่อสาย (admin only)
 // ═══════════════════════════════════════════════════════════
-// route_shifts: 1 แถว = 1 สาย  { route_id, enabled, start_time, trips, grace_min, work_days, point_mode, place_point_id, note }
-// point_mode: 'vehicle' = แตะที่สติ๊กเกอร์บนรถ | 'place' = แตะที่สถานที่ (เช่น บูรชัย) | 'off' = ไม่ต้องตอกเวลา
+// route_shifts: 1 แถว = 1 สาย
+//   { route_id, enabled, start_time, trips, trips_json, expected_taps,
+//     grace_min, work_days, point_mode, place_point_id, note }
+// trips_json = [{start:"05:30", end:"09:00"}, ...] — เวลาออก/กลับของแต่ละเที่ยว
+// point_mode: 'vehicle' = แตะสติ๊กเกอร์บนรถ | 'place' = แตะที่สถานที่ | 'off' = ไม่ต้องตอก
 const _DOW=['จ','อ','พ','พฤ','ศ','ส','อา'];
+const _WD_ALL='1234567';
 
-function _shiftOf(rid){
-  return PR.shifts.find(s=>s.route_id===rid)||{route_id:rid,enabled:true,start_time:null,trips:1,grace_min:10,work_days:'123456',point_mode:'vehicle',place_point_id:null,note:null};
+function _shTrips(sh){
+  let t=sh.trips_json;
+  if(typeof t==='string'){try{t=JSON.parse(t);}catch(e){t=null;}}
+  if(!Array.isArray(t)||!t.length)t=[{start:sh.start_time?String(sh.start_time).slice(0,5):'',end:''}];
+  return t;
 }
-function _expTaps(sh){return sh.point_mode==='off'?0:1+(Number(sh.trips)||1)*2;}
+function _shiftOf(rid){
+  return PR.shifts.find(s=>s.route_id===rid)||{route_id:rid,enabled:true,start_time:null,trips:1,trips_json:null,
+    grace_min:10,work_days:_WD_ALL,point_mode:'vehicle',place_point_id:null,note:null};
+}
+// แตะกี่ครั้ง/วัน = เข้างาน 1 + (ออก+กลับ) เที่ยวละ 2
+function _expTaps(sh){return sh.point_mode==='off'?0:1+_shTrips(sh).length*2;}
 
-// เรียงสายแบบเดียวกับ tab พนักงาน (กลุ่มก่อน แล้วสายเดี่ยว)
 function _shiftOrderedGroups(){
   const out=[];
   const groupedIds=groupedRouteIds();
   const sorted=[...S.shops].sort((a,b)=>(a.sort_order||0)-(b.sort_order||0));
   S.groups.slice().sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).forEach(g=>{
-    const ids=S.groupMembers[g.id]||[];
-    const members=ids.map(id=>S.shops.find(s=>s.id===id)).filter(Boolean);
+    const members=(S.groupMembers[g.id]||[]).map(id=>S.shops.find(s=>s.id===id)).filter(Boolean);
     if(members.length)out.push({key:g.id,name:g.name,icon:'📁',routes:members});
   });
   const solo=sorted.filter(r=>!groupedIds.has(r.id));
@@ -2517,18 +2527,16 @@ function _shiftOrderedGroups(){
 function renderPrShifts(){
   const pts=PR.points||[];
   const placeOpts=pts.filter(p=>p.kind==='place'&&p.status==='active');
-  const done=(PR.shifts||[]).filter(s=>s.point_mode!=='off'&&s.start_time).length;
+  const done=(PR.shifts||[]).filter(s=>s.point_mode!=='off'&&_shTrips(s).some(t=>t.start)).length;
   const total=S.shops.length;
 
   let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;flex-wrap:wrap;">
     <div style="font-size:16px;font-weight:600;">เวลาเข้างานรายสาย <span style="font-size:12px;color:var(--text3);font-weight:400;">ตั้งแล้ว ${done}/${total} สาย</span></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn btn-b" onclick="openAttPoints()">📍 จุดแตะ (${pts.length})</button>
-    </div>
+    <button class="btn btn-b" onclick="openAttPoints()">📍 จุดแตะ (${pts.length})</button>
   </div>
   <p style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.6;">
-    ตั้งเวลาเข้างาน + จำนวนรอบส่งของแต่ละสาย — ระบบใช้ค่านี้คำนวณว่าใครมาสายกี่นาที และแตะครบรอบหรือยัง<br>
-    <span style="color:var(--text3);">แก้ตรงไหนบันทึกอัตโนมัติทันที · สายที่ไม่ต้องตอกเวลา (เช่น ออฟฟิศ) เลือก "ไม่ต้องตอก"</span>
+    ตั้งเวลาแต่ละเที่ยวของแต่ละสาย — ระบบใช้ค่านี้ดูว่ามาสายกี่นาที และแตะครบทุกเที่ยวหรือยัง<br>
+    <span style="color:var(--text3);">แก้ตรงไหนบันทึกทันที · สายที่ไม่ต้องตอกเวลา (ออฟฟิศ) เลือก "ไม่ต้องตอก"</span>
   </p>`;
 
   _shiftOrderedGroups().forEach(g=>{
@@ -2538,9 +2546,10 @@ function renderPrShifts(){
     g.routes.forEach((rt,i)=>{
       const sh=_shiftOf(rt.id);
       const off=sh.point_mode==='off';
-      const wd=sh.work_days||'123456';
-      html+=`<div style="padding:12px 14px;${i?'border-top:1px solid var(--border);':''}background:var(--bg2);${off?'opacity:.55;':''}">
-        <div style="display:flex;align-items:center;gap:9px;margin-bottom:${off?'0':'10px'};">
+      const wd=sh.work_days||_WD_ALL;
+      const trips=_shTrips(sh);
+      html+=`<div style="padding:12px 14px;${i?'border-top:1px solid var(--border);':''}background:var(--bg2);${off?'opacity:.5;':''}">
+        <div style="display:flex;align-items:center;gap:9px;">
           <span style="width:10px;height:10px;border-radius:50%;background:${rt.color};display:inline-block;flex-shrink:0;"></span>
           <span style="font-size:14px;font-weight:600;flex:1;">${rt.name}</span>
           <select onchange="_shSet('${rt.id}','point_mode',this.value)" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:4px 6px;font-family:var(--font);">
@@ -2550,31 +2559,41 @@ function renderPrShifts(){
           </select>
         </div>
         ${off?'':`
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:8px;">
-          <div>
-            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;">เข้างาน</div>
-            <input type="time" value="${sh.start_time?String(sh.start_time).slice(0,5):''}" onchange="_shSet('${rt.id}','start_time',this.value)"
-              style="width:100%;background:var(--bg3);border:1px solid ${sh.start_time?'var(--border)':'var(--abr)'};border-radius:6px;color:var(--text);font-size:14px;padding:5px 6px;font-family:var(--mono);box-sizing:border-box;">
+        <div style="margin-top:11px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <span style="font-size:11px;color:var(--text3);">เที่ยววิ่ง</span>
+            <span style="flex:1;height:1px;background:var(--border);"></span>
+            <span style="font-size:10px;color:var(--text3);">แตะวันละ <strong style="color:var(--text2);">${_expTaps(sh)}</strong> ครั้ง</span>
+            <button onclick="_shAddTrip('${rt.id}')" style="background:var(--gdim);border:1px solid var(--gbr);border-radius:6px;color:var(--green);font-size:11px;padding:2px 9px;cursor:pointer;font-family:var(--font);">+ เที่ยว</button>
           </div>
-          <div>
-            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;">รอบส่ง/วัน</div>
-            <input type="number" min="1" max="6" value="${sh.trips||1}" onchange="_shSet('${rt.id}','trips',this.value)"
-              style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;padding:5px 6px;font-family:var(--mono);box-sizing:border-box;">
+          ${trips.map((tp,ti)=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">
+            <span style="font-size:11px;color:var(--text2);min-width:52px;">เที่ยว ${ti+1}</span>
+            <input type="time" value="${tp.start||''}" onchange="_shTripSet('${rt.id}',${ti},'start',this.value)"
+              style="flex:1;min-width:0;background:var(--bg3);border:1px solid ${tp.start?'var(--border)':'var(--abr)'};border-radius:6px;color:var(--text);font-size:14px;padding:5px 4px;font-family:var(--mono);box-sizing:border-box;">
+            <span style="font-size:12px;color:var(--text3);">–</span>
+            <input type="time" value="${tp.end||''}" onchange="_shTripSet('${rt.id}',${ti},'end',this.value)"
+              style="flex:1;min-width:0;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;padding:5px 4px;font-family:var(--mono);box-sizing:border-box;">
+            ${trips.length>1?`<button onclick="_shDelTrip('${rt.id}',${ti})" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text3);font-size:12px;padding:3px 8px;cursor:pointer;">✕</button>`:'<span style="width:28px;"></span>'}
+          </div>`).join('')}
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:9px;">
+            <div>
+              <div style="font-size:10px;color:var(--text3);margin-bottom:3px;">สายได้ (นาที)</div>
+              <input type="number" min="0" max="120" value="${sh.grace_min??10}" onchange="_shSet('${rt.id}','grace_min',this.value)"
+                style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;padding:5px 6px;font-family:var(--mono);box-sizing:border-box;">
+            </div>
+            ${sh.point_mode==='place'?`<div>
+              <div style="font-size:10px;color:var(--text3);margin-bottom:3px;">สถานที่แตะ</div>
+              <select onchange="_shSet('${rt.id}','place_point_id',this.value)" style="width:100%;background:var(--bg3);border:1px solid ${sh.place_point_id?'var(--border)':'var(--abr)'};border-radius:6px;color:var(--text);font-size:13px;padding:5px 6px;font-family:var(--font);box-sizing:border-box;">
+                <option value="">— เลือก —</option>
+                ${placeOpts.map(p=>`<option value="${p.id}"${sh.place_point_id===p.id?' selected':''}>${p.name}</option>`).join('')}
+              </select>
+            </div>`:''}
           </div>
-          <div>
-            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;">สายได้ (นาที)</div>
-            <input type="number" min="0" max="120" value="${sh.grace_min??10}" onchange="_shSet('${rt.id}','grace_min',this.value)"
-              style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:14px;padding:5px 6px;font-family:var(--mono);box-sizing:border-box;">
-          </div>
-          ${sh.point_mode==='place'?`<div>
-            <div style="font-size:10px;color:var(--text3);margin-bottom:3px;">สถานที่</div>
-            <select onchange="_shSet('${rt.id}','place_point_id',this.value)" style="width:100%;background:var(--bg3);border:1px solid ${sh.place_point_id?'var(--border)':'var(--abr)'};border-radius:6px;color:var(--text);font-size:13px;padding:5px 6px;font-family:var(--font);box-sizing:border-box;">
-              <option value="">— เลือก —</option>
-              ${placeOpts.map(p=>`<option value="${p.id}"${sh.place_point_id===p.id?' selected':''}>${p.name}</option>`).join('')}
-            </select>
-          </div>`:''}
-          <div style="grid-column:1/-1;">
-            <div style="font-size:10px;color:var(--text3);margin-bottom:4px;">วันทำงาน · แตะวันละ <strong style="color:var(--text2);">${_expTaps(sh)}</strong> ครั้ง (เข้างาน 1 + ออก/กลับ ${sh.trips||1} รอบ)</div>
+          <div style="margin-top:9px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+              <span style="font-size:10px;color:var(--text3);">วันทำงาน</span>
+              ${wd===_WD_ALL?'<span style="font-size:10px;color:var(--green);">ทุกวัน</span>':`<span onclick="_shSet('${rt.id}','work_days','${_WD_ALL}')" style="font-size:10px;color:var(--blue);cursor:pointer;text-decoration:underline;">ตั้งเป็นทุกวัน</span>`}
+            </div>
             <div style="display:flex;gap:4px;flex-wrap:wrap;">
               ${_DOW.map((d,di)=>{const n=String(di+1);const on=wd.includes(n);
                 return`<span onclick="_shToggleDay('${rt.id}','${n}')" style="cursor:pointer;user-select:none;min-width:30px;text-align:center;padding:3px 6px;border-radius:6px;font-size:11px;border:1px solid ${on?'var(--gbr)':'var(--border)'};background:${on?'var(--gdim)':'var(--bg3)'};color:${on?'var(--green)':'var(--text3)'};">${d}</span>`;}).join('')}
@@ -2588,27 +2607,57 @@ function renderPrShifts(){
   return html;
 }
 
-// บันทึก field เดียว → upsert แถวเต็ม
-async function _shSet(rid,field,val){
+// ─── บันทึก (upsert แถวเต็มเสมอ) ───
+function _shRow(rid,patch){
   const cur=_shiftOf(rid);
-  if(field==='trips')val=Math.max(1,Math.min(6,Number(val)||1));
-  if(field==='grace_min')val=Math.max(0,Math.min(120,Number(val)||0));
-  if(field==='start_time'&&!val)val=null;
-  if(field==='place_point_id'&&!val)val=null;
-  const row={route_id:rid,enabled:true,start_time:cur.start_time,trips:cur.trips||1,grace_min:cur.grace_min??10,
-    work_days:cur.work_days||'123456',point_mode:cur.point_mode||'vehicle',place_point_id:cur.place_point_id||null,note:cur.note||null};
-  row[field]=val;
-  row.expected_taps=row.point_mode==='off'?0:1+(Number(row.trips)||1)*2;
+  const trips=_shTrips(cur);
+  const row={route_id:rid,enabled:true,
+    start_time:trips[0]?.start||null,
+    trips:trips.length,
+    trips_json:trips,
+    grace_min:cur.grace_min??10,
+    work_days:cur.work_days||_WD_ALL,
+    point_mode:cur.point_mode||'vehicle',
+    place_point_id:cur.place_point_id||null,
+    note:cur.note||null,
+    ...patch};
+  if(patch.trips_json){row.trips=patch.trips_json.length;row.start_time=patch.trips_json[0]?.start||null;}
+  row.expected_taps=row.point_mode==='off'?0:1+(row.trips||1)*2;
+  return row;
+}
+async function _shSave(row){
   try{
     await sbUpsert('route_shifts',row);
-    const i=(PR.shifts||[]).findIndex(s=>s.route_id===rid);
+    const i=(PR.shifts||[]).findIndex(s=>s.route_id===row.route_id);
     if(i>-1)PR.shifts[i]=row;else (PR.shifts=PR.shifts||[]).push(row);
     renderPayroll();
   }catch(e){toast('บันทึกไม่สำเร็จ: '+e.message);}
 }
+function _shSet(rid,field,val){
+  if(field==='grace_min')val=Math.max(0,Math.min(120,Number(val)||0));
+  if(field==='place_point_id'&&!val)val=null;
+  _shSave(_shRow(rid,{[field]:val}));
+}
+function _shTripSet(rid,idx,which,val){
+  const trips=_shTrips(_shiftOf(rid)).map(t=>({start:t.start||'',end:t.end||''}));
+  if(!trips[idx])return;
+  trips[idx][which]=val||'';
+  _shSave(_shRow(rid,{trips_json:trips}));
+}
+function _shAddTrip(rid){
+  const trips=_shTrips(_shiftOf(rid)).map(t=>({start:t.start||'',end:t.end||''}));
+  if(trips.length>=6){toast('เพิ่มได้สูงสุด 6 เที่ยว');return;}
+  trips.push({start:'',end:''});
+  _shSave(_shRow(rid,{trips_json:trips}));
+}
+function _shDelTrip(rid,idx){
+  const trips=_shTrips(_shiftOf(rid)).map(t=>({start:t.start||'',end:t.end||''}));
+  if(trips.length<=1)return;
+  trips.splice(idx,1);
+  _shSave(_shRow(rid,{trips_json:trips}));
+}
 function _shToggleDay(rid,n){
-  const cur=_shiftOf(rid);
-  const wd=cur.work_days||'123456';
+  const wd=_shiftOf(rid).work_days||_WD_ALL;
   const next=wd.includes(n)?wd.split('').filter(c=>c!==n).join(''):(wd+n).split('').sort().join('');
   _shSet(rid,'work_days',next||'1');
 }
@@ -2622,11 +2671,11 @@ function openAttPoints(){
     return`<div style="padding:11px 12px;border-bottom:1px solid var(--border);background:var(--bg2);">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
         <span style="font-size:15px;">${p.kind==='place'?'📍':'🚐'}</span>
-        <input value="${(p.name||'').replace(/"/g,'&quot;')}" onchange="_ptSet('${p.id}','name',this.value)" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:4px 7px;font-family:var(--font);">
+        <input value="${(p.name||'').replace(/"/g,'&quot;')}" onchange="_ptSet('${p.id}','name',this.value)" style="flex:1;min-width:0;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:4px 7px;font-family:var(--font);">
         <button class="delbtn" onclick="_ptDel('${p.id}')">ลบ</button>
       </div>
       <div style="font-size:11px;color:var(--text3);font-family:var(--mono);word-break:break-all;line-height:1.5;">
-        ${rt?`สาย ${rt.name} · `:''}${veh?`${veh.name||veh.plate||'รถ'} · `:''}ลิงก์สติ๊กเกอร์:<br>
+        ${rt?`สาย ${rt.name} · `:''}${veh?`${veh.name||veh.plate||'รถ'} · `:''}ลิงก์สำหรับเขียนลงสติ๊กเกอร์:<br>
         <span style="color:var(--purple);">${location.origin}/?tap=${p.id}</span>
         <button onclick="_ptCopy('${p.id}')" style="margin-left:6px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;color:var(--text2);font-size:10px;padding:2px 7px;cursor:pointer;font-family:var(--font);">คัดลอก</button>
       </div>
@@ -2635,8 +2684,8 @@ function openAttPoints(){
 
   OM('📍 จุดแตะ NFC',
     `<p style="font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.6;">
-      แต่ละสติ๊กเกอร์ = 1 แถว · เขียนลิงก์ด้านล่างลงสติ๊กเกอร์ด้วยแอป <strong>NFC Tools</strong> (ฟรี) โหมด Write → URL<br>
-      <span style="color:var(--amber);">⚠ สติ๊กเกอร์ธรรมดาแปะบนโลหะจะอ่านไม่ขึ้น — แปะบนพลาสติก/กระจก หรือใช้รุ่น anti-metal</span>
+      1 สติ๊กเกอร์ = 1 แถว · เขียนลิงก์ลงสติ๊กเกอร์ด้วยแอป <strong>NFC Tools</strong> (ฟรี) → Write → URL<br>
+      <span style="color:var(--amber);">⚠ สติ๊กเกอร์ธรรมดาแปะบนโลหะอ่านไม่ขึ้น — แปะพลาสติก/กระจก หรือใช้รุ่น anti-metal</span>
     </p>
     <div style="border:1px solid var(--border);border-radius:9px;overflow:hidden;margin-bottom:12px;">${rows}</div>`,
     `<button class="btn btn-x" onclick="CMask()">ปิด</button>

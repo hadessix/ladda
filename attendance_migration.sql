@@ -65,13 +65,21 @@ create table if not exists route_shifts (
   enabled        boolean default true,
   start_time     time,                          -- เวลาเข้างาน เช่น 05:30
   trips          int default 1,                 -- จำนวนรอบส่งต่อวัน
+  trips_json     jsonb,                         -- [{start:'05:30',end:'09:00'}, ...] เวลาออก/กลับแต่ละเที่ยว
   expected_taps  int,                           -- = 1 + trips*2 (คำนวณให้อัตโนมัติ)
   grace_min      int default 10,                -- สายได้กี่นาที
-  work_days      text default '123456',         -- 1=จันทร์ … 7=อาทิตย์
+  work_days      text default '1234567',        -- 1=จันทร์ … 7=อาทิตย์ (ค่าเริ่มต้น = ทำงานทุกวัน)
   point_mode     text default 'vehicle',        -- vehicle | place | off (off = ไม่ต้องตอกเวลา)
   place_point_id text,                          -- ถ้า point_mode='place' แตะที่จุดไหน
   note           text
 );
+
+-- ── 4b) เผื่อเคยรันเวอร์ชันก่อนหน้าไปแล้ว ──
+alter table route_shifts add column if not exists trips_json jsonb;
+alter table att_points   add column if not exists kind text default 'vehicle';
+alter table att_points   add column if not exists vehicle_id text;
+alter table att_points   add column if not exists route_id text;
+alter table att_events   add column if not exists vehicle_id text;
 
 -- ── 5) สิทธิ์ (Supabase SQL editor ไม่ auto-grant ให้ anon) ──
 grant all on table att_points   to anon, authenticated, service_role;
