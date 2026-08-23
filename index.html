@@ -866,7 +866,8 @@ function _devDiag(){
 function _setIcon(){
   // ไอคอนหน้าจอโฮมแยกตามบริบท: หน้าพนักงาน = นาฬิกา, แอปงาน = รูปน้องลัดดา
   const q=new URLSearchParams(location.search);
-  const worker=_devTok()||_viewKey()||q.has("me")||q.has("tap")||q.has("enroll")||(location.hash||"").includes("k=");
+  // ?work=1 บังคับเป็นแอปงานเสมอ แม้เครื่องนั้นจะมีบัตรพนักงานอยู่
+  const worker=!q.has("work")&&(_devTok()||_viewKey()||q.has("me")||q.has("tap")||q.has("enroll")||(location.hash||"").includes("k="));
   const el=document.getElementById("ati");
   if(el)el.href=worker?"icon-192.png":"icon.png";
   const t=document.getElementById("awt");
