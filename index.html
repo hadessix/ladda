@@ -525,6 +525,7 @@ function _i18nApply(){
   nodes.forEach(n=>{
     const t=(n.nodeValue||'').trim();
     if(!t||!/[ก-๙]/.test(t))return;
+    if(n.parentElement&&n.parentElement.closest('#lang-bar'))return;  // ชื่อภาษาคงเดิมเสมอ
     if(dict[t]){n.nodeValue=n.nodeValue.replace(t,dict[t]);return;}
     for(const[re,rp]of res){if(re.test(t)){n.nodeValue=n.nodeValue.replace(t,t.replace(re,rp));return;}}
     // ตัดอิโมจิ/สัญลักษณ์หัวท้ายออกแล้วลองใหม่ (เช่น "💰 สลิปเงินเดือน")
@@ -541,7 +542,7 @@ function setLang(l){
 }
 function _langBar(){
   const cur=_lang();
-  return`<div style="position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);right:10px;z-index:600;display:flex;gap:4px;background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:3px;">
+  return`<div id="lang-bar" style="position:fixed;top:calc(env(safe-area-inset-top,0px) + 8px);right:10px;z-index:600;display:flex;gap:4px;background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:3px;">
     ${LANGS.map(([c,n])=>`<span onclick="setLang('${c}')" style="cursor:pointer;padding:4px 10px;border-radius:16px;font-size:12px;font-weight:${c===cur?'700':'400'};background:${c===cur?'var(--green)':'transparent'};color:${c===cur?'#06210f':'var(--text3)'};">${n}</span>`).join('')}
   </div>`;
 }
