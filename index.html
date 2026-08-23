@@ -7,10 +7,9 @@
 <meta name="theme-color" content="#0b0f1a">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="ลงเวลา">
-<link rel="apple-touch-icon" href="icon-192.png">
-<link rel="icon" type="image/png" href="icon-192.png">
-<meta name="apple-mobile-web-app-title" content="น้องลัดดา">
+<link rel="apple-touch-icon" id="ati" href="icon.png">
+<link rel="icon" href="icon.png">
+<meta name="apple-mobile-web-app-title" id="awt" content="น้องลัดดา">
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
@@ -863,7 +862,18 @@ function _devDiag(){
     +`<br>เปิดจาก: ${location.pathname}${location.search}${hash?hash+'…':'(ไม่มี #)'}`
     +`<br>${_isStandalone()?'โหมดไอคอนหน้าจอโฮม':'โหมดเบราว์เซอร์'}`;
 }
+function _setIcon(){
+  // ไอคอนหน้าจอโฮมแยกตามบริบท: หน้าพนักงาน = นาฬิกา, แอปงาน = รูปน้องลัดดา
+  const q=new URLSearchParams(location.search);
+  const worker=_devTok()||_viewKey()||q.has("me")||q.has("tap")||q.has("enroll")||(location.hash||"").includes("k=");
+  const el=document.getElementById("ati");
+  if(el)el.href=worker?"icon-192.png":"icon.png";
+  const t=document.getElementById("awt");
+  if(t)t.content=worker?"ลงเวลา":"น้องลัดดา";
+  document.title=worker?"ลงเวลา":"น้องลัดดา";
+}
 function authInit(){
+  _setIcon();
   // iOS: ถอด manifest ออก → ไอคอนหน้าจอโฮมเปิดใน Safari ใช้ที่เก็บข้อมูลเดียวกัน
   // (ถ้าปล่อยไว้ iOS 16.4+ จะสร้างแอปแยก storage แล้วแตะ NFC ไม่ได้)
   if(!/iPad|iPhone|iPod/.test(navigator.userAgent)){
