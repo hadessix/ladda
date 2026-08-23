@@ -2644,7 +2644,7 @@ function toggleOvShop(id){if(_ovShopVis.has(id))_ovShopVis.delete(id);else _ovSh
 function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2800);}
 
 // ─── PAYROLL ───
-let PR={tab:'periods',month:null,employees:[],loans:[],periods:[],entries:[],deductions:[],shifts:[],points:[],_loaded:false};
+let PR={tab:'periods',month:null,employees:[],loans:[],periods:[],entries:[],deductions:[],shifts:[],points:[],devices:[],_loaded:false};
 let _prSettings=(()=>{try{return JSON.parse(localStorage.getItem('pr_settings')||'{}')}catch{return{}}})();
 function _savePrSettings(){localStorage.setItem('pr_settings',JSON.stringify(_prSettings));}
 function _renderTrayItems(){
@@ -2757,6 +2757,7 @@ async function loadPayroll(){
       ]);
       PR.shifts=await sbGet('route_shifts','select=*').catch(()=>[]);
       PR.points=await sbGet('att_points','order=created_at').catch(()=>[]);
+      PR.devices=await sbGet('att_devices','order=bound_at.desc').catch(()=>[]);
       // merge salary ลงใน employee objects
       const salMap={};salaries.forEach(s=>salMap[s.employee_id]=s);
       emps.forEach(e=>{const s=salMap[e.id]||{};e.daily_rate=s.daily_rate??e.daily_rate;e.payment_type=s.payment_type??e.payment_type;e.phone_fee=s.phone_fee??e.phone_fee;e.room_fee=s.room_fee??e.room_fee;e.department=s.department??e.department;e.position=s.position??e.position;});
@@ -2813,7 +2814,10 @@ function renderPrShifts(){
 
   let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;flex-wrap:wrap;">
     <div style="font-size:16px;font-weight:600;">เวลาเข้างานรายสาย <span style="font-size:12px;color:var(--text3);font-weight:400;">ตั้งแล้ว ${done}/${total} สาย</span></div>
-    <button class="btn btn-b" onclick="openAttPoints()">📍 จุดแตะ (${pts.length})</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-g" onclick="openAttDevices()">📱 เครื่องพนักงาน</button>
+      <button class="btn btn-b" onclick="openAttPoints()">📍 จุดแตะ (${pts.length})</button>
+    </div>
   </div>
   <p style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.6;">
     ตั้งเวลาแต่ละเที่ยวของแต่ละสาย — ระบบใช้ค่านี้ดูว่ามาสายกี่นาที และแตะครบทุกเที่ยวหรือยัง<br>
@@ -2941,6 +2945,83 @@ function _shToggleDay(rid,n){
   const wd=_shiftOf(rid).work_days||_WD_ALL;
   const next=wd.includes(n)?wd.split('').filter(c=>c!==n).join(''):(wd+n).split('').sort().join('');
   _shSet(rid,'work_days',next||'1');
+}
+
+// ─── จัดการเครื่องพนักงาน (ลงทะเบียน / ถอน) ───
+function _devOf(empId){
+  return (PR.devices||[]).filter(d=>d.employee_id===empId).sort((a,b)=>new Date(b.bound_at||0)-new Date(a.bound_at||0))[0]||null;
+}
+function _devAgo(ts){
+  if(!ts)return'ยังไม่เคยแตะ';
+  const m=Math.floor((Date.now()-new Date(ts))/60000);
+  if(m<60)return`${m} นาทีที่แล้ว`;
+  const h=Math.floor(m/60);if(h<24)return`${h} ชม.ที่แล้ว`;
+  return`${Math.floor(h/24)} วันที่แล้ว`;
+}
+function openAttDevices(){
+  const url=`${location.origin}/?bind=1`;
+  const active=PR.employees.filter(e=>e.status==='active');
+  const bound=[],unbound=[];
+  active.forEach(e=>{const d=_devOf(e.id);(d&&d.status==='active'?bound:unbound).push({e,d});});
+
+  const row=({e,d})=>{
+    const rt=S.shops.find(s=>s.id===e.route_id);
+    const on=d&&d.status==='active';
+    return`<div style="display:flex;align-items:center;gap:9px;padding:9px 11px;border-bottom:1px solid var(--border);">
+      <span style="width:8px;height:8px;border-radius:50%;background:${on?'var(--green)':(d?'var(--red)':'var(--border2)')};flex-shrink:0;"></span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:500;">${e.name}</div>
+        <div style="font-size:10px;color:var(--text3);">${rt?rt.name+' · ':''}${on?'แตะล่าสุด '+_devAgo(d.last_seen):(d?'ถูกถอนแล้ว':'ยังไม่ได้ลงทะเบียน')}</div>
+      </div>
+      ${on?`<button class="delbtn" onclick="_devRevoke('${d.id}','${e.name.replace(/'/g,"")}')">ถอน</button>`:''}
+    </div>`;
+  };
+
+  OM('📱 เครื่องพนักงาน',
+   `<div style="background:var(--bdim);border:1px solid var(--bbr);border-radius:11px;padding:13px;margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:8px;">วิธีลงทะเบียนเครื่องให้ลูกน้อง</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.85;">
+        <strong style="color:var(--text);">วิธีที่ง่ายที่สุด</strong> — ให้ลูกน้องเอามือถือแตะสติ๊กเกอร์ NFC ก่อน<br>
+        จะขึ้นว่า "เครื่องนี้ยังไม่ได้ลงทะเบียน" → กดปุ่ม <strong>"หัวหน้างานกดที่นี่"</strong> → กรอก PIN ของคุณ → เลือกชื่อ<br><br>
+        <strong style="color:var(--text);">หรือเปิดลิงก์นี้ในเครื่องลูกน้องโดยตรง:</strong>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:7px;">
+        <input readonly value="${url}" onclick="this.select()" style="flex:1;min-width:0;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--purple);font-size:11px;padding:7px 9px;font-family:var(--mono);">
+        <button class="btn btn-b" style="padding:7px 12px;font-size:12px;" onclick="_devCopyBind()">คัดลอก</button>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:8px;line-height:1.6;">
+        ⚠️ PIN ของคุณ<strong style="color:var(--amber);">ไม่ถูกเก็บไว้ในเครื่องลูกน้อง</strong> — ใช้ยืนยันตอนนั้นแล้วทิ้งทันที<br>
+        1 คน = 1 เครื่อง · ลงทะเบียนเครื่องใหม่ให้ใคร เครื่องเก่าของคนนั้นใช้ไม่ได้ทันที
+      </div>
+    </div>
+
+    <div style="font-size:12px;font-weight:700;color:var(--green);margin-bottom:6px;">✅ ลงทะเบียนแล้ว (${bound.length})</div>
+    <div style="border:1px solid var(--border);border-radius:9px;overflow:hidden;margin-bottom:14px;">
+      ${bound.map(row).join('')||'<div style="padding:14px;text-align:center;color:var(--text3);font-size:12px;">ยังไม่มีใครลงทะเบียน</div>'}
+    </div>
+
+    <div style="font-size:12px;font-weight:700;color:var(--text3);margin-bottom:6px;">⬜ ยังไม่ได้ลงทะเบียน (${unbound.length})</div>
+    <div style="border:1px solid var(--border);border-radius:9px;overflow:hidden;">
+      ${unbound.map(row).join('')||'<div style="padding:14px;text-align:center;color:var(--text3);font-size:12px;">ครบทุกคนแล้ว</div>'}
+    </div>`,
+   `<button class="btn btn-x" onclick="CMask()">ปิด</button><button class="btn btn-b" onclick="_devReload()">รีเฟรช</button>`);
+}
+function _devCopyBind(){
+  const url=`${location.origin}/?bind=1`;
+  navigator.clipboard?.writeText(url).then(()=>toast('คัดลอกลิงก์แล้ว ✓')).catch(()=>prompt('คัดลอกลิงก์นี้:',url));
+}
+async function _devReload(){
+  try{PR.devices=await sbGet('att_devices','order=bound_at.desc');openAttDevices();}
+  catch(e){toast('โหลดไม่สำเร็จ: '+e.message);}
+}
+async function _devRevoke(devId,name){
+  if(!confirm(`ถอนเครื่องของ ${name}?\n\nเครื่องนั้นจะแตะเวลาไม่ได้ทันที และดูข้อมูลตัวเองไม่ได้\nประวัติเก่ายังอยู่ครบ`))return;
+  try{
+    const d=(PR.devices||[]).find(x=>x.id===devId);
+    await sbUpsert('att_devices',{...d,status:'revoked',revoked_at:new Date().toISOString()});
+    if(d){d.status='revoked';d.revoked_at=new Date().toISOString();}
+    openAttDevices();toast('ถอนเครื่องแล้ว ✓');
+  }catch(e){toast('ถอนไม่สำเร็จ: '+e.message);}
 }
 
 // ─── จุดแตะ (สติ๊กเกอร์ NFC) ───
