@@ -1044,8 +1044,7 @@ function renderExchangePair(exout,exin){
   body+=`<div><div style="font-size:12px;color:var(--text3);margin-bottom:6px;">ให้ออก</div>${billTbl(exout.bills||eb(),exout.amount||0)}</div>`;
   body+=`<div><div style="font-size:12px;color:var(--text3);margin-bottom:6px;">รับเข้า</div>${billTbl(exin.bills||eb(),exin.amount||0)}</div>`;
   body+=`</div>`;
-  const tok=_xpTok(exout)||_xpTok(exin);
-  const delBtn=isAdmin()?`<button class="delbtn" onclick="delExPair(event,'${exout.id}','${exin.id}','${tok}')">ลบ</button>`:'';
+  const delBtn=isAdmin()?`<button class="delbtn" onclick="delExchange(event,'${exout.id}')">ลบ</button>`:'';
   return`<div class="ecard">
     <div class="ehd" onclick="toggleE('${pairId}')">
       <span class="badge bexin">แลกเงิน</span>
@@ -1058,25 +1057,45 @@ function renderExchangePair(exout,exin){
   </div>`;
 }
 
-async function delExPair(ev,id1,id2,tok){
-  ev.stopPropagation();
-  if(!confirm('ลบรายการแลกเงินนี้? (ทุกฝั่งของการแลกครั้งนี้)'))return;
-  // ถ้ามี pair-token ลบทุกขาที่ผูก token เดียวกัน (รองรับการแลกที่กระจายหลายสาย)
-  let ids=[id1,id2].filter(Boolean);
-  if(tok){
-    const full='#xp:'+tok;
-    const set=new Set();
-    for(const rid of Object.keys(S.entries)){(ge(rid,S.month)||[]).forEach(e=>{if((e.note||'')===full)set.add(e.id);});}
-    if(set.size)ids=[...set];
+// ─── หา "ทุกขา" ของการแลกเงินครั้งเดียวกัน ───
+// รายการใหม่: จับด้วย pair-token ใน note
+// รายการเก่า (ไม่มี token): จับด้วย created_at ที่ห่างกันไม่เกิน 5 วินาที (ทุกขาถูกบันทึกพร้อมกันในคำสั่งเดียว)
+function _xFindLegs(id){
+  const all=[];
+  for(const rid of Object.keys(S.entries)){
+    (ge(rid,S.month)||[]).forEach(e=>{if(e.type==='exin'||e.type==='exout')all.push({rid,e});});
   }
+  const me=all.find(x=>x.e.id===id);
+  if(!me)return[];
+  const tok=_xpTok(me.e);
+  if(tok){const f=all.filter(x=>_xpTok(x.e)===tok);if(f.length)return f;}
+  const t0=me.e.ca?new Date(me.e.ca).getTime():NaN;
+  if(!isNaN(t0)){
+    const near=all.filter(x=>x.e.ca&&Math.abs(new Date(x.e.ca).getTime()-t0)<=5000);
+    if(near.length>1)return near;
+  }
+  return[me];
+}
+
+async function delExchange(ev,id){
+  if(ev)ev.stopPropagation();
+  const legs=_xFindLegs(id);
+  if(!legs.length){toast('ไม่พบรายการ');return;}
+  const lines=legs.map(({rid,e})=>{
+    const nm=S.shops.find(s=>s.id===rid)?.name||rid;
+    return `  ${e.type==='exout'?'ให้ออก':'รับเข้า'}  ${nm}  ${fmt(e.amount||0)}`;
+  }).join('\n');
+  if(!confirm(`ลบรายการแลกเงินนี้ทั้งหมด ${legs.length} รายการ?\n\n${lines}\n\nทุกสายที่เกี่ยวข้องจะถูกลบพร้อมกัน`))return;
   try{
-    for(const id of ids){
-      await sbDelete('entries',`id=eq.${id}`);
-      for(const rid of Object.keys(S.entries)){const l=ge(rid,S.month);const i=l.findIndex(e=>e.id===id);if(i>-1)l.splice(i,1);}
+    for(const {rid,e} of legs){
+      await sbDelete('entries',`id=eq.${e.id}`);
+      const l=ge(rid,S.month);const i=l.findIndex(x=>x.id===e.id);if(i>-1)l.splice(i,1);
     }
-    render();toast('ลบรายการแลกเงินแล้ว ✓');
+    render();toast(`ลบรายการแลกเงินแล้ว ${legs.length} รายการ ✓`);
   }catch(err){toast('ลบไม่สำเร็จ: '+err.message);console.error(err);}
 }
+// เก็บไว้เผื่อ HTML เก่าที่ค้างในหน้าจอ
+function delExPair(ev,id1){return delExchange(ev,id1);}
 
 function renderEntry(e){
   const labels={count:'นับเงิน',income:'รายรับ',expense:'รายจ่าย',exin:'รับแลกเงิน',exout:'แลกเงินออก'};
@@ -1108,7 +1127,7 @@ function renderEntry(e){
   }
   if(e.note&&!e.note.startsWith('#xp:'))body+=`<div class="notetxt">📝 ${e.note}</div>`;
   const _xtok=_xpTok(e);
-  const _delCall=((e.type==='exin'||e.type==='exout')&&_xtok)?`delExPair(event,'${e.id}','','${_xtok}')`:`delE(event,'${e.id}')`;
+  const _delCall=(e.type==='exin'||e.type==='exout')?`delExchange(event,'${e.id}')`:`delE(event,'${e.id}')`;
   return `<div class="ecard">
     <div class="ehd" onclick="toggleE('${e.id}')">
       <span class="badge ${bclass[e.type]}">${labels[e.type]}</span>
