@@ -925,9 +925,18 @@ async function _sosGo(){
     <div style="font-size:52px;margin-bottom:8px;">✅</div>
     <div style="font-size:19px;font-weight:800;color:var(--green);margin-bottom:8px;">แจ้งหัวหน้างานแล้ว</div>
     <p style="font-size:13px;color:var(--text2);line-height:1.8;margin-bottom:16px;">${loc?'ส่งตำแหน่งปัจจุบันไปแล้ว':'ส่งแล้ว แต่หาตำแหน่งไม่ได้ — เปิด GPS แล้วส่งใหม่จะดีกว่า'}</p>
-    ${map?`<button onclick="_sosShare('${map}')" style="width:100%;padding:13px;background:var(--green);border:none;border-radius:11px;color:#06210f;font-size:15px;font-weight:800;font-family:var(--font);cursor:pointer;margin-bottom:9px;">ส่งตำแหน่งเข้า LINE ด้วย</button>
+    ${map?`<button onclick="_sosShare('${map}')" style="width:100%;padding:13px;background:var(--green);border:none;border-radius:11px;color:#06210f;font-size:15px;font-weight:800;font-family:var(--font);cursor:pointer;margin-bottom:9px;">ส่งเข้า LINE / แอปอื่น</button>
+    <button onclick="_sosMsgr('${map}')" style="width:100%;padding:13px;background:#0084FF;border:none;border-radius:11px;color:#fff;font-size:15px;font-weight:800;font-family:var(--font);cursor:pointer;margin-bottom:9px;">ส่งเข้า Messenger</button>
     <button onclick="window.open('${map}','_blank')" style="width:100%;padding:11px;background:var(--bg3);border:1px solid var(--border);border-radius:11px;color:var(--text2);font-size:14px;font-family:var(--font);cursor:pointer;margin-bottom:9px;">ดูตำแหน่งบนแผนที่</button>`:''}
     <button onclick="_meRender()" style="width:100%;padding:11px;background:var(--bg3);border:1px solid var(--border);border-radius:11px;color:var(--text2);font-size:14px;font-family:var(--font);cursor:pointer;">ย้อนกลับ</button>`,'var(--gbr)'));
+}
+function _sosMsgr(map){
+  // ลองเปิดแอป Messenger ตรงๆ ถ้าไม่มีแอปจะตกไปที่หน้าต่างแชร์ปกติ
+  let opened=false;
+  const t=setTimeout(()=>{if(!opened)_sosShare(map);},1200);
+  window.addEventListener('blur',()=>{opened=true;clearTimeout(t);},{once:true});
+  try{location.href='fb-messenger://share/?link='+encodeURIComponent(map);}
+  catch(e){clearTimeout(t);_sosShare(map);}
 }
 function _sosShare(map){
   const txt='รถเสีย ขอความช่วยเหลือ ตำแหน่งของฉัน: '+map;
