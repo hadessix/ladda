@@ -636,7 +636,7 @@ function _getLoc(){
 
 // ── หน้าแตะ ──
 async function attTap(pointId,manual){
-  if(!_devTok()){
+  if(!_devTok()&&!_viewKey()){
     _attScreen(_attCard(`
       <div style="font-size:46px;margin-bottom:10px;">📵</div>
       <div style="font-size:17px;font-weight:700;margin-bottom:8px;">เครื่องนี้ยังไม่ได้ลงทะเบียน</div>

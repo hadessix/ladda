@@ -342,19 +342,27 @@ export default {
     // ── POST /att/tap — พนักงานแตะ NFC ──
     // body: { point_id, lat, lng, accuracy, client_ts }
     if (url.pathname === '/att/tap' && request.method === 'POST') {
-      const auth = request.headers.get('Authorization') || '';
-      const payload = await verifyToken(auth.startsWith('Bearer ') ? auth.slice(7) : '', env.JWT_SECRET);
-      if (!payload || payload.role !== 'device') return jsonRes({ error: 'unauthorized', code: 'notoken' }, 401);
+      // รับได้ทั้งบัตรลงเวลา (Bearer) และกุญแจดูข้อมูล (X-View-Key จากไอคอนหน้าจอโฮม)
+      const vkTap = request.headers.get('X-View-Key') || '';
+      let payload = null;
+      if (!vkTap) {
+        const auth = request.headers.get('Authorization') || '';
+        payload = await verifyToken(auth.startsWith('Bearer ') ? auth.slice(7) : '', env.JWT_SECRET);
+        if (!payload || payload.role !== 'device') return jsonRes({ error: 'unauthorized', code: 'notoken' }, 401);
+      } else if (vkTap.length < 24) return jsonRes({ error: 'unauthorized', code: 'notoken' }, 401);
 
       let body = {};
       try { body = await request.json(); } catch {}
 
       try {
-        const devs = await sb(env, `att_devices?id=eq.${payload.deviceId}&select=*`);
+        const devs = vkTap
+          ? await sb(env, `att_devices?view_hash=eq.${await sha256hex(vkTap)}&select=*`)
+          : await sb(env, `att_devices?id=eq.${payload.deviceId}&select=*`);
         const dev = devs && devs[0];
         if (!dev || dev.status !== 'active') return jsonRes({ error: 'เครื่องนี้ถูกถอนแล้ว — ติดต่อหัวหน้างาน', code: 'revoked' }, 403);
 
-        const emps = await sb(env, `employees?id=eq.${payload.employeeId}&select=id,name,route_id,status,photo_url`);
+        const empIdTap = vkTap ? dev.employee_id : payload.employeeId;
+        const emps = await sb(env, `employees?id=eq.${empIdTap}&select=id,name,route_id,status,photo_url`);
         const emp = emps && emps[0];
         if (!emp) return jsonRes({ error: 'ไม่พบพนักงาน', code: 'noemp' }, 404);
         if (emp.status !== 'active') {
