@@ -96,6 +96,16 @@ async function sb(env, path, opts = {}) {
 function workDate(d = new Date()) {
   return new Date(d.getTime() + 3 * 3600 * 1000).toISOString().slice(0, 10);
 }
+// รหัสจับคู่: 2 ตัวอักษร + 5 ตัวเลข (ตัด I O เพื่อไม่ให้สับสนกับ 1 0)
+function pairCode() {
+  const L = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const r = n => Math.floor(Math.random() * n);
+  return L[r(24)] + L[r(24)] + String(r(100000)).padStart(5, '0');
+}
+async function sha256hex(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
 function uid32() {
   return crypto.randomUUID().replace(/-/g, '').slice(0, 24);
 }
@@ -137,6 +147,109 @@ export default {
     // ═══════════════════════════════════════════════
     // ระบบเช็คเวลาเข้างาน NFC
     // ═══════════════════════════════════════════════
+
+    // ── POST /att/enroll — เครื่องลูกน้องขอรหัสจับคู่ (ไม่ต้อง auth) ──
+    // คืน { code, device_id, secret } · ยังใช้แตะไม่ได้จนกว่าหัวหน้าจะอนุมัติ
+    if (url.pathname === '/att/enroll' && request.method === 'POST') {
+      try {
+        const devId = 'd_' + uid32();
+        const secret = crypto.randomUUID().replace(/-/g, '');
+        const code = pairCode();
+        const expires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+        await sb(env, 'att_devices', {
+          method: 'POST', prefer: 'return=minimal',
+          body: {
+            id: devId, employee_id: null, status: 'pending', code,
+            claim_hash: await sha256hex(secret), expires_at: expires,
+            label: (request.headers.get('User-Agent') || '').slice(0, 80),
+            bound_at: new Date().toISOString(),
+            ua: request.headers.get('User-Agent') || null,
+          },
+        });
+        return jsonRes({ ok: true, code, device_id: devId, secret, expires_at: expires });
+      } catch (e) {
+        return jsonRes({ error: e.message }, 500);
+      }
+    }
+
+    // ── GET /att/enroll/status?d=..&s=.. — เครื่องถามว่าหัวหน้าอนุมัติหรือยัง ──
+    if (url.pathname === '/att/enroll/status' && request.method === 'GET') {
+      const devId = url.searchParams.get('d') || '';
+      const secret = url.searchParams.get('s') || '';
+      if (!devId || !secret) return jsonRes({ error: 'bad request' }, 400);
+      try {
+        const rows = await sb(env, `att_devices?id=eq.${devId}&select=*`);
+        const dev = rows && rows[0];
+        if (!dev) return jsonRes({ status: 'gone' }, 404);
+        if (dev.claim_hash !== await sha256hex(secret)) return jsonRes({ error: 'forbidden' }, 403);
+        if (dev.status === 'pending') {
+          if (dev.expires_at && new Date(dev.expires_at) < new Date()) return jsonRes({ status: 'expired' });
+          return jsonRes({ status: 'pending', code: dev.code });
+        }
+        if (dev.status === 'active' && dev.claim_token) {
+          const token = dev.claim_token;
+          // ให้ token แค่ครั้งเดียว แล้วล้างทิ้งจากฐานข้อมูล
+          await sb(env, `att_devices?id=eq.${devId}`, { method: 'PATCH', body: { claim_token: null } });
+          let name = '';
+          if (dev.employee_id) {
+            const emps = await sb(env, `employees?id=eq.${dev.employee_id}&select=name`);
+            name = (emps && emps[0] && emps[0].name) || '';
+          }
+          return jsonRes({ status: 'approved', token, employee: { id: dev.employee_id, name } });
+        }
+        if (dev.status === 'active') return jsonRes({ status: 'claimed' });
+        return jsonRes({ status: 'revoked' });
+      } catch (e) {
+        return jsonRes({ error: e.message }, 500);
+      }
+    }
+
+    // ── POST /att/approve — หัวหน้างานอนุมัติรหัส แล้วผูกกับพนักงาน ──
+    // body: { device_id | code, employee_id } · auth: admin | hr
+    if (url.pathname === '/att/approve' && request.method === 'POST') {
+      const auth = request.headers.get('Authorization') || '';
+      const payload = await verifyToken(auth.startsWith('Bearer ') ? auth.slice(7) : '', env.JWT_SECRET);
+      if (!payload || !['admin', 'hr'].includes(payload.role)) return jsonRes({ error: 'unauthorized' }, 401);
+
+      let body;
+      try { body = await request.json(); } catch { return jsonRes({ error: 'bad request' }, 400); }
+      const empId = body.employee_id;
+      if (!empId) return jsonRes({ error: 'employee_id required' }, 400);
+
+      try {
+        const q = body.device_id
+          ? `att_devices?id=eq.${body.device_id}&select=*`
+          : `att_devices?code=eq.${(body.code || '').toUpperCase()}&status=eq.pending&select=*`;
+        const rows = await sb(env, q);
+        const dev = rows && rows[0];
+        if (!dev) return jsonRes({ error: 'ไม่พบรหัสนี้' }, 404);
+        if (dev.status !== 'pending') return jsonRes({ error: 'รหัสนี้ถูกใช้ไปแล้ว' }, 409);
+        if (dev.expires_at && new Date(dev.expires_at) < new Date()) return jsonRes({ error: 'รหัสหมดอายุแล้ว — ให้ลูกน้องสแกนใหม่' }, 410);
+
+        const emps = await sb(env, `employees?id=eq.${empId}&select=id,name,status`);
+        const emp = emps && emps[0];
+        if (!emp) return jsonRes({ error: 'ไม่พบพนักงาน' }, 404);
+        if (emp.status !== 'active') return jsonRes({ error: 'พนักงานคนนี้ไม่ได้ทำงานอยู่' }, 403);
+
+        // 1 คน = 1 เครื่อง → ถอนเครื่องเก่าก่อน
+        await sb(env, `att_devices?employee_id=eq.${empId}&status=eq.active`, {
+          method: 'PATCH', body: { status: 'revoked', revoked_at: new Date().toISOString() },
+        });
+
+        const token = await makeToken('device', env.JWT_SECRET, `${dev.id}|${empId}`, 3650);
+        await sb(env, `att_devices?id=eq.${dev.id}`, {
+          method: 'PATCH',
+          body: {
+            employee_id: empId, status: 'active', claim_token: token,
+            secret_hash: token.slice(token.lastIndexOf('.') + 1),
+            bound_by: payload.role, bound_at: new Date().toISOString(), code: null,
+          },
+        });
+        return jsonRes({ ok: true, employee: { id: emp.id, name: emp.name } });
+      } catch (e) {
+        return jsonRes({ error: e.message }, 500);
+      }
+    }
 
     // ── POST /att/bind — หัวหน้างานผูกเครื่องให้พนักงาน ──
     // body: { employee_id, label } · auth: admin | hr
