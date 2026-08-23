@@ -118,6 +118,50 @@ function distM(a, b, c, d) {
   return Math.round(R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x)));
 }
 
+// ── Web Push (VAPID) ──
+// ส่งแบบไม่มีเนื้อหา → service worker ปลุกขึ้นมาแล้วแสดงข้อความเอง
+// (ไม่ต้องทำการเข้ารหัส payload ซึ่งซับซ้อนกว่ามาก)
+function b64uFromBuf(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+async function vapidHeader(env, endpoint) {
+  const aud = new URL(endpoint).origin;
+  const header = b64uFromBuf(new TextEncoder().encode(JSON.stringify({ typ: 'JWT', alg: 'ES256' })));
+  const payload = b64uFromBuf(new TextEncoder().encode(JSON.stringify({
+    aud, exp: Math.floor(Date.now() / 1000) + 12 * 3600, sub: env.VAPID_SUBJECT || 'mailto:admin@example.com',
+  })));
+  const key = await crypto.subtle.importKey('jwk', JSON.parse(env.VAPID_JWK),
+    { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, key,
+    new TextEncoder().encode(header + '.' + payload));
+  return { auth: `vapid t=${header}.${payload}.${b64uFromBuf(sig)}, k=${env.VAPID_PUBLIC}` };
+}
+async function sendPush(env, sub) {
+  try {
+    const { auth } = await vapidHeader(env, sub.endpoint);
+    const res = await fetch(sub.endpoint, {
+      method: 'POST',
+      headers: { Authorization: auth, TTL: '3600', 'Content-Length': '0', Urgency: 'high' },
+    });
+    if (res.status === 404 || res.status === 410) {
+      await sb(env, `push_subs?id=eq.${sub.id}`, { method: 'DELETE' }).catch(() => {});
+      return false;
+    }
+    await sb(env, `push_subs?id=eq.${sub.id}`, { method: 'PATCH', body: { last_sent: new Date().toISOString() } }).catch(() => {});
+    return res.ok;
+  } catch { return false; }
+}
+async function notifyRoles(env) {
+  try {
+    const st = await sb(env, `app_settings?key=eq.alert_roles&select=value`).catch(() => null);
+    const roles = (st && st[0] && st[0].value) || ['admin'];
+    if (!roles.length) return;
+    const list = roles.map(r => `"${r}"`).join(',');
+    const subs = await sb(env, `push_subs?role=in.(${list})&select=id,endpoint`);
+    await Promise.all((subs || []).map(x => sendPush(env, x)));
+  } catch {}
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -399,6 +443,47 @@ export default {
       }
     }
 
+    // ── POST /push/subscribe — เครื่องของหัวหน้าสมัครรับแจ้งเตือน ──
+    if (url.pathname === '/push/subscribe' && request.method === 'POST') {
+      const auth = request.headers.get('Authorization') || '';
+      const p = await verifyToken(auth.startsWith('Bearer ') ? auth.slice(7) : '', env.JWT_SECRET);
+      if (!p || p.role === 'device') return jsonRes({ error: 'unauthorized' }, 401);
+      let body;
+      try { body = await request.json(); } catch { return jsonRes({ error: 'bad request' }, 400); }
+      if (!body.endpoint) return jsonRes({ error: 'endpoint required' }, 400);
+      try {
+        await sb(env, 'push_subs?on_conflict=endpoint', {
+          method: 'POST', prefer: 'resolution=merge-duplicates,return=minimal',
+          body: { id: 'ps_' + uid32(), endpoint: body.endpoint, role: p.role, label: (body.label || '').slice(0, 80) },
+        });
+        return jsonRes({ ok: true, role: p.role });
+      } catch (e) { return jsonRes({ error: e.message }, 500); }
+    }
+
+    // ── POST /push/unsubscribe ──
+    if (url.pathname === '/push/unsubscribe' && request.method === 'POST') {
+      const auth = request.headers.get('Authorization') || '';
+      const p = await verifyToken(auth.startsWith('Bearer ') ? auth.slice(7) : '', env.JWT_SECRET);
+      if (!p || p.role === 'device') return jsonRes({ error: 'unauthorized' }, 401);
+      let body; try { body = await request.json(); } catch { body = {}; }
+      if (!body.endpoint) return jsonRes({ error: 'endpoint required' }, 400);
+      try {
+        await sb(env, `push_subs?endpoint=eq.${encodeURIComponent(body.endpoint)}`, { method: 'DELETE' });
+        return jsonRes({ ok: true });
+      } catch (e) { return jsonRes({ error: e.message }, 500); }
+    }
+
+    // ── POST /push/test — ส่งทดสอบให้ตัวเอง ──
+    if (url.pathname === '/push/test' && request.method === 'POST') {
+      const auth = request.headers.get('Authorization') || '';
+      const p = await verifyToken(auth.startsWith('Bearer ') ? auth.slice(7) : '', env.JWT_SECRET);
+      if (!p || p.role !== 'admin') return jsonRes({ error: 'unauthorized' }, 401);
+      let body; try { body = await request.json(); } catch { body = {}; }
+      if (!body.endpoint) return jsonRes({ error: 'endpoint required' }, 400);
+      const ok = await sendPush(env, { id: 'test', endpoint: body.endpoint });
+      return jsonRes({ ok });
+    }
+
     // ── POST /att/alert — แจ้งเหตุจากหน้างาน (รถเสีย) ──
     // เข้าได้ทั้ง device token และกุญแจดูข้อมูล (ไอคอนหน้าจอโฮมมีแค่กุญแจ)
     if (url.pathname === '/att/alert' && request.method === 'POST') {
@@ -434,6 +519,7 @@ export default {
           ip: request.headers.get('CF-Connecting-IP') || null,
         };
         await sb(env, 'att_alerts', { method: 'POST', prefer: 'return=minimal', body: row });
+        await notifyRoles(env);
         return jsonRes({ ok: true, ts: row.ts, employee: { name: emp.name || '' } });
       } catch (e) {
         return jsonRes({ error: e.message }, 500);

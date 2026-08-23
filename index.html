@@ -3133,6 +3133,128 @@ function _prSyncTabs(){
   if(t)t.style.display=isHR()?'none':'';
 }
 // ═══════════════════════════════════════════════════════════
+// 🚨 ตั้งค่าแจ้งเตือนรถเสีย (admin)
+// ═══════════════════════════════════════════════════════════
+const VAPID_PUB='BFf8ZKe97FG0kDAF_OPX6CSwYVECwCfM1aI4QxhKshZXaVNfqpaYPkaiE0cU8XTbzkWBpg0m0wC9erele8t4cbk';
+const ROLE_NAMES={admin:'ผู้ดูแล (admin)',user:'คนนับเงิน (user)',hr:'ฝ่ายบุคคล (hr)',viewer:'ผู้ดูภาพรวม (viewer)'};
+
+function _b64ToU8(b){
+  const p='='.repeat((4-b.length%4)%4);
+  const raw=atob((b+p).replace(/-/g,'+').replace(/_/g,'/'));
+  return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
+}
+async function _pushSub(){
+  if(!('serviceWorker'in navigator)||!('PushManager'in window))return null;
+  const reg=await navigator.serviceWorker.ready;
+  return await reg.pushManager.getSubscription();
+}
+async function openAlertSettings(){
+  let roles=['admin','hr'];
+  try{
+    const r=await sbGet('app_settings','key=eq.alert_roles&select=value');
+    if(r&&r[0]&&Array.isArray(r[0].value))roles=r[0].value;
+  }catch(e){}
+  window._alertRoles=roles;
+
+  const sub=await _pushSub().catch(()=>null);
+  const on=!!sub;
+  const perm=(typeof Notification!=='undefined')?Notification.permission:'unsupported';
+  const supported=('serviceWorker'in navigator)&&('PushManager'in window)&&typeof Notification!=='undefined';
+
+  let subs=[];
+  try{subs=await sbGet('push_subs','select=id,role,label,created_at,last_sent&order=created_at.desc');}catch(e){}
+  const cnt={};(subs||[]).forEach(x=>{cnt[x.role]=(cnt[x.role]||0)+1;});
+
+  const rows=Object.keys(ROLE_NAMES).map(r=>{
+    const chk=roles.includes(r);
+    return`<div onclick="_alertToggleRole('${r}')" style="display:flex;align-items:center;gap:10px;padding:11px 13px;border-bottom:1px solid var(--border);cursor:pointer;background:var(--bg2);">
+      <span style="width:22px;height:22px;border-radius:6px;border:2px solid ${chk?'var(--green)':'var(--border2)'};background:${chk?'var(--green)':'transparent'};color:#06210f;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;flex-shrink:0;">${chk?'✓':''}</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:${chk?'600':'400'};">${ROLE_NAMES[r]}</div>
+        <div style="font-size:10px;color:var(--text3);">${cnt[r]?cnt[r]+' เครื่องเปิดรับอยู่':'ยังไม่มีเครื่องเปิดรับ'}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  OM('🚨 แจ้งเตือนรถเสีย',
+   `<div style="background:${on?'var(--gdim)':'var(--adim)'};border:1px solid ${on?'var(--gbr)':'var(--abr)'};border-radius:12px;padding:13px;margin-bottom:14px;">
+      <div style="font-size:13px;font-weight:700;color:${on?'var(--green)':'var(--amber)'};margin-bottom:4px;">
+        ${on?'✅ เครื่องนี้เปิดรับแจ้งเตือนอยู่':'🔕 เครื่องนี้ยังไม่ได้เปิดรับแจ้งเตือน'}
+      </div>
+      <div style="font-size:11px;color:var(--text2);line-height:1.7;margin-bottom:10px;">
+        ${!supported?'เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน':
+          perm==='denied'?'คุณเคยกดปฏิเสธไว้ — ต้องไปเปิดในตั้งค่าเบราว์เซอร์ก่อน':
+          on?'ปิดแอปอยู่ก็จะเด้งเตือน · ต้องเปิดจากไอคอนหน้าจอโฮมบน iPhone':
+          'กดปุ่มด้านล่างเพื่อเปิดรับ · <strong>iPhone ต้องเปิดจากไอคอนหน้าจอโฮมเท่านั้น</strong>'}
+      </div>
+      ${supported&&perm!=='denied'?`<div style="display:flex;gap:7px;">
+        <button class="btn ${on?'btn-x':'btn-g'}" style="flex:1;" onclick="${on?'_pushOff()':'_pushOn()'}">${on?'ปิดรับแจ้งเตือน':'📲 เปิดรับแจ้งเตือน'}</button>
+        ${on?`<button class="btn btn-b" onclick="_pushTest()">ทดสอบ</button>`:''}
+      </div>`:''}
+    </div>
+
+    <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:7px;">ตำแหน่งที่จะได้รับแจ้งเตือน</div>
+    <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:8px;">${rows}</div>
+    <p style="font-size:11px;color:var(--text3);line-height:1.7;">
+      ติ๊กตำแหน่งไหน = เครื่องของคนที่ล็อกอินด้วยตำแหน่งนั้นและกดเปิดรับแจ้งเตือนไว้ จะได้รับ<br>
+      แต่ละคนต้องกด "เปิดรับแจ้งเตือน" ในเครื่องตัวเองด้วย 1 ครั้ง
+    </p>`,
+   `<button class="btn btn-x" onclick="CMask()">ปิด</button><button class="btn btn-g" onclick="_alertSaveRoles()">บันทึก</button>`);
+}
+function _alertToggleRole(r){
+  const s=new Set(window._alertRoles||[]);
+  s.has(r)?s.delete(r):s.add(r);
+  window._alertRoles=[...s];
+  openAlertSettings();
+}
+async function _alertSaveRoles(){
+  try{
+    await sbUpsert('app_settings',{key:'alert_roles',value:window._alertRoles||['admin'],updated_at:new Date().toISOString()});
+    CM();toast('บันทึกแล้ว ✓');
+  }catch(e){toast('บันทึกไม่สำเร็จ: '+e.message);}
+}
+async function _pushOn(){
+  try{
+    const perm=await Notification.requestPermission();
+    if(perm!=='granted'){toast('ไม่ได้รับอนุญาตให้แจ้งเตือน');return;}
+    const reg=await navigator.serviceWorker.ready;
+    let sub=await reg.pushManager.getSubscription();
+    if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:_b64ToU8(VAPID_PUB)});
+    const res=await fetch(WORKER_URL+'/push/subscribe',{method:'POST',
+      headers:{'Content-Type':'application/json',Authorization:'Bearer '+_wToken()},
+      body:JSON.stringify({endpoint:sub.endpoint,label:navigator.userAgent.slice(0,60)})});
+    const d=await res.json();
+    if(!res.ok){toast(d.error||'เปิดไม่สำเร็จ');return;}
+    toast('เปิดรับแจ้งเตือนแล้ว ✓');
+    openAlertSettings();
+  }catch(e){toast('เปิดไม่สำเร็จ: '+e.message);}
+}
+async function _pushOff(){
+  try{
+    const sub=await _pushSub();
+    if(sub){
+      await fetch(WORKER_URL+'/push/unsubscribe',{method:'POST',
+        headers:{'Content-Type':'application/json',Authorization:'Bearer '+_wToken()},
+        body:JSON.stringify({endpoint:sub.endpoint})}).catch(()=>{});
+      await sub.unsubscribe().catch(()=>{});
+    }
+    toast('ปิดรับแจ้งเตือนแล้ว');
+    openAlertSettings();
+  }catch(e){toast('ปิดไม่สำเร็จ: '+e.message);}
+}
+async function _pushTest(){
+  try{
+    const sub=await _pushSub();
+    if(!sub){toast('ยังไม่ได้เปิดรับแจ้งเตือน');return;}
+    const res=await fetch(WORKER_URL+'/push/test',{method:'POST',
+      headers:{'Content-Type':'application/json',Authorization:'Bearer '+_wToken()},
+      body:JSON.stringify({endpoint:sub.endpoint})});
+    const d=await res.json();
+    toast(d.ok?'ส่งแล้ว — รอสักครู่':'ส่งไม่สำเร็จ');
+  }catch(e){toast('ทดสอบไม่สำเร็จ: '+e.message);}
+}
+
+// ═══════════════════════════════════════════════════════════
 // 📊 กระดานลงเวลารายวัน (admin)
 // ═══════════════════════════════════════════════════════════
 let _attDate=null, _attEvents=null, _attAlerts=null, _attLoading=false;
@@ -3264,6 +3386,7 @@ function renderPrAtt(){
       ${isToday?'<span style="font-size:11px;color:var(--green);">วันนี้</span>':`<button class="btn btn-b" style="padding:6px 11px;font-size:12px;" onclick="attLoadDay(attToday())">วันนี้</button>`}
       <span style="flex:1;"></span>
       <button class="btn btn-b" style="padding:6px 11px;" onclick="attLoadDay(_attDate)">🔄</button>
+      <button class="btn btn-a" onclick="openAlertSettings()">🚨</button>
       <button class="btn btn-g" onclick="openAttDevices()">📱 เครื่อง</button>
       <button class="btn btn-b" onclick="PR.tab='shifts_cfg';renderPayroll();">⚙️ ตั้งค่า</button>
     </div>
