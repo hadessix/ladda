@@ -491,6 +491,7 @@ async function attTap(pointId){
   }
 
   const d=r.data;
+  _meUrl();
   const t=new Date(d.ts);
   const hhmm=String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
   const warn=[];
@@ -591,6 +592,17 @@ async function attBindGo(){
   }catch(e){err.textContent='เชื่อมต่อไม่ได้: '+e.message;}
 }
 
+// เปลี่ยน URL ให้เป็นลิงก์ประจำตัวพนักงาน — เวลากด "เพิ่มลงหน้าจอหลัก" จะได้ลิงก์ที่ถูก
+function _meUrl(){try{history.replaceState({},'',location.pathname+'?me=1');}catch(e){}}
+function _homeTip(){
+  const ios=/iPad|iPhone|iPod/.test(navigator.userAgent);
+  return`<div style="background:var(--bdim);border:1px solid var(--bbr);border-radius:11px;padding:11px 13px;font-size:12px;color:var(--text2);line-height:1.8;text-align:left;">
+    <div style="font-weight:700;color:var(--blue);margin-bottom:4px;">📌 บันทึกไว้ที่หน้าจอหลัก</div>
+    ${ios?'กดปุ่มแชร์ <strong>⬆️</strong> ด้านล่างจอ → เลื่อนหา <strong>"เพิ่มไปยังหน้าจอโฮม"</strong>':'กดปุ่ม <strong>⋮</strong> มุมขวาบน → <strong>"เพิ่มลงในหน้าจอหลัก"</strong>'}
+    <div style="font-size:11px;color:var(--text3);margin-top:5px;">ต้องทำจากหน้านี้เท่านั้น จะได้ลิงก์ที่ถูกต้อง</div>
+  </div>`;
+}
+
 // ── หน้าข้อมูลของฉัน ──
 function _expChip(label,date){
   if(!date)return'';
@@ -671,7 +683,7 @@ async function attMe(){
     ${sec('📇 เอกสารของฉัน',photoHtml)}
     ${sec('💰 สลิปงวดล่าสุด',slipHtml)}
     ${sec('📅 เวลาเข้างาน 7 วันล่าสุด',evHtml)}
-    <div style="margin-top:20px;"><a href="?" style="font-size:12px;color:var(--text3);">← ปิด</a></div>
+    <div style="margin-top:18px;">${_homeTip()}</div>
   </div>`);
 }
 
@@ -679,8 +691,18 @@ async function attMe(){
 let _enrPoll=null;
 function _enrStop(){if(_enrPoll){clearInterval(_enrPoll);_enrPoll=null;}}
 
-async function attEnroll(){
+async function attEnroll(force){
   _enrStop();
+  if(_devTok()&&!force){
+    _meUrl();
+    _attScreen(_attCard(`<div style="font-size:44px;margin-bottom:8px;">✅</div>
+      <div style="font-size:17px;font-weight:700;margin-bottom:8px;">เครื่องนี้ลงทะเบียนแล้ว</div>
+      <p style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:14px;">แตะสติ๊กเกอร์ได้เลย ไม่ต้องลงทะเบียนใหม่</p>
+      ${_homeTip()}
+      <button class="btn btn-b" style="width:100%;margin-top:12px;" onclick="attMe()">ดูข้อมูลของฉัน</button>
+      <div style="margin-top:14px;"><span onclick="attEnroll(1)" style="font-size:11px;color:var(--text3);cursor:pointer;text-decoration:underline;">เครื่องนี้เปลี่ยนเจ้าของ — ลงทะเบียนใหม่</span></div>`,'var(--gbr)'));
+    return;
+  }
   _attScreen(_attCard(`<div style="font-size:44px;margin-bottom:10px;">⏳</div>
     <div style="font-size:16px;font-weight:700;">กำลังขอรหัส…</div>`));
   try{
@@ -717,12 +739,14 @@ async function _enrCheck(devId,secret){
       _enrStop();
       localStorage.setItem(DEV_KEY,d.token);
       sessionStorage.removeItem('ladda_enr');
+      _meUrl();
       _attScreen(_attCard(`
         <div style="font-size:52px;margin-bottom:8px;">🎉</div>
         <div style="font-size:19px;font-weight:800;color:var(--green);margin-bottom:6px;">ลงทะเบียนเรียบร้อย</div>
         <div style="font-size:17px;font-weight:600;margin-bottom:12px;">${d.employee?.name||''}</div>
-        <p style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:18px;">ต่อไปแค่เอามือถือแตะสติ๊กเกอร์ ไม่ต้องกรอกอะไรอีก</p>
-        <button class="btn btn-b" style="width:100%;" onclick="attMe()">ดูข้อมูลของฉัน</button>`,'var(--gbr)'));
+        <p style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:14px;">ต่อไปแค่เอามือถือแตะสติ๊กเกอร์ ไม่ต้องกรอกอะไรอีก</p>
+        ${_homeTip()}
+        <button class="btn btn-b" style="width:100%;margin-top:12px;" onclick="attMe()">ดูข้อมูลของฉัน</button>`,'var(--gbr)'));
       return;
     }
     const st=document.getElementById('enr-status');
@@ -759,7 +783,7 @@ function attRoute(){
   if(q.has('tap')){attTap(q.get('tap'));return true;}
   if(q.has('enroll')){attEnroll();return true;}
   if(q.has('bind')){attBind();return true;}
-  if(q.has('me')){if(_devTok()){attMe();return true;}}
+  if(q.has('me')){if(_devTok()){attMe();return true;} attEnroll();return true;}
   // เครื่องที่ผูกแล้ว เปิดเว็บเปล่าๆ → เข้าหน้าข้อมูลตัวเอง ไม่ต้องเห็นหน้า login
   if(_devTok()&&!localStorage.getItem('ladda_role')){attMe();return true;}
   return false;
