@@ -246,13 +246,16 @@ employees_salary (
 - **`calcCBGroup(gid, mk)`**: sums `calcCB()` across **all** routes in the group (not just the first). Use this whenever checking group balance.
 - **`firstRouteWithMoney(gid, mk)`**: returns first route in group that has a positive balance; used to pick the source route when writing exout entries for a group
 - **Modal UX**: modals are fullscreen (`width:100%; height:100%`); clicking outside does NOT close; close button calls `CMask()` which calls `confirm()` before closing to prevent accidental data loss
-- **Exchange modal** (`openExchange(fromShop, lockedId)`):
-  - Left dropdown: groups (`g:${id}`) + standalone routes (`r:${id}`) — **not** individual routes that are in a group
-  - Right dropdown: same rule, excludes self and own group
-  - Both sides specify bills to give out (bilateral swap); each side validated against `calcCBGroup` (for groups) or `calcCB` (for routes)
-  - When group is on left: exout entry saved to `firstRouteWithMoney(Lid)`, not always first route
-  - When group is on right: exout entry saved to `firstRouteWithMoney(Rid)`, validated against `calcCBGroup`
-  - Paired exout+exin entries (same `oid`, same `df`) are displayed as **one combined row** via `renderEntriesList` + `renderExchangePair`; delete button (`delExPair`) deletes both at once
+- **Exchange modal** (`openExchange(lockedVal)` — `lockedVal` = `'r:<routeId>'` | `'g:<groupId>'`):
+  - **ฝั่งซ้ายล็อคเสมอ** เป็นสาย/กลุ่มที่กดปุ่มมา (หน้าสาย → `r:${sid}`, หน้ากลุ่ม → `g:${gid}`); ไม่มี dropdown ฝั่งซ้าย เก็บค่าใน `<input type=hidden id=xc_L>`
+  - **ฝั่งขวาไม่มี default** — option แรกคือ `value=""`; ช่องกรอกแบงค์ฝั่งขวา `disabled` จนกว่าจะเลือก (`refreshExchangeCB()` เป็นตัวปลดล็อค)
+  - Right dropdown: standalone routes + groups ที่มีเงิน ยกเว้นตัวเอง/กลุ่มตัวเอง
+  - **ยอดสองฝั่งต้องเท่ากันเป๊ะ** — `_xcDiff()` เช็คสดทุกครั้งที่พิมพ์ แล้ว enable/disable ปุ่ม `#xc_save`; `saveExchange()` บล็อกซ้ำอีกชั้น (`La!==Ra` หรือฝั่งใดเป็น 0 → return)
+  - แถบ sticky `#xc_banner` บนสุดโชว์ `ซ้าย ⇄ ขวา` + `#xc_status` บอกสถานะยอด (เทา/แดง/เขียว) — กันคนกรอกลืมดูว่าแลกใครกับใคร
+  - แบงค์ที่ให้ออกกระจายด้วย `_distBills()` ตามสายที่มีแบงค์ชนิดนั้นจริง; ขารับเข้าลงที่ `firstRouteWithMoney()` — **ยอดรวมกลุ่มถูก แต่ราย route ไม่ตรงกับความจริง** (ตั้งใจ เพราะเงินจริงกองรวมที่กลุ่ม)
+  - Paired exout+exin แสดงเป็น **row เดียว** ผ่าน `renderEntriesList` + `renderExchangePair`
+  - **ลบ = ลบทุกขา** ผ่าน `delExchange(ev,id)` → `_xFindLegs(id)` หาขาทั้งหมด (ใหม่: pair-token ใน note; เก่าไม่มี token: `created_at` ห่างกัน ≤5 วิ) แล้ว confirm แสดงรายการทุกขาก่อนลบ
+  - **วันที่ = `today()` เสมอ** ไม่มีช่องเลือกวัน — ตั้งใจไว้แบบนี้ (คนนับเงินลงย้อนหลังทีละ 3–5 วัน การรวมเป็นวันเดียวช่วยให้ไล่หาของที่เพิ่งลงง่ายกว่า)
 - **Pay-owner tab**: `tab_flags.payowner`; target group must have `is_owner=true`; saves exout+exin
 - **Count flow** (simplified — no session step):
   - `openCount()` opens a modal with bill inputs; pressing "บันทึก" calls `saveCountDirect()` immediately
@@ -311,11 +314,15 @@ employees_salary (
 | `entryToRow/rowToEntry` | map JS ↔ Supabase fields |
 | `openCount()` | เปิด modal นับเงิน (ไม่มี session step) |
 | `saveCountDirect()` | บันทึก count entry ทันที ไม่ผ่าน session |
-| `openExchange/saveExchange` | modal แลกเงิน (bilateral, group-aware) |
-| `refreshExchangeCB(fromShop)` | อัปเดต cap + label เมื่อเปลี่ยน dropdown |
+| `openExchange(lockedVal)` | modal แลกเงิน; ซ้ายล็อคตาม view, ขวาต้องเลือกเอง |
+| `saveExchange()` | บันทึกการแลก; บล็อกถ้ายอดสองฝั่งไม่เท่ากัน |
+| `_xcSum(pre)` / `_xcDiff()` | รวมยอดฝั่งหนึ่ง / เช็คสองฝั่งเท่ากัน → คุมปุ่ม `#xc_save` + `#xc_status` |
+| `refreshExchangeCB()` | อัปเดต cap/label/ชื่อฝั่งขวา + ปลดล็อคช่องกรอกฝั่งขวาเมื่อเลือกแล้ว |
 | `renderEntriesList(entries)` | render รายการ; จับคู่ exout+exin (oid+df เดียวกัน) → renderExchangePair |
 | `renderExchangePair(exout,exin)` | render คู่แลกเงินเป็น row เดียว (badge แลกเงิน, ยอดสองฝั่ง) |
-| `delExPair(ev,id1,id2)` | ลบ exout+exin คู่พร้อมกัน |
+| `delExchange(ev,id)` | ลบ **ทุกขา** ของการแลกครั้งนั้น (confirm แสดงรายการก่อน) |
+| `_xFindLegs(id)` | หาทุกขาของการแลกเดียวกัน — token ก่อน, fallback `created_at` ≤5 วิ |
+| `delExPair(ev,id1)` | alias เดิม → เรียก `delExchange` (กัน HTML เก่าที่ค้างในหน้าจอ) |
 | `renderEntry(e)` | render entry เดี่ยว (count/income/expense/exin/exout ที่ไม่มีคู่) |
 | `openPayOwner/openPayOwnerGroup/savePayOwner` | จ่ายเฮียรวย |
 | `billInp/billInpWithLimit/updB/updBLimit/gb` | bill input helpers |
@@ -587,6 +594,10 @@ payroll_deductions -- รายการหักแต่ละรายกา�
 - [x] calcCBGroup รวมทุก route ในกลุ่ม + firstRouteWithMoney
 - [x] Count บันทึกตรง (saveCountDirect) ไม่มี session step
 - [x] Exchange pair แสดงเป็น row เดียว (renderExchangePair)
+- [x] แลกเงิน: ฝั่งซ้ายล็อคตามหน้าที่กดปุ่มมา (สาย → สายนั้น, กลุ่ม → กลุ่มนั้น) ไม่มี dropdown ให้เผลอเปลี่ยน
+- [x] แลกเงิน: ฝั่งขวาต้องกดเลือกเองทุกครั้ง + ช่องกรอก disabled จนกว่าจะเลือก + แถบ sticky โชว์คู่แลกตลอด
+- [x] แลกเงิน: บล็อกยอดสองฝั่งไม่เท่ากัน (ปุ่มบันทึก disabled + guard ใน saveExchange) — เดิมแค่ toast เตือนแล้วบันทึกให้
+- [x] แลกเงิน: ลบที่สายไหนก็ลบครบทุกขา (`delExchange`/`_xFindLegs`) รองรับข้อมูลเก่าที่ไม่มี pair-token — เดิมลบแค่แถวเดียว ทำให้เหลือขาค้างจนจำนวนแบงค์เพี้ยน
 - [x] Payroll system — employees, loans, periods, auto-calculation
 - [x] openPeriod redesign — grouped by route card, split deduction columns, daily_rate display
 - [x] Employee quick-assign route mode (drag-to-reassign, touch+mouse)
