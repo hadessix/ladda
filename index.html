@@ -600,11 +600,18 @@ async function attBindGo(){
 function _meUrl(){try{history.replaceState({},'',location.pathname+'?me=1');}catch(e){}}
 function _homeTip(){
   if(_isStandalone())return'';
-  const ios=_isIOS();
+  if(_isIOS()){
+    return`<div style="background:var(--bdim);border:1px solid var(--bbr);border-radius:11px;padding:11px 13px;font-size:12px;color:var(--text2);line-height:1.8;text-align:left;">
+      <div style="font-weight:700;color:var(--blue);margin-bottom:4px;">📖 เปิดหน้านี้อีกครั้งยังไง</div>
+      แตะสติ๊กเกอร์ NFC ได้เลย หรือกดปุ่มแชร์ <strong>⬆️</strong> → <strong>"เพิ่มบุ๊กมาร์ก"</strong>
+      <div style="font-size:11px;color:var(--text3);margin-top:5px;">อย่าใช้ "เพิ่มไปยังหน้าจอโฮม" — iPhone จะถือว่าเป็นคนละเครื่อง แล้วต้องลงทะเบียนใหม่</div>
+    </div>`;
+  }
   return`<div style="background:var(--bdim);border:1px solid var(--bbr);border-radius:11px;padding:11px 13px;font-size:12px;color:var(--text2);line-height:1.8;text-align:left;">
-    <div style="font-weight:700;color:var(--blue);margin-bottom:4px;">📌 บันทึกไว้ที่หน้าจอหลัก</div>
-    ${ios?'กดปุ่มแชร์ <strong>⬆️</strong> ด้านล่างจอ → เลื่อนหา <strong>"เพิ่มไปยังหน้าจอโฮม"</strong>':'กดปุ่ม <strong>⋮</strong> มุมขวาบน → <strong>"เพิ่มลงในหน้าจอหลัก"</strong>'}
-    <div style="font-size:11px;color:var(--text3);margin-top:5px;">ต้องทำจากหน้านี้เท่านั้น จะได้ลิงก์ที่ถูกต้อง</div>
+    <div style="font-weight:700;color:var(--blue);margin-bottom:4px;">📌 เพิ่มลงหน้าจอหลัก (ถ้าต้องการ)</div>
+    <button id="inst-btn" style="display:none;width:100%;margin:6px 0 2px;padding:11px;background:var(--green);border:none;border-radius:10px;color:#06210f;font-size:15px;font-weight:800;font-family:var(--font);cursor:pointer;" onclick="_doInstall()">📲 ติดตั้ง</button>
+    <span id="inst-manual">กดปุ่ม <strong>⋮</strong> มุมขวาบน → <strong>"เพิ่มลงในหน้าจอหลัก"</strong></span>
+    <div style="font-size:11px;color:var(--text3);margin-top:5px;">ไม่ติดตั้งก็ใช้ได้ปกติ — แตะสติ๊กเกอร์เข้ามาได้ตลอด</div>
   </div>`;
 }
 
@@ -707,7 +714,8 @@ async function _doInstall(){
   if(r&&r.outcome==='accepted'){
     _attScreen(_attCard(`<div style="font-size:46px;margin-bottom:8px;">✅</div>
       <div style="font-size:17px;font-weight:800;margin-bottom:8px;">ติดตั้งแล้ว</div>
-      <p style="font-size:13px;color:var(--text2);line-height:1.8;">ปิดหน้านี้ แล้ว<strong style="color:var(--text);">เปิดจากไอคอน "ลงเวลา"</strong> บนหน้าจอหลัก<br>แล้วสแกน QR อีกครั้งจากในไอคอนนั้น</p>`,'var(--gbr)'));
+      <p style="font-size:13px;color:var(--text2);line-height:1.8;">ไอคอน <strong style="color:var(--text);">"ลงเวลา"</strong> อยู่บนหน้าจอหลักแล้ว</p>
+      <button class="btn btn-b" style="width:100%;margin-top:12px;" onclick="_devTok()?attMe():attEnroll(1)">ต่อไป</button>`,'var(--gbr)'));
   }
 }
 
@@ -723,24 +731,16 @@ function _enrStop(){if(_enrPoll){clearInterval(_enrPoll);_enrPoll=null;}}
 
 async function attEnroll(force){
   _enrStop();
-  // ขั้นที่ 1: iOS ต้องเพิ่มลงหน้าจอหลักก่อน ไม่งั้นลงทะเบียนแล้วหายตอนเปิดจากไอคอน
-  if(!_isStandalone()&&!force){
-    const ios=_isIOS();
+  // iPhone: ไอคอนหน้าจอหลักมีที่เก็บข้อมูลแยกจาก Safari และการแตะ NFC เปิดใน Safari เสมอ
+  // → ต้องลงทะเบียนใน Safari เท่านั้น ไม่งั้นแตะสติ๊กเกอร์แล้วจะไม่รู้จักเครื่อง
+  if(_isIOS()&&_isStandalone()){
     _attScreen(_attCard(`
-      <div style="font-size:44px;margin-bottom:6px;">📌</div>
-      <div style="font-size:17px;font-weight:800;margin-bottom:3px;">ขั้นที่ 1 — ติดตั้งก่อน</div>
-      <p style="font-size:12px;color:var(--text3);margin-bottom:14px;">เพิ่มหน้านี้ลงหน้าจอหลัก แล้วเปิดจากไอคอนนั้น</p>
-      <div id="inst-manual"><div style="background:var(--bdim);border:1px solid var(--bbr);border-radius:12px;padding:13px;text-align:left;font-size:13px;color:var(--text2);line-height:2;">
-        ${ios
-          ?'<strong style="color:var(--text);">1.</strong> กดปุ่มแชร์ <strong>⬆️</strong> ตรงกลางด้านล่างจอ<br><strong style="color:var(--text);">2.</strong> เลื่อนลงหา <strong>"เพิ่มไปยังหน้าจอโฮม"</strong><br><strong style="color:var(--text);">3.</strong> กด <strong>เพิ่ม</strong> มุมขวาบน'
-          :'<strong style="color:var(--text);">1.</strong> กดปุ่ม <strong>⋮</strong> มุมขวาบน<br><strong style="color:var(--text);">2.</strong> เลือก <strong>"เพิ่มลงในหน้าจอหลัก"</strong><br><strong style="color:var(--text);">3.</strong> กด <strong>เพิ่ม</strong> / <strong>ติดตั้ง</strong>'}
-      </div>
-      <div style="background:var(--adim);border:1px solid var(--abr);border-radius:11px;padding:11px;margin-top:12px;font-size:12px;color:var(--amber);line-height:1.75;text-align:left;">
-        <strong>4.</strong> ปิดหน้านี้ แล้ว<strong>เปิดจากไอคอนบนหน้าจอหลัก</strong><br>
-        <strong>5.</strong> ลงทะเบียนจากในไอคอนนั้น — ถ้าลงทะเบียนตรงนี้จะหายตอนเปิดจากไอคอน
-      </div></div>
-      <button id="inst-btn" style="display:none;width:100%;margin-top:14px;padding:13px;background:var(--green);border:none;border-radius:11px;color:#06210f;font-size:16px;font-weight:800;font-family:var(--font);cursor:pointer;" onclick="_doInstall()">📲 ติดตั้งลงหน้าจอหลัก</button>
-    `,'var(--bbr)'));
+      <div style="font-size:44px;margin-bottom:8px;">🌐</div>
+      <div style="font-size:17px;font-weight:800;margin-bottom:8px;">เปิดจาก Safari แทน</div>
+      <p style="font-size:13px;color:var(--text2);line-height:1.85;">ลงทะเบียนจากไอคอนนี้ไม่ได้<br>ให้เปิด <strong style="color:var(--text);">Safari</strong> แล้วสแกน QR อีกครั้ง</p>
+      <div style="background:var(--adim);border:1px solid var(--abr);border-radius:11px;padding:11px;margin-top:14px;font-size:12px;color:var(--amber);line-height:1.75;">
+        เพราะเวลาแตะสติ๊กเกอร์ NFC มือถือจะเปิด Safari เสมอ<br>บัตรประจำตัวจึงต้องอยู่ใน Safari
+      </div>`,'var(--abr)'));
     return;
   }
   if(_devTok()&&!force){
@@ -840,7 +840,9 @@ function attRoute(){
 }
 
 function authInit(){
-  if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
+  // iOS: ถอด manifest ออก ไม่ให้ Safari ชวนติดตั้ง (ไอคอนหน้าจอโฮมทำให้บัตรประจำตัวหาย)
+  if(/iPad|iPhone|iPod/.test(navigator.userAgent))document.querySelector('link[rel=manifest]')?.remove();
+  else if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
   if(attRoute())return;
   const saved=localStorage.getItem('ladda_role');
   const token=localStorage.getItem('ladda_token');
