@@ -407,11 +407,13 @@ export default {
       let empId = null, devRow = null;
 
       if (viewKey) {
+       try {
         if (viewKey.length < 24) return jsonRes({ error: 'unauthorized' }, 401);
         const rows = await sb(env, `att_devices?view_hash=eq.${await sha256hex(viewKey)}&select=id,employee_id,status`);
         devRow = rows && rows[0];
         if (!devRow || devRow.status !== 'active') return jsonRes({ error: 'ลิงก์นี้ใช้ไม่ได้แล้ว — ติดต่อหัวหน้างาน', code: 'revoked' }, 403);
         empId = devRow.employee_id;
+       } catch (e) { return jsonRes({ error: 'ลิงก์นี้ใช้ไม่ได้ — ' + e.message, code: 'revoked' }, 403); }
       } else {
         const auth = request.headers.get('Authorization') || '';
         const payload = await verifyToken(auth.startsWith('Bearer ') ? auth.slice(7) : '', env.JWT_SECRET);
