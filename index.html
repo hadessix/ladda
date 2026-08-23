@@ -2850,6 +2850,177 @@ function _prSyncTabs(){
   if(t)t.style.display=isHR()?'none':'';
 }
 // ═══════════════════════════════════════════════════════════
+// 📊 กระดานลงเวลารายวัน (admin)
+// ═══════════════════════════════════════════════════════════
+let _attDate=null, _attEvents=null, _attLoading=false;
+
+// วันทำงานปัจจุบัน (ตัดวันที่ 04:00 เหมือนฝั่ง Worker)
+function attToday(){
+  const d=new Date(Date.now()+3*3600*1000);
+  return d.toISOString().slice(0,10);
+}
+function _hhmm(ts){const t=new Date(ts);return String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');}
+function _mins(hhmm){if(!hhmm)return null;const[h,m]=String(hhmm).slice(0,5).split(':').map(Number);return h*60+m;}
+function _minsOfTs(ts){const t=new Date(ts);return t.getHours()*60+t.getMinutes();}
+
+async function attLoadDay(d){
+  _attDate=d||_attDate||attToday();
+  _attLoading=true;renderPayroll();
+  try{
+    _attEvents=await sbGet('att_events',`work_date=eq.${_attDate}&order=ts.asc`);
+  }catch(e){_attEvents=[];toast('โหลดไม่สำเร็จ: '+e.message);}
+  _attLoading=false;renderPayroll();
+}
+function attShiftDay(n){
+  const d=new Date(_attDate||attToday());
+  d.setDate(d.getDate()+n);
+  const nd=d.toISOString().slice(0,10);
+  if(nd>attToday())return;
+  attLoadDay(nd);
+}
+
+function renderPrAtt(){
+  if(!_attDate){setTimeout(()=>attLoadDay(attToday()),0);
+    return`<div class="empty"><div class="ei">⏳</div><p>กำลังโหลด…</p></div>`;}
+
+  const isToday=_attDate===attToday();
+  const evs=_attEvents||[];
+  const byEmp={};evs.forEach(e=>{(byEmp[e.employee_id]=byEmp[e.employee_id]||[]).push(e);});
+
+  // พนักงานที่ต้องตอกเวลา จัดกลุ่มตามสาย
+  let nIn=0,nLate=0,nMiss=0,nFlag=0;
+  const groups=_shiftOrderedGroups();
+  let body='';
+
+  groups.forEach(g=>{
+    let gHtml='';
+    g.routes.forEach(rt=>{
+      const sh=_shiftOf(rt.id);
+      if(sh.point_mode==='off')return;
+      const emps=PR.employees.filter(e=>e.status==='active'&&e.route_id===rt.id)
+        .sort((a,b)=>{
+          const ta=(byEmp[a.id]||[])[0], tb=(byEmp[b.id]||[])[0];
+          if(ta&&tb)return new Date(ta.ts)-new Date(tb.ts);
+          if(ta)return -1;if(tb)return 1;
+          return (a.name||'').localeCompare(b.name||'','th');
+        });
+      if(!emps.length)return;
+
+      const startMin=_mins(_shTrips(sh)[0]?.start);
+      const grace=Number(sh.grace_min??10);
+      const expect=_expTaps(sh);
+
+      const rows=emps.map((e,idx)=>{
+        const list=byEmp[e.id]||[];
+        const first=list[0];
+        let lateTxt='',lateCol='var(--text3)';
+        if(!first){nMiss++;lateTxt='ยังไม่มา';lateCol='var(--red)';}
+        else{
+          nIn++;
+          if(startMin!=null){
+            const diff=_minsOfTs(first.ts)-startMin;
+            if(diff>grace){nLate++;lateTxt=`สาย ${diff} นาที`;lateCol='var(--red)';}
+            else if(diff>0){lateTxt=`+${diff} นาที`;lateCol='var(--amber)';}
+            else{lateTxt=`ก่อนเวลา ${-diff} นาที`;lateCol='var(--green)';}
+          } else lateTxt='—';
+        }
+        const flags=list.reduce((a,v)=>{const f=v.flags||{};Object.keys(f).forEach(k=>{if(f[k])a[k]=f[k];});return a;},{});
+        const fchips=[];
+        if(flags.noloc)fchips.push('<span title="ไม่ได้เปิด GPS" style="font-size:10px;color:var(--amber);">📍✕</span>');
+        if(flags.far)fchips.push(`<span title="ห่างจุดแตะ ${flags.far} ม." style="font-size:10px;color:var(--red);">ไกล ${flags.far}ม.</span>`);
+        if(flags.clockskew)fchips.push('<span title="เวลาในเครื่องเพี้ยน" style="font-size:10px;color:var(--red);">⏱✕</span>');
+        if(fchips.length)nFlag++;
+
+        const times=list.map(v=>{
+          const bad=(v.flags&&(v.flags.far||v.flags.noloc));
+          return`<span onclick="attEvDetail('${v.id}')" title="แตะครั้งที่ ${v.seq}" style="cursor:pointer;font-family:var(--mono);font-size:12px;padding:1px 5px;border-radius:5px;background:${bad?'var(--rdim)':'var(--bg3)'};border:1px solid ${bad?'var(--rbr)':'var(--border)'};">${_hhmm(v.ts)}</span>`;
+        }).join(' ');
+
+        const short=first&&list.length<expect;
+        return`<div style="display:flex;align-items:flex-start;gap:8px;padding:8px 11px;${idx?'border-top:1px solid var(--border);':''}">
+          <span style="font-size:11px;color:var(--text3);font-family:var(--mono);min-width:16px;">${first?idx+1:'–'}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <span style="font-size:13px;font-weight:500;">${e.name}</span>
+              ${e.position?`<span style="font-size:10px;color:var(--text3);">${e.position}</span>`:''}
+              ${fchips.join(' ')}
+            </div>
+            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap;">${times||'<span style="font-size:11px;color:var(--text3);">ไม่มีการแตะ</span>'}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;">
+            <div style="font-size:11px;font-weight:600;color:${lateCol};">${lateTxt}</div>
+            <div style="font-size:10px;color:${short?'var(--amber)':'var(--text3)'};">${list.length}/${expect} ครั้ง</div>
+          </div>
+        </div>`;
+      }).join('');
+
+      const tripLbl=_shTrips(sh).map((t,i)=>t.start?`${t.start}${t.end?'-'+t.end:''}`:'').filter(Boolean).join(' · ')||'ยังไม่ตั้งเวลา';
+      gHtml+=`<div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:9px;">
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 11px;background:var(--bg3);border-bottom:1px solid var(--border);">
+          <span style="width:9px;height:9px;border-radius:50%;background:${rt.color};flex-shrink:0;"></span>
+          <span style="font-size:13px;font-weight:600;flex:1;">${rt.name}</span>
+          <span style="font-size:10px;color:var(--text3);font-family:var(--mono);">${tripLbl}</span>
+        </div>
+        <div style="background:var(--bg2);">${rows}</div>
+      </div>`;
+    });
+    if(gHtml)body+=`<div style="margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:7px;">${g.icon} ${g.name}</div>${gHtml}</div>`;
+  });
+
+  const card=(lbl,val,col)=>`<div style="flex:1;min-width:70px;background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:8px 10px;text-align:center;">
+    <div style="font-size:19px;font-weight:700;color:${col};font-family:var(--mono);">${val}</div>
+    <div style="font-size:10px;color:var(--text3);">${lbl}</div></div>`;
+
+  return`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+      <button class="btn btn-b" style="padding:6px 11px;" onclick="attShiftDay(-1)">‹</button>
+      <input type="date" value="${_attDate}" max="${attToday()}" onchange="attLoadDay(this.value)"
+        style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;padding:6px 9px;font-family:var(--mono);">
+      <button class="btn btn-b" style="padding:6px 11px;${isToday?'opacity:.3;pointer-events:none;':''}" onclick="attShiftDay(1)">›</button>
+      ${isToday?'<span style="font-size:11px;color:var(--green);">วันนี้</span>':`<button class="btn btn-b" style="padding:6px 11px;font-size:12px;" onclick="attLoadDay(attToday())">วันนี้</button>`}
+      <span style="flex:1;"></span>
+      <button class="btn btn-b" style="padding:6px 11px;" onclick="attLoadDay(_attDate)">🔄</button>
+      <button class="btn btn-g" onclick="openAttDevices()">📱 เครื่อง</button>
+      <button class="btn btn-b" onclick="PR.tab='shifts_cfg';renderPayroll();">⚙️ ตั้งค่า</button>
+    </div>
+    ${_attLoading?'<div class="empty"><div class="ei">⏳</div><p>กำลังโหลด…</p></div>':`
+    <div style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap;">
+      ${card('มาแล้ว',nIn,'var(--green)')}
+      ${card('สาย',nLate,nLate?'var(--red)':'var(--text3)')}
+      ${card('ยังไม่มา',nMiss,nMiss?'var(--amber)':'var(--text3)')}
+      ${card('ต้องตรวจ',nFlag,nFlag?'var(--red)':'var(--text3)')}
+    </div>
+    ${body||`<div class="empty"><div class="ei">📭</div><p>ยังไม่มีสายที่เปิดใช้ระบบลงเวลา<br><span style="font-size:12px;">ไปที่ ⚙️ ตั้งค่า เพื่อกำหนดเวลาแต่ละสาย</span></p></div>`}
+    <p style="font-size:11px;color:var(--text3);line-height:1.7;margin-top:14px;">
+      ตัวเลขหน้าชื่อ = ลำดับคนมาถึงในสายนั้น · แตะเวลาสีแดง = มีเรื่องต้องตรวจ (แตะไกลจุด/ไม่เปิด GPS) · กดที่เวลาเพื่อดูรายละเอียด<br>
+      <span style="color:var(--amber);">ข้อมูลนี้ยังไม่ถูกนำไปคิดเงินเดือนอัตโนมัติ — ใช้ดูอย่างเดียว</span>
+    </p>`}`;
+}
+
+function attEvDetail(evId){
+  const v=(_attEvents||[]).find(x=>x.id===evId);if(!v)return;
+  const emp=PR.employees.find(e=>e.id===v.employee_id);
+  const pt=(PR.points||[]).find(p=>p.id===v.point_id);
+  const f=v.flags||{};
+  const line=(l,x)=>`<div style="display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;"><span style="color:var(--text2);">${l}</span><span style="font-family:var(--mono);text-align:right;">${x}</span></div>`;
+  const warn=[];
+  if(f.noloc)warn.push('ไม่ได้เปิด GPS ตอนแตะ');
+  if(f.far)warn.push(`แตะห่างจากจุด ${f.far} เมตร (เกินรัศมีที่ตั้งไว้)`);
+  if(f.clockskew)warn.push(`เวลาในเครื่องต่างจากเวลาจริง ${f.clockskew} วินาที`);
+  OM('รายละเอียดการแตะ',
+    `${line('พนักงาน',emp?.name||'-')}
+     ${line('เวลา',new Date(v.ts).toLocaleString('th-TH'))}
+     ${line('ครั้งที่',v.seq||'-')}
+     ${line('จุดแตะ',pt?.name||v.point_id||'-')}
+     ${line('พิกัด',v.lat!=null?`${Number(v.lat).toFixed(5)}, ${Number(v.lng).toFixed(5)}`:'ไม่มี')}
+     ${line('ความแม่นยำ',v.accuracy!=null?`± ${Math.round(v.accuracy)} ม.`:'-')}
+     ${v.dist_m!=null?line('ห่างจากจุด',`${v.dist_m} ม.`):''}
+     ${warn.length?`<div style="margin-top:12px;background:var(--rdim);border:1px solid var(--rbr);border-radius:9px;padding:10px;font-size:12px;color:var(--red);line-height:1.7;">⚠ ${warn.join('<br>⚠ ')}</div>`:''}
+     ${v.lat!=null?`<button class="btn btn-b" style="width:100%;margin-top:12px;" onclick="window.open('https://www.google.com/maps?q=${v.lat},${v.lng}','_blank')">🗺 ดูตำแหน่งบนแผนที่</button>`:''}`,
+    `<button class="btn btn-x" onclick="CMask()">ปิด</button>`);
+}
+
+// ═══════════════════════════════════════════════════════════
 // ⏱ เวลาเข้างาน — ตั้งค่าต่อสาย (admin only)
 // ═══════════════════════════════════════════════════════════
 // route_shifts: 1 แถว = 1 สาย
@@ -2895,6 +3066,7 @@ function renderPrShifts(){
   let html=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px;flex-wrap:wrap;">
     <div style="font-size:16px;font-weight:600;">เวลาเข้างานรายสาย <span style="font-size:12px;color:var(--text3);font-weight:400;">ตั้งแล้ว ${done}/${total} สาย</span></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-b" onclick="PR.tab='shifts';renderPayroll();">← กระดานลงเวลา</button>
       <button class="btn btn-g" onclick="openAttDevices()">📱 เครื่องพนักงาน</button>
       <button class="btn btn-b" onclick="openAttPoints()">📍 จุดแตะ (${pts.length})</button>
     </div>
@@ -3195,13 +3367,13 @@ function _ptCopy(id){
 function setPrTab(tab){
   PR.tab=tab;
   document.querySelectorAll('.pr-tab').forEach(b=>b.classList.remove('active'));
-  document.getElementById('pr-tab-'+tab).classList.add('active');
+  document.getElementById('pr-tab-'+tab)?.classList.add('active');
   renderPayroll();
 }
 function renderPayroll(){
   const el=document.getElementById('pr-body');
   if(!el)return;
-  el.innerHTML=PR.tab==='periods'?renderPrPeriods():PR.tab==='shifts'?renderPrShifts():renderPrEmployees();
+  el.innerHTML=PR.tab==='periods'?renderPrPeriods():PR.tab==='shifts'?renderPrAtt():PR.tab==='shifts_cfg'?renderPrShifts():renderPrEmployees();
 }
 
 // ── Periods tab ──
