@@ -13,7 +13,6 @@ const HR_BLOCKED_TABLES = ['employees_salary', 'payroll_periods', 'payroll_entri
 
 // ── ระบบเช็คเวลาเข้างาน ──
 const AUTO_REVOKE_DAYS = 3;   // ไม่แตะเกินกี่วัน → เครื่องหลุด ต้องให้หัวหน้าผูกใหม่
-const MAX_DEVICES      = 3;   // 1 พนักงานมีเครื่องพร้อมกันได้กี่เครื่อง (Safari + ไอคอนหน้าจอโฮม)
 const DUP_WINDOW_SEC   = 120; // แตะซ้ำจุดเดิมภายในกี่วินาที = นับเป็นครั้งเดียว
 const CLOCK_SKEW_SEC   = 300; // เวลาเครื่องต่างจาก server เกินนี้ = ตีธง
 
@@ -232,13 +231,10 @@ export default {
         if (!emp) return jsonRes({ error: 'ไม่พบพนักงาน' }, 404);
         if (emp.status !== 'active') return jsonRes({ error: 'พนักงานคนนี้ไม่ได้ทำงานอยู่' }, 403);
 
-        // 1 คนมีได้หลายเครื่อง (Safari + ไอคอนหน้าจอโฮม) — เกิน MAX_DEVICES ถอนตัวเก่าสุด
-        const olds = await sb(env, `att_devices?employee_id=eq.${empId}&status=eq.active&select=id,bound_at&order=bound_at.asc`);
-        if (olds && olds.length >= MAX_DEVICES) {
-          for (const o of olds.slice(0, olds.length - MAX_DEVICES + 1)) {
-            await sb(env, `att_devices?id=eq.${o.id}`, { method: 'PATCH', body: { status: 'revoked', revoked_at: new Date().toISOString() } });
-          }
-        }
+        // 1 คน = 1 เครื่องเท่านั้น → ถอนเครื่องเก่าทั้งหมดก่อน
+        await sb(env, `att_devices?employee_id=eq.${empId}&status=eq.active`, {
+          method: 'PATCH', body: { status: 'revoked', revoked_at: new Date().toISOString() },
+        });
 
         const token = await makeToken('device', env.JWT_SECRET, `${dev.id}|${empId}`, 3650);
         await sb(env, `att_devices?id=eq.${dev.id}`, {
@@ -273,13 +269,10 @@ export default {
         if (!emp) return jsonRes({ error: 'ไม่พบพนักงาน' }, 404);
         if (emp.status !== 'active') return jsonRes({ error: 'พนักงานคนนี้ไม่ได้ทำงานอยู่' }, 403);
 
-        // 1 คนมีได้หลายเครื่อง (Safari + ไอคอนหน้าจอโฮม) — เกิน MAX_DEVICES ถอนตัวเก่าสุด
-        const olds = await sb(env, `att_devices?employee_id=eq.${empId}&status=eq.active&select=id,bound_at&order=bound_at.asc`);
-        if (olds && olds.length >= MAX_DEVICES) {
-          for (const o of olds.slice(0, olds.length - MAX_DEVICES + 1)) {
-            await sb(env, `att_devices?id=eq.${o.id}`, { method: 'PATCH', body: { status: 'revoked', revoked_at: new Date().toISOString() } });
-          }
-        }
+        // 1 คน = 1 เครื่องเท่านั้น → ถอนเครื่องเก่าทั้งหมดก่อน
+        await sb(env, `att_devices?employee_id=eq.${empId}&status=eq.active`, {
+          method: 'PATCH', body: { status: 'revoked', revoked_at: new Date().toISOString() },
+        });
 
         const devId = 'd_' + uid32();
         const token = await makeToken('device', env.JWT_SECRET, `${devId}|${empId}`, 3650);

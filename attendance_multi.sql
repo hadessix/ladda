@@ -1,11 +1,18 @@
 -- ═══════════════════════════════════════════════════════════
--- อนุญาตให้ 1 พนักงานมีได้หลายเครื่อง (สูงสุด 3)
--- เหตุผล: iPhone แยกที่เก็บข้อมูลระหว่าง Safari กับไอคอนหน้าจอโฮม
---         แตะ NFC เปิดใน Safari · เปิดดูข้อมูลใช้ไอคอน → ต้องลงทะเบียนได้ทั้งสองที่
--- รันต่อจาก attendance_enroll.sql
+-- ยืนยันกฎ "1 พนักงาน = 1 เครื่อง" (ป้องกันฝากเครื่องให้เพื่อนกดแทน)
+-- รันต่อจาก attendance_enroll.sql · รันซ้ำได้ไม่พัง
 -- ═══════════════════════════════════════════════════════════
 
-drop index if exists att_devices_one_active;
+-- 1) ถ้ามีใครเผลอมีหลายเครื่องอยู่แล้ว เก็บเครื่องล่าสุดไว้เครื่องเดียว
+update att_devices d set status = 'revoked', revoked_at = now()
+where d.status = 'active'
+  and exists (
+    select 1 from att_devices x
+    where x.employee_id = d.employee_id
+      and x.status = 'active'
+      and x.bound_at > d.bound_at
+  );
 
--- ยังกันเครื่องซ้ำในบริบทเดียวกันไม่ได้ แต่ทุกเครื่องต้องผ่านการอนุมัติจากหัวหน้าอยู่ดี
--- และหน้า 📱 เครื่องพนักงาน จะโชว์ว่าใครมีกี่เครื่อง
+-- 2) บังคับที่ระดับฐานข้อมูล — ต่อให้โค้ดพลาดก็เพิ่มเครื่องที่ 2 ไม่ได้
+create unique index if not exists att_devices_one_active
+  on att_devices(employee_id) where status = 'active';

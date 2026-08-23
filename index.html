@@ -6,7 +6,6 @@
 <title>น้องลัดดา</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0b0f1a">
-<meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="ลงเวลา">
@@ -577,7 +576,7 @@ async function attBindGo(){
   const empId=sel?.value;
   if(!empId){err.textContent='เลือกชื่อพนักงานก่อน';return;}
   const name=sel.options[sel.selectedIndex].textContent;
-  if(!confirm(`ลงทะเบียนเครื่องนี้ให้:\n\n${name}\n\nเครื่องเดิมของคนนี้ยังใช้ได้ (สูงสุด 3 เครื่อง)`))return;
+  if(!confirm(`ลงทะเบียนเครื่องนี้ให้:\n\n${name}\n\nเครื่องเก่าของคนนี้ (ถ้ามี) จะใช้ไม่ได้ทันที`))return;
   err.textContent='กำลังลงทะเบียน…';
   try{
     const res=await fetch(WORKER_URL+'/att/bind',{method:'POST',
@@ -606,7 +605,7 @@ function _homeTip(){
     ${ios
       ?'กดปุ่มแชร์ <strong>⬆️</strong> ด้านล่างจอ → เลื่อนหา <strong>"เพิ่มไปยังหน้าจอโฮม"</strong> → กด <strong>เพิ่ม</strong>'
       :'<button id="inst-btn" style="display:none;width:100%;margin:4px 0;padding:11px;background:var(--green);border:none;border-radius:10px;color:#06210f;font-size:15px;font-weight:800;font-family:var(--font);cursor:pointer;" onclick="_doInstall()">📲 ติดตั้งเลย</button><span id="inst-manual">กดปุ่ม <strong>⋮</strong> มุมขวาบน → <strong>"เพิ่มลงในหน้าจอหลัก"</strong></span>'}
-    ${ios?'<div style="font-size:11px;color:var(--amber);margin-top:6px;line-height:1.7;">iPhone ถือว่าไอคอนเป็นคนละเครื่อง — เปิดจากไอคอนครั้งแรกจะขอรหัสอีกรอบ ให้หัวหน้าอนุมัติอีกครั้งแล้วจบ ทั้งสองทางใช้ได้พร้อมกัน</div>':''}
+    <div style="font-size:11px;color:var(--green);margin-top:6px;">✓ ไม่ต้องลงทะเบียนใหม่ ไอคอนใช้บัตรประจำตัวเดิม</div>
   </div>`;
 }
 
@@ -726,6 +725,13 @@ function _enrStop(){if(_enrPoll){clearInterval(_enrPoll);_enrPoll=null;}}
 
 async function attEnroll(force){
   _enrStop();
+  if(_isIOS()&&_isStandalone()){
+    _attScreen(_attCard(`
+      <div style="font-size:44px;margin-bottom:8px;">🌐</div>
+      <div style="font-size:17px;font-weight:800;margin-bottom:8px;">เปิดจาก Safari แทน</div>
+      <p style="font-size:13px;color:var(--text2);line-height:1.85;">ไอคอนนี้เป็นแอปแยกรุ่นเก่า — ลบทิ้งแล้วเปิด <strong style="color:var(--text);">Safari</strong> สแกน QR ใหม่<br>จากนั้นค่อยเพิ่มไอคอนอีกครั้ง</p>`,'var(--abr)'));
+    return;
+  }
   if(_devTok()&&!force){
     _meUrl();
     _attScreen(_attCard(`<div style="font-size:44px;margin-bottom:8px;">✅</div>
@@ -823,7 +829,10 @@ function attRoute(){
 }
 
 function authInit(){
-  if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
+  // iOS: ถอด manifest ออก → ไอคอนหน้าจอโฮมเปิดใน Safari ใช้ที่เก็บข้อมูลเดียวกัน
+  // (ถ้าปล่อยไว้ iOS 16.4+ จะสร้างแอปแยก storage แล้วแตะ NFC ไม่ได้)
+  if(/iPad|iPhone|iPod/.test(navigator.userAgent))document.querySelector('link[rel=manifest]')?.remove();
+  else if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
   if(attRoute())return;
   const saved=localStorage.getItem('ladda_role');
   const token=localStorage.getItem('ladda_token');
@@ -3329,7 +3338,7 @@ function openAttDevices(){
       <div style="font-size:11px;color:var(--text2);margin-bottom:10px;">เปิดกล้องมือถือส่องได้เลย ไม่ต้องลงแอป</div>
       <div id="enr-qr" style="display:inline-block;background:#fff;padding:10px;border-radius:12px;min-height:60px;"></div>
       <div style="font-size:11px;color:var(--text3);margin-top:9px;line-height:1.7;">
-        <span style="color:var(--amber);">1 คนมีได้สูงสุด 3 เครื่อง</span> — iPhone นับ Safari กับไอคอนหน้าจอโฮมเป็นคนละเครื่อง<br>
+        <span style="color:var(--amber);">1 คน = 1 เครื่องเท่านั้น</span> — ลงทะเบียนเครื่องใหม่ เครื่องเก่าใช้ไม่ได้ทันที<br>
         ลูกน้องจะได้รหัส 7 หลัก เช่น <span style="font-family:var(--mono);color:var(--green);">BC37041</span><br>
         แล้วรหัสนั้นจะเด้งมาให้คุณเลือกชื่อด้านล่าง
       </div>
@@ -3367,7 +3376,7 @@ async function _devApprove(devId,code){
   const empId=sel?.value;
   if(!empId){toast('เลือกชื่อพนักงานก่อน');return;}
   const name=sel.options[sel.selectedIndex].textContent;
-  if(!confirm(`อนุมัติรหัส ${code} ให้:\n\n${name}\n\nเครื่องเดิมของคนนี้ยังใช้ได้ (สูงสุด 3 เครื่อง)`))return;
+  if(!confirm(`อนุมัติรหัส ${code} ให้:\n\n${name}\n\nเครื่องเก่าของคนนี้ (ถ้ามี) จะใช้ไม่ได้ทันที`))return;
   try{
     const res=await fetch(WORKER_URL+'/att/approve',{method:'POST',
       headers:{'Content-Type':'application/json',Authorization:'Bearer '+_wToken()},
