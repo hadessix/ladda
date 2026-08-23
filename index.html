@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>น้องลัดดา</title>
-<link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0b0f1a">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -372,6 +371,7 @@ main{display:flex;flex:1;overflow:hidden;}
     </div>
     <button class="pin-submit" onclick="pinCheck()">🐉 LOG IN</button>
     <div class="login-err" id="login-err"></div>
+    <div id="dev-diag" style="display:none;margin-top:14px;font-size:10px;color:var(--text3);font-family:var(--mono);line-height:1.6;word-break:break-all;text-align:center;"></div>
   </div>
 </div>
 
@@ -853,12 +853,25 @@ function attRoute(){
   return false;
 }
 
+// แสดงสถานะเครื่องพนักงานบนหน้า login (ไว้ตรวจว่ากุญแจมาถึงไหม)
+function _devDiag(){
+  const el=document.getElementById('dev-diag');if(!el)return;
+  const hasKey=!!_viewKey(), hasTok=!!_devTok();
+  const hash=(location.hash||'').slice(0,14);
+  el.style.display='';
+  el.innerHTML=`เครื่องนี้: ${hasKey?'<span style="color:var(--green)">มีกุญแจ ✓</span>':'<span style="color:var(--red)">ไม่มีกุญแจ</span>'} · ${hasTok?'มีบัตร ✓':'ไม่มีบัตร'}`
+    +`<br>เปิดจาก: ${location.pathname}${location.search}${hash?hash+'…':'(ไม่มี #)'}`
+    +`<br>${_isStandalone()?'โหมดไอคอนหน้าจอโฮม':'โหมดเบราว์เซอร์'}`;
+}
 function authInit(){
   // iOS: ถอด manifest ออก → ไอคอนหน้าจอโฮมเปิดใน Safari ใช้ที่เก็บข้อมูลเดียวกัน
   // (ถ้าปล่อยไว้ iOS 16.4+ จะสร้างแอปแยก storage แล้วแตะ NFC ไม่ได้)
-  if(/iPad|iPhone|iPod/.test(navigator.userAgent))document.querySelector('link[rel=manifest]')?.remove();
-  else if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{});}
+  if(!/iPad|iPhone|iPod/.test(navigator.userAgent)){
+    const ml=document.createElement('link');ml.rel='manifest';ml.href='manifest.json';document.head.appendChild(ml);
+    if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
   if(attRoute())return;
+  _devDiag();
   const saved=localStorage.getItem('ladda_role');
   const token=localStorage.getItem('ladda_token');
   if((saved==='user'||saved==='admin'||saved==='viewer')&&token){
