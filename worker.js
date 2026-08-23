@@ -399,6 +399,47 @@ export default {
       }
     }
 
+    // ── POST /att/alert — แจ้งเหตุจากหน้างาน (รถเสีย) ──
+    // เข้าได้ทั้ง device token และกุญแจดูข้อมูล (ไอคอนหน้าจอโฮมมีแค่กุญแจ)
+    if (url.pathname === '/att/alert' && request.method === 'POST') {
+      let empId = null, devId = null;
+      const vk = request.headers.get('X-View-Key') || '';
+      try {
+        if (vk) {
+          if (vk.length < 24) return jsonRes({ error: 'unauthorized' }, 401);
+          const rows = await sb(env, `att_devices?view_hash=eq.${await sha256hex(vk)}&select=id,employee_id,status`);
+          const d = rows && rows[0];
+          if (!d || d.status !== 'active') return jsonRes({ error: 'unauthorized' }, 403);
+          empId = d.employee_id; devId = d.id;
+        } else {
+          const auth = request.headers.get('Authorization') || '';
+          const p = await verifyToken(auth.startsWith('Bearer ') ? auth.slice(7) : '', env.JWT_SECRET);
+          if (!p || p.role !== 'device') return jsonRes({ error: 'unauthorized' }, 401);
+          const rows = await sb(env, `att_devices?id=eq.${p.deviceId}&select=id,status`);
+          if (!rows || !rows[0] || rows[0].status !== 'active') return jsonRes({ error: 'unauthorized' }, 403);
+          empId = p.employeeId; devId = p.deviceId;
+        }
+        let body = {};
+        try { body = await request.json(); } catch {}
+        const emps = await sb(env, `employees?id=eq.${empId}&select=id,name,route_id`);
+        const emp = (emps && emps[0]) || {};
+        const now = new Date();
+        const row = {
+          id: 'al_' + uid32(), employee_id: empId, device_id: devId,
+          route_id: emp.route_id || null, kind: body.kind || 'breakdown',
+          work_date: workDate(now), ts: now.toISOString(),
+          lat: body.lat ?? null, lng: body.lng ?? null, accuracy: body.accuracy ?? null,
+          note: body.note || null, status: 'open',
+          ua: request.headers.get('User-Agent') || null,
+          ip: request.headers.get('CF-Connecting-IP') || null,
+        };
+        await sb(env, 'att_alerts', { method: 'POST', prefer: 'return=minimal', body: row });
+        return jsonRes({ ok: true, ts: row.ts, employee: { name: emp.name || '' } });
+      } catch (e) {
+        return jsonRes({ error: e.message }, 500);
+      }
+    }
+
     // ── GET /me — ข้อมูลของตัวเอง (อ่านอย่างเดียว) ──
     // เข้าได้ 2 ทาง: device token (Bearer) หรือกุญแจดูข้อมูล (X-View-Key)
     // ทั้งสองทางดึงได้เฉพาะข้อมูลของเจ้าของเท่านั้น — ส่ง id คนอื่นมาไม่ได้

@@ -898,10 +898,42 @@ function _meRender(){
       <div style="font-size:23px;font-weight:800;margin-top:12px;">${e.name}</div>
       <div style="font-size:13px;color:var(--text3);">${e.nationality||''}</div>
     </div>
+    <button onclick="_sosGo()" style="width:100%;margin-top:16px;padding:14px;background:var(--rdim);border:1px solid var(--rbr);border-radius:12px;color:var(--red);font-size:16px;font-weight:800;font-family:var(--font);cursor:pointer;">🚨 แจ้งรถเสีย / ขอความช่วยเหลือ</button>
     ${sec('📇 เอกสารของฉัน',photoHtml)}
     ${sec('📅 เวลาเข้างาน 7 วันล่าสุด',evHtml)}
     <div style="margin-top:18px;">${_homeTip()}</div>
   </div>`);
+}
+
+// ── แจ้งรถเสีย: บันทึกเข้าระบบ + แชร์พิกัดต่อได้ ──
+async function _sosGo(){
+  if(!confirm('แจ้งรถเสีย / ขอความช่วยเหลือ?\n\nระบบจะส่งตำแหน่งปัจจุบันไปให้หัวหน้างานทันที'))return;
+  _attScreen(_attCard(`<div style="font-size:44px;margin-bottom:10px;">🚨</div>
+    <div style="font-size:16px;font-weight:700;">กำลังส่งตำแหน่ง…</div>
+    <div style="font-size:12px;color:var(--text3);margin-top:8px;">กำลังหาตำแหน่ง…</div>`,'var(--rbr)'));
+  const loc=await _getLoc();
+  const r=await _devFetch('/att/alert',{method:'POST',body:{kind:'breakdown',lat:loc?.lat??null,lng:loc?.lng??null,accuracy:loc?.accuracy??null}});
+  if(!r.ok){
+    _attScreen(_attCard(`<div style="font-size:44px;">⚠️</div>
+      <div style="font-size:15px;color:var(--red);margin:10px 0;">${r.data?.error||'ส่งไม่สำเร็จ'}</div>
+      <button class="btn btn-b" style="width:100%;" onclick="_sosGo()">ลองใหม่</button>
+      <div style="margin-top:12px;"><span onclick="_meRender()" style="font-size:12px;color:var(--text3);cursor:pointer;text-decoration:underline;">ย้อนกลับ</span></div>`,'var(--rbr)'));
+    return;
+  }
+  const map=loc?`https://www.google.com/maps?q=${loc.lat},${loc.lng}`:'';
+  _attScreen(_attCard(`
+    <div style="font-size:52px;margin-bottom:8px;">✅</div>
+    <div style="font-size:19px;font-weight:800;color:var(--green);margin-bottom:8px;">แจ้งหัวหน้างานแล้ว</div>
+    <p style="font-size:13px;color:var(--text2);line-height:1.8;margin-bottom:16px;">${loc?'ส่งตำแหน่งปัจจุบันไปแล้ว':'ส่งแล้ว แต่หาตำแหน่งไม่ได้ — เปิด GPS แล้วส่งใหม่จะดีกว่า'}</p>
+    ${map?`<button onclick="_sosShare('${map}')" style="width:100%;padding:13px;background:var(--green);border:none;border-radius:11px;color:#06210f;font-size:15px;font-weight:800;font-family:var(--font);cursor:pointer;margin-bottom:9px;">ส่งตำแหน่งเข้า LINE ด้วย</button>
+    <button onclick="window.open('${map}','_blank')" style="width:100%;padding:11px;background:var(--bg3);border:1px solid var(--border);border-radius:11px;color:var(--text2);font-size:14px;font-family:var(--font);cursor:pointer;margin-bottom:9px;">ดูตำแหน่งบนแผนที่</button>`:''}
+    <button onclick="_meRender()" style="width:100%;padding:11px;background:var(--bg3);border:1px solid var(--border);border-radius:11px;color:var(--text2);font-size:14px;font-family:var(--font);cursor:pointer;">ย้อนกลับ</button>`,'var(--gbr)'));
+}
+function _sosShare(map){
+  const txt='รถเสีย ขอความช่วยเหลือ ตำแหน่งของฉัน: '+map;
+  if(navigator.share)navigator.share({title:'แจ้งรถเสีย',text:txt}).catch(()=>{});
+  else if(navigator.clipboard)navigator.clipboard.writeText(txt).then(()=>alert('คัดลอกแล้ว วางส่งใน LINE ได้เลย'));
+  else prompt('คัดลอกข้อความนี้:',txt);
 }
 
 // ── หน้าส่วนตัว: ต้องสแกนก่อน ──
@@ -3094,7 +3126,7 @@ function _prSyncTabs(){
 // ═══════════════════════════════════════════════════════════
 // 📊 กระดานลงเวลารายวัน (admin)
 // ═══════════════════════════════════════════════════════════
-let _attDate=null, _attEvents=null, _attLoading=false;
+let _attDate=null, _attEvents=null, _attAlerts=null, _attLoading=false;
 
 // วันทำงานปัจจุบัน (ตัดวันที่ 04:00 เหมือนฝั่ง Worker)
 function attToday(){
@@ -3110,6 +3142,7 @@ async function attLoadDay(d){
   _attLoading=true;renderPayroll();
   try{
     _attEvents=await sbGet('att_events',`work_date=eq.${_attDate}&order=ts.asc`);
+    _attAlerts=await sbGet('att_alerts',`work_date=eq.${_attDate}&order=ts.desc`).catch(()=>[]);
   }catch(e){_attEvents=[];toast('โหลดไม่สำเร็จ: '+e.message);}
   _attLoading=false;renderPayroll();
 }
@@ -3226,6 +3259,7 @@ function renderPrAtt(){
       <button class="btn btn-b" onclick="PR.tab='shifts_cfg';renderPayroll();">⚙️ ตั้งค่า</button>
     </div>
     ${_attLoading?'<div class="empty"><div class="ei">⏳</div><p>กำลังโหลด…</p></div>':`
+    ${_attAlertBar()}
     <div style="display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap;">
       ${card('มาแล้ว',nIn,'var(--green)')}
       ${card('สาย',nLate,nLate?'var(--red)':'var(--text3)')}
@@ -3237,6 +3271,35 @@ function renderPrAtt(){
       ตัวเลขหน้าชื่อ = ลำดับคนมาถึงในสายนั้น · แตะเวลาสีแดง = มีเรื่องต้องตรวจ (แตะไกลจุด/ไม่เปิด GPS) · กดที่เวลาเพื่อดูรายละเอียด<br>
       <span style="color:var(--amber);">ข้อมูลนี้ยังไม่ถูกนำไปคิดเงินเดือนอัตโนมัติ — ใช้ดูอย่างเดียว</span>
     </p>`}`;
+}
+
+// แถบแจ้งเหตุ (รถเสีย) ของวันนั้น
+function _attAlertBar(){
+  const list=(_attAlerts||[]).filter(a=>a.status!=='closed');
+  if(!list.length)return'';
+  return list.map(a=>{
+    const emp=PR.employees.find(e=>e.id===a.employee_id);
+    const rt=S.shops.find(x=>x.id===a.route_id);
+    const t=new Date(a.ts);
+    const hhmm=String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
+    return`<div style="display:flex;align-items:center;gap:9px;background:var(--rdim);border:1px solid var(--rbr);border-radius:11px;padding:11px 13px;margin-bottom:8px;">
+      <span style="font-size:22px;">🚨</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:700;color:var(--red);">แจ้งรถเสีย · ${emp?.name||'?'}</div>
+        <div style="font-size:11px;color:var(--text3);">${rt?rt.name+' · ':''}${hhmm}${a.lat==null?' · ไม่มีพิกัด':''}</div>
+      </div>
+      ${a.lat!=null?`<button class="btn btn-b" style="padding:6px 10px;font-size:12px;" onclick="window.open('https://www.google.com/maps?q=${a.lat},${a.lng}','_blank')">🗺 แผนที่</button>`:''}
+      <button class="btn btn-x" style="padding:6px 10px;font-size:12px;" onclick="_attAlertClose('${a.id}')">เสร็จแล้ว</button>
+    </div>`;
+  }).join('');
+}
+async function _attAlertClose(id){
+  const a=(_attAlerts||[]).find(x=>x.id===id);if(!a)return;
+  if(!confirm('ปิดการแจ้งนี้?'))return;
+  try{
+    await sbUpsert('att_alerts',{...a,status:'closed',closed_at:new Date().toISOString()});
+    a.status='closed';renderPayroll();
+  }catch(e){toast('ปิดไม่สำเร็จ: '+e.message);}
 }
 
 function attEvDetail(evId){
