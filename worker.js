@@ -401,6 +401,7 @@ export default {
         const lat = body.lat ?? null, lng = body.lng ?? null;
         if (lat === null || lng === null) flags.noloc = true;
         if (body.mock) flags.mock = true;
+        if (body.manual) flags.manual = true;   // กดปุ่มในแอป ไม่ได้แตะสติ๊กเกอร์
         if (body.client_ts) {
           const skew = Math.abs((new Date(body.client_ts) - now) / 1000);
           if (skew > CLOCK_SKEW_SEC) flags.clockskew = Math.round(skew);
