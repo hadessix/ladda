@@ -450,6 +450,7 @@ const LANGS=[['th','ไทย'],['lo','ລາວ'],['my','မြန်မာ']];
 const I18N={
  lo:{
   'เข้างานครบแล้ววันนี้':'ເຂົ້າວຽກຄົບແລ້ວມື້ນີ້','ยังเข้างานไม่ครบ':'ຍັງເຂົ້າວຽກບໍ່ຄົບ',
+  '(ยังกดยืนยันลงเวลาได้ปกติ แต่จะไม่มีพิกัดแนบไป)':'(ຍັງກົດຢືນຢັນລົງເວລາໄດ້ປົກກະຕິ ແຕ່ຈະບໍ່ມີຕຳແໜ່ງແນບໄປ)',
   'กดลงเวลาในแอป':'ກົດລົງເວລາໃນແອັບ','แตะสติ๊กเกอร์ที่รถ':'ແຕະສະຕິກເກີທີ່ລົດ',
   'ต้องทำครบทั้ง 2 อย่างถึงจะนับว่าเข้างาน':'ຕ້ອງເຮັດຄົບທັງ 2 ຢ່າງຈຶ່ງນັບວ່າເຂົ້າວຽກ',
   'ไม่ได้อนุญาตให้ใช้ตำแหน่ง — เปิดในตั้งค่าแล้วแตะใหม่':'ບໍ່ໄດ້ອະນຸຍາດໃຫ້ໃຊ້ຕຳແໜ່ງ — ເປີດໃນຕັ້ງຄ່າແລ້ວແຕະໃໝ່',
@@ -508,6 +509,7 @@ const I18N={
  },
  my:{
   'เข้างานครบแล้ววันนี้':'ယနေ့ အလုပ်ဆင်းချိန်ပြည့်စုံပြီ','ยังเข้างานไม่ครบ':'အလုပ်ဆင်းချိန် မပြည့်စုံသေးပါ',
+  '(ยังกดยืนยันลงเวลาได้ปกติ แต่จะไม่มีพิกัดแนบไป)':'(ပုံမှန်အတိုင်း အချိန်မှတ်နိုင်ဆဲ ဒါပေမယ့် တည်နေရာမပါဝင်ပါ)',
   'กดลงเวลาในแอป':'အက်ပ်တွင် အချိန်မှတ်ရန်','แตะสติ๊กเกอร์ที่รถ':'ကားပေါ်ရှိ စတစ်ကာကို တို့ရန်',
   'ต้องทำครบทั้ง 2 อย่างถึงจะนับว่าเข้างาน':'နှစ်ခုလုံးပြီးမှ အလုပ်ဆင်းသည်ဟု သတ်မှတ်ပါမည်',
   'ไม่ได้อนุญาตให้ใช้ตำแหน่ง — เปิดในตั้งค่าแล้วแตะใหม่':'တည်နေရာသုံးခွင့်မပေးထားပါ — ဆက်တင်တွင်ဖွင့်ပြီး ထပ်တို့ပါ',
@@ -671,15 +673,25 @@ async function _getLoc(){
 
 // ── หน้าแตะ ──
 // แตะสติ๊กเกอร์แล้วมาที่นี่ — แสดงหน้ายืนยันก่อน (การกดปุ่มคือสิ่งที่ปลดล็อกให้ขอตำแหน่งได้)
-function attTap(pointId,manual){
+// เช็คสถานะสิทธิ์ตำแหน่งแบบไม่เด้งอะไรขึ้นมา (เบราว์เซอร์บางรุ่นไม่รองรับ — เจอแล้วคืน null)
+async function _locPerm(){
+  try{
+    if(!navigator.permissions?.query)return null;
+    const st=await navigator.permissions.query({name:'geolocation'});
+    return st.state; // 'granted' | 'denied' | 'prompt'
+  }catch(e){return null;}
+}
+async function attTap(pointId,manual){
   if(manual)return _tapGo(pointId,true);
   if(!_devTok()&&!_viewKey())return _tapNoDev();
   let me={};
   try{me=JSON.parse(localStorage.getItem('ladda_me')||'{}');}catch(e){}
+  const perm=await _locPerm();
   _attScreen(_attCard(`
     ${me.photo?`<img src="${me.photo}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;margin-bottom:8px;">`:'<div style="font-size:44px;margin-bottom:6px;">📲</div>'}
     ${me.name?`<div style="font-size:19px;font-weight:800;margin-bottom:2px;">${me.name}</div>`:''}
     <div style="font-size:13px;color:var(--text3);margin-bottom:16px;">แตะสติ๊กเกอร์แล้ว — กดยืนยันเพื่อบันทึกเวลา</div>
+    ${perm==='denied'?`<div style="background:var(--adim);border:1px solid var(--abr);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--amber);line-height:1.75;text-align:left;margin-bottom:14px;">ไม่ได้อนุญาตให้ใช้ตำแหน่ง — เปิดในตั้งค่าแล้วแตะใหม่<br><span style="color:var(--text3);">(ยังกดยืนยันลงเวลาได้ปกติ แต่จะไม่มีพิกัดแนบไป)</span></div>`:''}
     <button onclick="_tapGo('${pointId||''}')" style="width:100%;padding:16px;background:var(--green);border:none;border-radius:14px;color:#06210f;font-size:18px;font-weight:800;font-family:var(--font);cursor:pointer;">ยืนยันลงเวลา</button>
     <div style="font-size:11px;color:var(--text3);margin-top:12px;line-height:1.7;">กดยืนยันแล้วระบบจะขอตำแหน่งของคุณ<br>ถ้ามือถือถามให้กด "อนุญาต"</div>`,'var(--gbr)'));
 }
