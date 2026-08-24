@@ -1093,10 +1093,19 @@ function _meRender(){
   const byDate={};evs.forEach(v=>{(byDate[v.work_date]=byDate[v.work_date]||[]).push(v);});
   const evHtml=Object.keys(byDate).sort().reverse().slice(0,7).map(dt=>{
     const list=byDate[dt].slice().sort((a,b)=>new Date(a.ts)-new Date(b.ts));
-    const times=list.map(v=>{const t=new Date(v.ts);return String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');}).join('  ·  ');
+    // รวมคู่ "เข้างาน" (กดในแอป+แตะสติ๊กเกอร์ ครั้งแรกของแต่ละแบบ) เป็นรายการเดียว
+    // เหมือนกับกระดานฝั่ง admin — เพื่อไม่ให้ดูเหมือนแตะแยก 2 ครั้งทั้งที่เป็นการเข้างานครั้งเดียว
+    const mi=list.findIndex(v=>v.flags&&v.flags.manual);
+    const ti=list.findIndex(v=>!(v.flags&&v.flags.manual));
+    const idxs=new Set([mi,ti].filter(i=>i>=0));
+    const hhmm=v=>{const t=new Date(v.ts);return String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');};
+    const parts=[];
+    if(idxs.size===2)parts.push(`<span style="color:var(--green);">✓เข้างาน ${hhmm(list[mi])}</span>`);
+    else if(idxs.size===1)parts.push(`<span style="color:var(--amber);">⚠เข้างาน ${hhmm(list[[...idxs][0]])}</span>`);
+    list.forEach((v,i)=>{if(!idxs.has(i))parts.push(hhmm(v));});
     return`<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;text-align:left;">
       <span style="font-family:var(--mono);color:var(--text3);min-width:78px;">${dt}</span>
-      <span style="font-family:var(--mono);flex:1;">${times}</span>
+      <span style="font-family:var(--mono);flex:1;">${parts.join('  ·  ')}</span>
       <span style="color:var(--text3);">${list.length} ครั้ง</span>
     </div>`;}).join('')||`<div style="font-size:12px;color:var(--text3);padding:8px;">ยังไม่มีประวัติ</div>`;
 
