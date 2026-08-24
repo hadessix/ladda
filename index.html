@@ -455,6 +455,9 @@ const I18N={
   'ไม่ได้อนุญาตให้ใช้ตำแหน่ง — เปิดในตั้งค่าแล้วแตะใหม่':'ບໍ່ໄດ້ອະນຸຍາດໃຫ້ໃຊ້ຕຳແໜ່ງ — ເປີດໃນຕັ້ງຄ່າແລ້ວແຕະໃໝ່',
   'หาตำแหน่งไม่ได้ — ออกไปที่โล่งแล้วแตะใหม่':'ຫາຕຳແໜ່ງບໍ່ໄດ້ — ອອກໄປບ່ອນໂລ່ງແລ້ວແຕະໃໝ່',
   'แตะใหม่พร้อมตำแหน่ง':'ແຕະໃໝ່ພ້ອມຕຳແໜ່ງ',
+  'แตะสติ๊กเกอร์แล้ว — กดยืนยันเพื่อบันทึกเวลา':'ແຕະສະຕິກເກີແລ້ວ — ກົດຢືນຢັນເພື່ອບັນທຶກເວລາ',
+  'กดยืนยันแล้วระบบจะขอตำแหน่งของคุณ':'ກົດຢືນຢັນແລ້ວລະບົບຈະຂໍຕຳແໜ່ງຂອງທ່ານ',
+  'ถ้ามือถือถามให้กด "อนุญาต"':'ຖ້າໂທລະສັບຖາມໃຫ້ກົດ "ອະນຸຍາດ"',
   'ลงเวลาเข้างาน':'ລົງເວລາເຂົ້າວຽກ','ยืนยันลงเวลา':'ຢືນຢັນລົງເວລາ',
   'ระบบจะบันทึกเวลาและตำแหน่งปัจจุบัน':'ລະບົບຈະບັນທຶກເວລາແລະຕຳແໜ່ງປັດຈຸບັນ','ต้องยืนยันตัวตนก่อน':'ຕ້ອງຢືນຢັນຕົວຕົນກ່ອນ',
   'แจ้งรถเสีย / ขอความช่วยเหลือ':'ແຈ້ງລົດເສຍ / ຂໍຄວາມຊ່ວຍເຫຼືອ','ยืนยันแจ้งรถเสีย':'ຢືນຢັນແຈ້ງລົດເສຍ',
@@ -510,6 +513,9 @@ const I18N={
   'ไม่ได้อนุญาตให้ใช้ตำแหน่ง — เปิดในตั้งค่าแล้วแตะใหม่':'တည်နေရာသုံးခွင့်မပေးထားပါ — ဆက်တင်တွင်ဖွင့်ပြီး ထပ်တို့ပါ',
   'หาตำแหน่งไม่ได้ — ออกไปที่โล่งแล้วแตะใหม่':'တည်နေရာမတွေ့ပါ — ကွင်းပြင်သို့ထွက်ပြီး ထပ်တို့ပါ',
   'แตะใหม่พร้อมตำแหน่ง':'တည်နေရာနှင့်အတူ ထပ်တို့ရန်',
+  'แตะสติ๊กเกอร์แล้ว — กดยืนยันเพื่อบันทึกเวลา':'စတစ်ကာတို့ပြီးပါပြီ — အချိန်မှတ်ရန် အတည်ပြုပါ',
+  'กดยืนยันแล้วระบบจะขอตำแหน่งของคุณ':'အတည်ပြုပြီးလျှင် သင့်တည်နေရာကို တောင်းပါမည်',
+  'ถ้ามือถือถามให้กด "อนุญาต"':'ဖုန်းမေးလာလျှင် "ခွင့်ပြုပါ" ကိုနှိပ်ပါ',
   'ลงเวลาเข้างาน':'အလုပ်ဆင်းချိန်မှတ်ရန်','ยืนยันลงเวลา':'အချိန်မှတ်ရန် အတည်ပြုပါ',
   'ระบบจะบันทึกเวลาและตำแหน่งปัจจุบัน':'လက်ရှိအချိန်နှင့်တည်နေရာကို မှတ်တမ်းတင်ပါမည်','ต้องยืนยันตัวตนก่อน':'အထောက်အထားအရင်အတည်ပြုပါ',
   'แจ้งรถเสีย / ขอความช่วยเหลือ':'ကားပျက် / အကူအညီတောင်းရန်','ยืนยันแจ้งรถเสีย':'ကားပျက်ကြောင်း အတည်ပြုပါ',
@@ -664,15 +670,27 @@ async function _getLoc(){
 }
 
 // ── หน้าแตะ ──
-async function attTap(pointId,manual){
-  if(!_devTok()&&!_viewKey()){
-    _attScreen(_attCard(`
-      <div style="font-size:46px;margin-bottom:10px;">📵</div>
-      <div style="font-size:17px;font-weight:700;margin-bottom:8px;">เครื่องนี้ยังไม่ได้ลงทะเบียน</div>
-      ${_inApp()?`<div style="background:var(--adim);border:1px solid var(--abr);border-radius:11px;padding:12px;font-size:13px;color:var(--amber);line-height:1.85;text-align:left;margin-bottom:14px;"><strong>เปิดผิดที่</strong><br>ตอนนี้เปิดอยู่ในแอป ${_inApp()} ซึ่งเก็บข้อมูลแยกจากเบราว์เซอร์<br>กดปุ่ม <strong>⋯</strong> มุมขวาบน แล้วเลือก <strong>เปิดในเบราว์เซอร์</strong></div>`:'<p style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:18px;">ให้หัวหน้างานเปิดหน้าลงทะเบียนในเครื่องนี้ แล้วเลือกชื่อของคุณ</p>'}
-      <button class="btn btn-b" style="width:100%;" onclick="attEnroll()">ลงทะเบียนเครื่องนี้</button>`,'var(--abr)'));
-    return;
-  }
+// แตะสติ๊กเกอร์แล้วมาที่นี่ — แสดงหน้ายืนยันก่อน (การกดปุ่มคือสิ่งที่ปลดล็อกให้ขอตำแหน่งได้)
+function attTap(pointId,manual){
+  if(manual)return _tapGo(pointId,true);
+  if(!_devTok()&&!_viewKey())return _tapNoDev();
+  let me={};
+  try{me=JSON.parse(localStorage.getItem('ladda_me')||'{}');}catch(e){}
+  _attScreen(_attCard(`
+    ${me.photo?`<img src="${me.photo}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;margin-bottom:8px;">`:'<div style="font-size:44px;margin-bottom:6px;">📲</div>'}
+    ${me.name?`<div style="font-size:19px;font-weight:800;margin-bottom:2px;">${me.name}</div>`:''}
+    <div style="font-size:13px;color:var(--text3);margin-bottom:16px;">แตะสติ๊กเกอร์แล้ว — กดยืนยันเพื่อบันทึกเวลา</div>
+    <button onclick="_tapGo('${pointId||''}')" style="width:100%;padding:16px;background:var(--green);border:none;border-radius:14px;color:#06210f;font-size:18px;font-weight:800;font-family:var(--font);cursor:pointer;">ยืนยันลงเวลา</button>
+    <div style="font-size:11px;color:var(--text3);margin-top:12px;line-height:1.7;">กดยืนยันแล้วระบบจะขอตำแหน่งของคุณ<br>ถ้ามือถือถามให้กด "อนุญาต"</div>`,'var(--gbr)'));
+}
+function _tapNoDev(){
+  _attScreen(_attCard(`
+    <div style="font-size:46px;margin-bottom:10px;">📵</div>
+    <div style="font-size:17px;font-weight:700;margin-bottom:8px;">เครื่องนี้ยังไม่ได้ลงทะเบียน</div>
+    ${_inApp()?`<div style="background:var(--adim);border:1px solid var(--abr);border-radius:11px;padding:12px;font-size:13px;color:var(--amber);line-height:1.85;text-align:left;margin-bottom:14px;"><strong>เปิดผิดที่</strong><br>ตอนนี้เปิดอยู่ในแอป ${_inApp()} ซึ่งเก็บข้อมูลแยกจากเบราว์เซอร์<br>กดปุ่ม <strong>⋯</strong> มุมขวาบน แล้วเลือก <strong>เปิดในเบราว์เซอร์</strong></div>`:'<p style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:18px;">ให้หัวหน้างานเปิดหน้าลงทะเบียนในเครื่องนี้ แล้วเลือกชื่อของคุณ</p>'}
+    <button class="btn btn-b" style="width:100%;" onclick="attEnroll()">ลงทะเบียนเครื่องนี้</button>`,'var(--abr)'));
+}
+async function _tapGo(pointId,manual){
   _attScreen(_attCard(`
     <div style="font-size:46px;margin-bottom:12px;">📲</div>
     <div style="font-size:17px;font-weight:700;margin-bottom:6px;">กำลังบันทึกเวลา…</div>
@@ -702,6 +720,11 @@ async function attTap(pointId,manual){
   _meUrl();
   const t=new Date(d.ts);
   const hhmm=String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
+  // ยังไม่มีข้อมูลของตัวเองในหน้านี้ → ดึงมาเพื่อโชว์การ์ดสถานะให้ครบ
+  if(!_meData){
+    const m=await _devFetch('/me');
+    if(m.ok)_meData=m.data;
+  }
   // อัปเดตข้อมูลในเครื่องเพื่อคำนวณสถานะใหม่
   if(_meData&&d.work_date){
     (_meData.events=_meData.events||[]).unshift({work_date:d.work_date,ts:d.ts,seq:d.seq,flags:d.flags||{}});
@@ -720,7 +743,7 @@ async function attTap(pointId,manual){
     ${d.employee?.photo_url?`<img src="${d.employee.photo_url}" style="width:64px;height:64px;border-radius:50%;object-fit:cover;margin-bottom:8px;">`:''}
     <div style="font-size:16px;font-weight:600;margin-bottom:14px;">${d.employee?.name||''}</div>
     ${warn.length?`<div style="background:var(--adim);border:1px solid var(--abr);border-radius:9px;padding:9px 11px;font-size:12px;color:var(--amber);line-height:1.6;margin-bottom:12px;">${warn.join('<br>')}</div>`:''}
-    ${d.flags?.noloc?`<button onclick="attTap('${pointId||''}',${manual?'true':'false'})" style="width:100%;padding:12px;background:var(--amber);border:none;border-radius:11px;color:#3d2700;font-size:14px;font-weight:800;font-family:var(--font);cursor:pointer;margin-bottom:10px;">แตะใหม่พร้อมตำแหน่ง</button>`:''}
+    ${d.flags?.noloc?`<button onclick="_tapGo('${pointId||''}',${manual?'true':'false'})" style="width:100%;padding:12px;background:var(--amber);border:none;border-radius:11px;color:#3d2700;font-size:14px;font-weight:800;font-family:var(--font);cursor:pointer;margin-bottom:10px;">แตะใหม่พร้อมตำแหน่ง</button>`:''}
     ${_meData?_statusCard():''}
     <button class="btn btn-b" style="width:100%;margin-top:12px;" onclick="attMe()">ดูข้อมูลของฉัน</button>`,'var(--gbr)'));
 }
@@ -805,9 +828,7 @@ async function attBindGo(){
       <div style="font-size:19px;font-weight:800;color:var(--green);margin-bottom:6px;">ลงทะเบียนเรียบร้อย</div>
       <div style="font-size:16px;font-weight:600;margin-bottom:12px;">${d.employee?.name||''}</div>
       <p style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:18px;">ต่อไปแค่เอามือถือแตะสติ๊กเกอร์ ไม่ต้องกรอกอะไรอีก</p>
-      ${d.flags?.noloc?`<button onclick="attTap('${pointId||''}',${manual?'true':'false'})" style="width:100%;padding:12px;background:var(--amber);border:none;border-radius:11px;color:#3d2700;font-size:14px;font-weight:800;font-family:var(--font);cursor:pointer;margin-bottom:10px;">แตะใหม่พร้อมตำแหน่ง</button>`:''}
-    ${_meData?_statusCard():''}
-    <button class="btn btn-b" style="width:100%;margin-top:12px;" onclick="attMe()">ดูข้อมูลของฉัน</button>`,'var(--gbr)'));
+      <button class="btn btn-b" style="width:100%;" onclick="attMe()">ดูข้อมูลของฉัน</button>`,'var(--gbr)'));
   }catch(e){err.textContent='เชื่อมต่อไม่ได้: '+e.message;}
 }
 
@@ -913,6 +934,7 @@ async function attMe(){
     return;
   }
   _meData=r.data;
+  try{localStorage.setItem('ladda_me',JSON.stringify({name:r.data.employee?.name||'',photo:r.data.employee?.photo_url||''}));}catch(e){}
   _meRender();
 }
 
