@@ -736,14 +736,16 @@ async function _tapGo(pointId,manual){
   _meUrl();
   const t=new Date(d.ts);
   const hhmm=String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0');
-  // ยังไม่มีข้อมูลของตัวเองในหน้านี้ → ดึงมาเพื่อโชว์การ์ดสถานะให้ครบ
-  if(!_meData){
+  // ยังไม่มีข้อมูล หรือแตะสายที่ยังไม่รู้จักตารางเที่ยว (เช่น พึ่งไปแทนสายอื่นครั้งแรกวันนี้)
+  // → ดึงใหม่ทั้งชุด เพื่อให้ได้ shifts/routeNames ของสายนั้นมาด้วย (ข้อมูลชุดใหม่มีรายการที่พึ่งแตะอยู่แล้ว)
+  let refetched=false;
+  if(!_meData||(d.route_id&&!(_meData.shifts&&_meData.shifts[d.route_id]))){
     const m=await _devFetch('/me');
-    if(m.ok)_meData=m.data;
+    if(m.ok){_meData=m.data;refetched=true;}
   }
-  // อัปเดตข้อมูลในเครื่องเพื่อคำนวณสถานะใหม่
-  if(_meData&&d.work_date){
-    (_meData.events=_meData.events||[]).unshift({work_date:d.work_date,ts:d.ts,seq:d.seq,flags:d.flags||{}});
+  // อัปเดตข้อมูลในเครื่องเพื่อคำนวณสถานะใหม่ (ข้ามถ้าพึ่งดึงชุดใหม่มา กันรายการซ้ำ)
+  if(_meData&&d.work_date&&!refetched){
+    (_meData.events=_meData.events||[]).unshift({work_date:d.work_date,ts:d.ts,seq:d.seq,route_id:d.route_id||null,flags:d.flags||{}});
     _meData.today=d.work_date;
   }
   const warn=[];
@@ -1052,19 +1054,57 @@ async function attMe(){
 }
 
 // เข้างานวันนี้ครบหรือยัง — ต้องมีทั้ง "กดในแอป" และ "แตะสติ๊กเกอร์"
-// สถานะวันนี้: [กดในแอป][แตะสติ๊กเกอร์] + ตารางเที่ยววิ่ง (ขาไป/ขากลับ)
-// แตะสติ๊กเกอร์ครั้งแรกของวันนับเป็นทั้ง "เข้างาน" และ "ขาไปเที่ยวที่ 1" พร้อมกัน
-// (ในความเป็นจริงเป็นการแตะครั้งเดียวตอนขึ้นรถ ไม่ใช่แตะ 2 รอบแยกกัน)
+// สถานะวันนี้: [กดในแอป][แตะสติ๊กเกอร์] + ตารางเที่ยววิ่งแยกตามสาย (เผื่อไปแทนสายอื่น)
+// จับคู่การแตะแต่ละครั้งกับ "เที่ยว" ตามเวลาที่ใกล้เคียงที่สุด ไม่ใช่ตามลำดับที่แตะ
+// เพราะถ้าไปแทนสายอื่นแค่บางเที่ยว (เที่ยวอื่นมีคนทำไปแล้ว) การนับตามลำดับจะเพี้ยน
+function _assignTrips(taps,cfg){
+  const slots=[];
+  cfg.forEach((t,i)=>{
+    if(t.start)slots.push({trip:i,type:'depart',mins:_mins(t.start)});
+    if(t.end)slots.push({trip:i,type:'return',mins:_mins(t.end)});
+  });
+  const result=cfg.map(()=>({depart:false,ret:false}));
+  taps.slice().sort((a,b)=>new Date(a.ts)-new Date(b.ts)).forEach(v=>{
+    const tMin=_minsOfTs(v.ts);
+    let best=-1,bestDiff=Infinity;
+    slots.forEach((s,idx)=>{
+      if(s.used||s.mins==null)return;
+      const diff=Math.abs(tMin-s.mins);
+      if(diff<bestDiff){bestDiff=diff;best=idx;}
+    });
+    if(best>=0){
+      slots[best].used=true;
+      const s=slots[best];
+      if(s.type==='depart')result[s.trip].depart=true;else result[s.trip].ret=true;
+    }
+  });
+  return result;
+}
 function _todayStatus(){
-  const d=_meData;if(!d)return{app:false,tag:false,trips:[]};
+  const d=_meData;if(!d)return{app:false,tag:false,routes:[]};
   const today=d.today;
-  const list=(d.events||[]).filter(v=>v.work_date===today).slice().sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+  const list=(d.events||[]).filter(v=>v.work_date===today);
   const app=list.some(v=>v.flags&&v.flags.manual);
   const stickers=list.filter(v=>!(v.flags&&v.flags.manual));
   const tag=stickers.length>0;
-  const cfg=_shTrips(d.shift||{});
-  const trips=cfg.map((t,i)=>({depart:stickers.length>i*2,ret:stickers.length>i*2+1}));
-  return{app,tag,trips};
+
+  const homeRoute=d.employee?.route_id||null;
+  const byRoute={};
+  if(homeRoute)byRoute[homeRoute]=[]; // โชว์สายตัวเองเสมอแม้ยังไม่ได้แตะ
+  stickers.forEach(v=>{
+    const rid=v.route_id||homeRoute;
+    if(!rid)return;
+    (byRoute[rid]=byRoute[rid]||[]).push(v);
+  });
+  const routeIds=Object.keys(byRoute).sort((a,b)=>a===homeRoute?-1:b===homeRoute?1:0);
+  const routes=routeIds.map(rid=>{
+    const cfg=_shTrips((d.shifts&&d.shifts[rid])||{});
+    const isHome=rid===homeRoute;
+    let trips=_assignTrips(byRoute[rid],cfg).map((t,i)=>({n:i+1,...t}));
+    if(!isHome)trips=trips.filter(t=>t.depart||t.ret); // สายที่ไปแทน โชว์แค่เที่ยวที่แตะจริง
+    return{routeId:rid,name:(d.routeNames&&d.routeNames[rid])||'',isHome,trips};
+  }).filter(r=>r.isHome||r.trips.length);
+  return{app,tag,routes};
 }
 function _statusChk(done){
   return`<span style="display:inline-flex;width:23px;height:23px;border-radius:7px;align-items:center;justify-content:center;font-size:14px;font-weight:800;background:${done?'var(--green)':'var(--bg3)'};color:#06210f;border:1px solid ${done?'var(--green)':'var(--border2)'};">${done?'✓':''}</span>`;
@@ -1072,20 +1112,22 @@ function _statusChk(done){
 function _statusCard(){
   const st=_todayStatus();
   const full=st.app&&st.tag;
+  const routeBlock=r=>`<div style="margin-top:10px;padding-top:10px;border-top:1px solid ${full?'var(--gbr)':'var(--abr)'};">
+    ${!r.isHome?`<div style="font-size:11px;font-weight:700;color:var(--amber);margin-bottom:6px;">🔄 ไปแทนสาย ${r.name||'-'}</div>`:''}
+    ${r.trips.map(t=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;">
+      <span style="font-size:12px;color:var(--text2);">เที่ยวที่ ${t.n}</span>
+      <span style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:11px;color:var(--text3);">ขาไป</span>${_statusChk(t.depart)}
+        <span style="font-size:11px;color:var(--text3);">ขากลับ</span>${_statusChk(t.ret)}
+      </span>
+    </div>`).join('')}
+  </div>`;
   return`<div style="margin-top:16px;background:${full?'var(--gdim)':'var(--adim)'};border:1px solid ${full?'var(--gbr)':'var(--abr)'};border-radius:13px;padding:14px;text-align:left;">
     <div style="display:flex;align-items:center;justify-content:space-between;">
       <span style="font-size:14px;font-weight:800;color:${full?'var(--green)':'var(--amber)'};">เข้างานวันนี้</span>
       <span style="display:flex;gap:6px;">${_statusChk(st.app)}${_statusChk(st.tag)}</span>
     </div>
-    ${st.trips.length?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid ${full?'var(--gbr)':'var(--abr)'};">
-      ${st.trips.map((t,i)=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;">
-        <span style="font-size:12px;color:var(--text2);">เที่ยวที่ ${i+1}</span>
-        <span style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:11px;color:var(--text3);">ขาไป</span>${_statusChk(t.depart)}
-          <span style="font-size:11px;color:var(--text3);">ขากลับ</span>${_statusChk(t.ret)}
-        </span>
-      </div>`).join('')}
-    </div>`:''}
+    ${st.routes.map(routeBlock).join('')}
   </div>`;
 }
 
@@ -4127,17 +4169,21 @@ async function _devRevoke(devId,name){
 // ─── จุดแตะ (สติ๊กเกอร์ NFC) ───
 function openAttPoints(){
   const pts=PR.points||[];
+  const routeOpts=`<option value="">— ไม่ผูกสาย —</option>`+S.shops.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
   const rows=pts.map(p=>{
     const veh=p.vehicle_id?S.vehicles.find(v=>v.id===p.vehicle_id):null;
-    const rt=p.route_id?S.shops.find(s=>s.id===p.route_id):null;
     return`<div style="padding:11px 12px;border-bottom:1px solid var(--border);background:var(--bg2);">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
         <span style="font-size:15px;">${p.kind==='place'?'📍':'🚐'}</span>
         <input value="${(p.name||'').replace(/"/g,'&quot;')}" onchange="_ptSet('${p.id}','name',this.value)" style="flex:1;min-width:0;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;padding:4px 7px;font-family:var(--font);">
         <button class="delbtn" onclick="_ptDel('${p.id}')">ลบ</button>
       </div>
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+        <span style="font-size:11px;color:var(--text3);flex-shrink:0;">ผูกกับสาย</span>
+        <select onchange="_ptSet('${p.id}','route_id',this.value||null)" style="flex:1;min-width:0;background:var(--bg3);border:1px solid ${p.route_id?'var(--border)':'var(--abr)'};border-radius:6px;color:var(--text);font-size:12px;padding:4px 6px;font-family:var(--font);">${routeOpts.replace(`value="${p.route_id||''}"`,`value="${p.route_id||''}" selected`)}</select>
+      </div>
       <div style="font-size:11px;color:var(--text3);font-family:var(--mono);word-break:break-all;line-height:1.5;">
-        ${rt?`สาย ${rt.name} · `:''}${veh?`${veh.name||veh.plate||'รถ'} · `:''}ลิงก์สำหรับเขียนลงสติ๊กเกอร์:<br>
+        ${veh?`${veh.name||veh.plate||'รถ'} · `:''}ลิงก์สำหรับเขียนลงสติ๊กเกอร์:<br>
         <span style="color:var(--purple);">${location.origin}/?tap=${p.id}</span>
         <button onclick="_ptCopy('${p.id}')" style="margin-left:6px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;color:var(--text2);font-size:10px;padding:2px 7px;cursor:pointer;font-family:var(--font);">คัดลอก</button>
       </div>
@@ -4147,7 +4193,8 @@ function openAttPoints(){
   OM('📍 จุดแตะ NFC',
     `<p style="font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.6;">
       1 สติ๊กเกอร์ = 1 แถว · เขียนลิงก์ลงสติ๊กเกอร์ด้วยแอป <strong>NFC Tools</strong> (ฟรี) → Write → URL<br>
-      <span style="color:var(--amber);">⚠ สติ๊กเกอร์ธรรมดาแปะบนโลหะอ่านไม่ขึ้น — แปะพลาสติก/กระจก หรือใช้รุ่น anti-metal</span>
+      <span style="color:var(--amber);">⚠ สติ๊กเกอร์ธรรมดาแปะบนโลหะอ่านไม่ขึ้น — แปะพลาสติก/กระจก หรือใช้รุ่น anti-metal</span><br>
+      <span style="color:var(--amber);">⚠ ต้องผูกสายให้ทุกจุดแตะ — ไม่งั้นระบบจะจับเที่ยววิ่งผิด/ไม่จับให้เลย</span>
     </p>
     <div style="border:1px solid var(--border);border-radius:9px;overflow:hidden;margin-bottom:12px;">${rows}</div>`,
     `<button class="btn btn-x" onclick="CMask()">ปิด</button>

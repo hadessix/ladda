@@ -420,12 +420,16 @@ export default {
           if (dist != null && dist > (point.radius_m || 200)) flags.far = dist;
         }
 
+        // สายของการแตะครั้งนี้ = สายที่ผูกกับสติ๊กเกอร์ (ไม่ใช่สายประจำตัวคนแตะ)
+        // เผื่อไปแทนสายอื่น — ถ้าสติ๊กเกอร์ไม่ผูกสาย (หรือกดในแอป ไม่มีจุดแตะ) ใช้สายตัวเอง
+        const tapRouteId = (point && point.route_id) || emp.route_id || null;
+
         const row = {
           id: 'e_' + uid32(),
           employee_id: emp.id,
           device_id: dev.id,
           point_id: point ? point.id : null,
-          route_id: emp.route_id || null,
+          route_id: tapRouteId,
           vehicle_id: point ? point.vehicle_id || null : null,
           work_date: wd,
           ts: now.toISOString(),
@@ -445,6 +449,7 @@ export default {
           ok: true, seq: row.seq, taps_today: row.seq, ts: row.ts, work_date: wd,
           point: point ? { id: point.id, name: point.name, kind: point.kind } : null,
           employee: { id: emp.id, name: emp.name, photo_url: emp.photo_url },
+          route_id: tapRouteId,
           flags,
         });
       } catch (e) {
@@ -575,13 +580,19 @@ export default {
           }
         }
         const from = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
-        const events = await sb(env, `att_events?employee_id=eq.${empId}&work_date=gte.${from}&select=work_date,ts,seq,point_id,flags&order=ts.desc&limit=80`);
+        const events = await sb(env, `att_events?employee_id=eq.${empId}&work_date=gte.${from}&select=work_date,ts,seq,point_id,route_id,flags&order=ts.desc&limit=80`);
 
-        // ตารางเที่ยววิ่งของสายที่สังกัด — ไว้ให้ฝั่งลูกน้องรู้ว่าวันนี้ต้องแตะกี่เที่ยว
-        let shift = null;
-        if (emp.route_id) {
-          const shifts = await sb(env, `route_shifts?route_id=eq.${emp.route_id}&select=trips_json,start_time`).catch(() => null);
-          if (shifts && shifts[0]) shift = shifts[0];
+        // ตารางเที่ยววิ่ง — ของสายตัวเอง + ของทุกสายที่แตะวันนี้ (เผื่อไปแทนสายอื่น)
+        // ไม่ได้ดูแค่สายประจำตัว เพราะสติ๊กเกอร์ที่แตะอาจเป็นของสายอื่นก็ได้
+        const todayRouteIds = new Set((events || []).filter(v => v.work_date === wd && v.route_id).map(v => v.route_id));
+        if (emp.route_id) todayRouteIds.add(emp.route_id);
+        let shifts = {}, routeNames = {};
+        if (todayRouteIds.size) {
+          const idList = [...todayRouteIds].map(r => `"${r}"`).join(',');
+          const shiftRows = await sb(env, `route_shifts?route_id=in.(${idList})&select=route_id,trips_json,start_time`).catch(() => []);
+          (shiftRows || []).forEach(s => { shifts[s.route_id] = s; });
+          const routeRows = await sb(env, `routes?id=in.(${idList})&select=id,name`).catch(() => []);
+          (routeRows || []).forEach(r => { routeNames[r.id] = r.name; });
         }
 
         // สลิป = งวดล่าสุดที่ "จ่ายแล้ว" เท่านั้น (ไม่โชว์งวดที่กำลังทำอยู่ ซึ่งวันทำงานยังเป็น 0)
@@ -597,7 +608,7 @@ export default {
             break;
           }
         }
-        return jsonRes({ ok: true, employee: emp, today: wd, events: events || [], payslip, shift });
+        return jsonRes({ ok: true, employee: emp, today: wd, events: events || [], payslip, shifts, routeNames });
       } catch (e) {
         return jsonRes({ error: e.message }, 500);
       }
