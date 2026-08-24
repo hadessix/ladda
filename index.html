@@ -3665,6 +3665,7 @@ function renderPrAtt(){
         const fchips=[];
         if(flags.noloc)fchips.push('<span title="ไม่ได้เปิด GPS" style="font-size:10px;color:var(--amber);">📍✕</span>');
         if(flags.far)fchips.push(`<span title="ห่างจุดแตะ ${flags.far} ม." style="font-size:10px;color:var(--red);">ไกล ${flags.far}ม.</span>`);
+        if(flags.away)fchips.push(`<span title="ห่างจากเพื่อนร่วมสาย ${flags.away} ม. — น่าจะแตะแทนจากคนละที่" style="font-size:10px;color:var(--red);font-weight:800;">🚨ห่างเพื่อน ${flags.away}ม.</span>`);
         if(flags.clockskew)fchips.push('<span title="เวลาในเครื่องเพี้ยน" style="font-size:10px;color:var(--red);">⏱✕</span>');
         if(flags.manual)fchips.push('<span title="กดปุ่มในแอป ไม่ได้แตะสติ๊กเกอร์" style="font-size:10px;color:var(--amber);">📱แอป</span>');
         if(fchips.length)nFlag++;
@@ -3786,6 +3787,7 @@ function attEvDetail(evId){
   const warn=[];
   if(f.noloc)warn.push('ไม่ได้เปิด GPS ตอนแตะ');
   if(f.far)warn.push(`แตะห่างจากจุด ${f.far} เมตร (เกินรัศมีที่ตั้งไว้)`);
+  if(f.away){const mate=PR.employees.find(e=>e.id===f.away_emp);warn.push(`🚨 ห่างจากเพื่อนร่วมสาย${mate?' ('+mate.name+')':''} ${f.away} เมตร — น่าจะแตะแทนจากคนละที่`);}
   if(f.clockskew)warn.push(`เวลาในเครื่องต่างจากเวลาจริง ${f.clockskew} วินาที`);
   if(f.manual)warn.push('กดปุ่มลงเวลาในแอป ไม่ได้แตะสติ๊กเกอร์ที่รถ');
   OM('รายละเอียดการแตะ',
@@ -3824,6 +3826,7 @@ function _attPairDetail(id1,id2){
     const warn=[];
     if(f.noloc)warn.push('ไม่ได้เปิด GPS ตอนแตะ');
     if(f.far)warn.push(`แตะห่างจากจุด ${f.far} เมตร`);
+    if(f.away){const mate=PR.employees.find(e=>e.id===f.away_emp);warn.push(`🚨 ห่างจากเพื่อนร่วมสาย${mate?' ('+mate.name+')':''} ${f.away} เมตร`);}
     if(f.clockskew)warn.push(`เวลาในเครื่องต่างจากเวลาจริง ${f.clockskew} วินาที`);
     return`<div style="border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:10px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
@@ -4186,6 +4189,7 @@ function openAttPoints(){
         ${veh?`${veh.name||veh.plate||'รถ'} · `:''}ลิงก์สำหรับเขียนลงสติ๊กเกอร์:<br>
         <span style="color:var(--purple);">${location.origin}/?tap=${p.id}</span>
         <button onclick="_ptCopy('${p.id}')" style="margin-left:6px;background:var(--bg3);border:1px solid var(--border);border-radius:5px;color:var(--text2);font-size:10px;padding:2px 7px;cursor:pointer;font-family:var(--font);">คัดลอก</button>
+        ${/^[a-z0-9-]{20,}$/i.test(p.id)?'':`<button onclick="_ptRegen('${p.id}')" style="margin-left:4px;background:var(--bg3);border:1px solid var(--rbr);border-radius:5px;color:var(--red);font-size:10px;padding:2px 7px;cursor:pointer;font-family:var(--font);">🔀 สุ่มรหัสใหม่ (รหัสนี้เดาง่าย)</button>`}
       </div>
     </div>`;
   }).join('')||`<div style="padding:20px;text-align:center;color:var(--text3);font-size:13px;">ยังไม่มีจุดแตะ</div>`;
@@ -4221,6 +4225,18 @@ async function _ptDel(id){
 function _ptCopy(id){
   const url=`${location.origin}/?tap=${id}`;
   navigator.clipboard?.writeText(url).then(()=>toast('คัดลอกลิงก์แล้ว ✓')).catch(()=>prompt('คัดลอกลิงก์นี้:',url));
+}
+async function _ptRegen(id){
+  const p=(PR.points||[]).find(x=>x.id===id);if(!p)return;
+  if(!confirm('สุ่มรหัสใหม่? ลิงก์เดิมที่เขียนไว้ในสติ๊กเกอร์จะใช้ไม่ได้ ต้องเขียนสติ๊กเกอร์ใหม่ทันที'))return;
+  const newRow={...p,id:uid()};
+  try{
+    await sbUpsert('att_points',newRow);
+    await sbDelete('att_points',`id=eq.${id}`);
+    PR.points=(PR.points||[]).map(x=>x.id===id?newRow:x);
+    openAttPoints();
+    toast('สุ่มรหัสใหม่แล้ว ✓ อย่าลืมเขียนสติ๊กเกอร์ใหม่');
+  }catch(e){toast('ทำไม่สำเร็จ: '+e.message);}
 }
 
 function setPrTab(tab){

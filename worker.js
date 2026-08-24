@@ -15,6 +15,8 @@ const HR_BLOCKED_TABLES = ['employees_salary', 'payroll_periods', 'payroll_entri
 const AUTO_REVOKE_DAYS = 3;   // ไม่แตะเกินกี่วัน → เครื่องหลุด ต้องให้หัวหน้าผูกใหม่
 const DUP_WINDOW_SEC   = 20;  // แตะซ้ำจุดเดิมภายในกี่วินาที = นับเป็นครั้งเดียว (กันแตะเบิ้ล/NFC อ่านซ้ำ — สั้นพอไม่กันรอบจริงถัดไป)
 const CLOCK_SKEW_SEC   = 300; // เวลาเครื่องต่างจาก server เกินนี้ = ตีธง
+const AWAY_WINDOW_MIN  = 15;  // เทียบพิกัดกับเพื่อนร่วมสายที่แตะห่างกันไม่เกินกี่นาที
+const AWAY_DIST_M      = 800; // ห่างจากเพื่อนร่วมสายเกินนี้ = ตีธง (คนละที่กันชัดเจน)
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -423,6 +425,20 @@ export default {
         // สายของการแตะครั้งนี้ = สายที่ผูกกับสติ๊กเกอร์ (ไม่ใช่สายประจำตัวคนแตะ)
         // เผื่อไปแทนสายอื่น — ถ้าสติ๊กเกอร์ไม่ผูกสาย (หรือกดในแอป ไม่มีจุดแตะ) ใช้สายตัวเอง
         const tapRouteId = (point && point.route_id) || emp.route_id || null;
+
+        // เทียบพิกัดกับเพื่อนร่วมสายที่แตะเวลาใกล้กัน — จับกรณีมีคนแตะแทนจากคนละที่
+        if (lat != null && lng != null && tapRouteId) {
+          const winStart = new Date(now - AWAY_WINDOW_MIN * 60000).toISOString();
+          const mates = await sb(env, `att_events?route_id=eq.${tapRouteId}&work_date=eq.${wd}&employee_id=neq.${emp.id}&ts=gte.${winStart}&lat=not.is.null&select=employee_id,lat,lng,ts&order=ts.desc&limit=5`);
+          if (mates && mates.length) {
+            const mate = mates[0];
+            const mDist = distM(Number(mate.lat), Number(mate.lng), lat, lng);
+            if (mDist != null && mDist > AWAY_DIST_M) {
+              flags.away = Math.round(mDist);
+              flags.away_emp = mate.employee_id;
+            }
+          }
+        }
 
         const row = {
           id: 'e_' + uid32(),
