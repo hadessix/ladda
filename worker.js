@@ -577,6 +577,13 @@ export default {
         const from = new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
         const events = await sb(env, `att_events?employee_id=eq.${empId}&work_date=gte.${from}&select=work_date,ts,seq,point_id,flags&order=ts.desc&limit=80`);
 
+        // ตารางเที่ยววิ่งของสายที่สังกัด — ไว้ให้ฝั่งลูกน้องรู้ว่าวันนี้ต้องแตะกี่เที่ยว
+        let shift = null;
+        if (emp.route_id) {
+          const shifts = await sb(env, `route_shifts?route_id=eq.${emp.route_id}&select=trips_json,start_time`).catch(() => null);
+          if (shifts && shifts[0]) shift = shifts[0];
+        }
+
         // สลิป = งวดล่าสุดที่ "จ่ายแล้ว" เท่านั้น (ไม่โชว์งวดที่กำลังทำอยู่ ซึ่งวันทำงานยังเป็น 0)
         let payslip = null;
         const paid = await sb(env, `payroll_periods?status=eq.paid&select=id,period_key,status,pay_date&order=period_key.desc&limit=12`);
@@ -590,7 +597,7 @@ export default {
             break;
           }
         }
-        return jsonRes({ ok: true, employee: emp, today: wd, events: events || [], payslip });
+        return jsonRes({ ok: true, employee: emp, today: wd, events: events || [], payslip, shift });
       } catch (e) {
         return jsonRes({ error: e.message }, 500);
       }

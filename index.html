@@ -451,6 +451,7 @@ const I18N={
  lo:{
   'เข้างานครบแล้ววันนี้':'ເຂົ້າວຽກຄົບແລ້ວມື້ນີ້','ยังเข้างานไม่ครบ':'ຍັງເຂົ້າວຽກບໍ່ຄົບ',
   '(ยังกดยืนยันลงเวลาได้ปกติ แต่จะไม่มีพิกัดแนบไป)':'(ຍັງກົດຢືນຢັນລົງເວລາໄດ້ປົກກະຕິ ແຕ່ຈະບໍ່ມີຕຳແໜ່ງແນບໄປ)',
+  'เข้างานวันนี้':'ເຂົ້າວຽກມື້ນີ້','ขาไป':'ຂາອອກ','ขากลับ':'ຂາກັບ',
   'กดลงเวลาในแอป':'ກົດລົງເວລາໃນແອັບ','แตะสติ๊กเกอร์ที่รถ':'ແຕະສະຕິກເກີທີ່ລົດ',
   'ต้องทำครบทั้ง 2 อย่างถึงจะนับว่าเข้างาน':'ຕ້ອງເຮັດຄົບທັງ 2 ຢ່າງຈຶ່ງນັບວ່າເຂົ້າວຽກ',
   'ไม่ได้อนุญาตให้ใช้ตำแหน่ง — เปิดในตั้งค่าแล้วแตะใหม่':'ບໍ່ໄດ້ອະນຸຍາດໃຫ້ໃຊ້ຕຳແໜ່ງ — ເປີດໃນຕັ້ງຄ່າແລ້ວແຕະໃໝ່',
@@ -510,6 +511,7 @@ const I18N={
  my:{
   'เข้างานครบแล้ววันนี้':'ယနေ့ အလုပ်ဆင်းချိန်ပြည့်စုံပြီ','ยังเข้างานไม่ครบ':'အလုပ်ဆင်းချိန် မပြည့်စုံသေးပါ',
   '(ยังกดยืนยันลงเวลาได้ปกติ แต่จะไม่มีพิกัดแนบไป)':'(ပုံမှန်အတိုင်း အချိန်မှတ်နိုင်ဆဲ ဒါပေမယ့် တည်နေရာမပါဝင်ပါ)',
+  'เข้างานวันนี้':'ယနေ့ အလုပ်ဆင်းချိန်','ขาไป':'ထွက်ချိန်','ขากลับ':'ပြန်ချိန်',
   'กดลงเวลาในแอป':'အက်ပ်တွင် အချိန်မှတ်ရန်','แตะสติ๊กเกอร์ที่รถ':'ကားပေါ်ရှိ စတစ်ကာကို တို့ရန်',
   'ต้องทำครบทั้ง 2 อย่างถึงจะนับว่าเข้างาน':'နှစ်ခုလုံးပြီးမှ အလုပ်ဆင်းသည်ဟု သတ်မှတ်ပါမည်',
   'ไม่ได้อนุญาตให้ใช้ตำแหน่ง — เปิดในตั้งค่าแล้วแตะใหม่':'တည်နေရာသုံးခွင့်မပေးထားပါ — ဆက်တင်တွင်ဖွင့်ပြီး ထပ်တို့ပါ',
@@ -573,11 +575,13 @@ const I18N_RE={
  lo:[[/^ครั้งที่ (\d+) ของวันนี้$/,'ຄັ້ງທີ $1 ຂອງມື້ນີ້'],[/^(\d+) ครั้ง$/,'$1 ຄັ້ງ'],
      [/^เหลือ (\d+) วัน$/,'ຍັງເຫຼືອ $1 ວັນ'],[/^เหลือ (\d+) วัน — รีบต่อ!$/,'ຍັງເຫຼືອ $1 ວັນ — ຮີບຕໍ່!'],
      [/^หมดอายุแล้ว (\d+) วัน$/,'ໝົດອາຍຸແລ້ວ $1 ວັນ'],[/^ค่าแรง (\d+) วัน × (.+)$/,'ຄ່າແຮງ $1 ວັນ × $2'],
-     [/^งวด (.+)$/,'งວດ $1'],[/^อยู่ห่างจุดแตะ (\d+) เมตร$/,'ຢູ່ຫ່າງຈຸດແຕະ $1 ແມັດ'],[/^ใบอนุญาต (\d+)$/,'ໃບອະນຸຍາດ $1']],
+     [/^งวด (.+)$/,'งວດ $1'],[/^อยู่ห่างจุดแตะ (\d+) เมตร$/,'ຢູ່ຫ່າງຈຸດແຕະ $1 ແມັດ'],[/^ใบอนุญาต (\d+)$/,'ໃບອະນຸຍາດ $1'],
+     [/^เที่ยวที่ (\d+)$/,'ຖ້ຽວທີ $1']],
  my:[[/^ครั้งที่ (\d+) ของวันนี้$/,'ယနေ့ $1 ကြိမ်မြောက်'],[/^(\d+) ครั้ง$/,'$1 ကြိမ်'],
      [/^เหลือ (\d+) วัน$/,'$1 ရက်ကျန်'],[/^เหลือ (\d+) วัน — รีบต่อ!$/,'$1 ရက်သာကျန် — အမြန်သက်တမ်းတိုးပါ!'],
      [/^หมดอายุแล้ว (\d+) วัน$/,'သက်တမ်းကုန်ပြီး $1 ရက်'],[/^ค่าแรง (\d+) วัน × (.+)$/,'လုပ်ခ $1 ရက် × $2'],
-     [/^งวด (.+)$/,'ကာလ $1'],[/^อยู่ห่างจุดแตะ (\d+) เมตร$/,'တို့ရမည့်နေရာမှ $1 မီတာ ကွာဝေးသည်'],[/^ใบอนุญาต (\d+)$/,'လိုင်စင် $1']]
+     [/^งวด (.+)$/,'ကာလ $1'],[/^อยู่ห่างจุดแตะ (\d+) เมตร$/,'တို့ရမည့်နေရာမှ $1 မီတာ ကွာဝေးသည်'],[/^ใบอนุญาต (\d+)$/,'လိုင်စင် $1'],
+     [/^เที่ยวที่ (\d+)$/,'ခရီးစဉ် $1']]
 };
 
 function _i18nApply(){
@@ -1048,32 +1052,40 @@ async function attMe(){
 }
 
 // เข้างานวันนี้ครบหรือยัง — ต้องมีทั้ง "กดในแอป" และ "แตะสติ๊กเกอร์"
+// สถานะวันนี้: [กดในแอป][แตะสติ๊กเกอร์] + ตารางเที่ยววิ่ง (ขาไป/ขากลับ)
+// แตะสติ๊กเกอร์ครั้งแรกของวันนับเป็นทั้ง "เข้างาน" และ "ขาไปเที่ยวที่ 1" พร้อมกัน
+// (ในความเป็นจริงเป็นการแตะครั้งเดียวตอนขึ้นรถ ไม่ใช่แตะ 2 รอบแยกกัน)
 function _todayStatus(){
-  const d=_meData;if(!d)return{app:false,tag:false};
+  const d=_meData;if(!d)return{app:false,tag:false,trips:[]};
   const today=d.today;
-  const list=(d.events||[]).filter(v=>v.work_date===today);
-  return{
-    app:list.some(v=>v.flags&&v.flags.manual),
-    tag:list.some(v=>!(v.flags&&v.flags.manual)),
-    n:list.length
-  };
+  const list=(d.events||[]).filter(v=>v.work_date===today).slice().sort((a,b)=>new Date(a.ts)-new Date(b.ts));
+  const app=list.some(v=>v.flags&&v.flags.manual);
+  const stickers=list.filter(v=>!(v.flags&&v.flags.manual));
+  const tag=stickers.length>0;
+  const cfg=_shTrips(d.shift||{});
+  const trips=cfg.map((t,i)=>({depart:stickers.length>i*2,ret:stickers.length>i*2+1}));
+  return{app,tag,trips};
 }
-function _stepRow(done,label){
-  return`<div style="display:flex;align-items:center;gap:9px;padding:8px 0;">
-    <span style="width:24px;height:24px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;background:${done?'var(--green)':'var(--bg3)'};color:${done?'#06210f':'var(--text3)'};border:1px solid ${done?'var(--green)':'var(--border2)'};">${done?'✓':''}</span>
-    <span style="font-size:13px;color:${done?'var(--text)':'var(--text3)'};font-weight:${done?'600':'400'};">${label}</span>
-  </div>`;
+function _statusChk(done){
+  return`<span style="display:inline-flex;width:23px;height:23px;border-radius:7px;align-items:center;justify-content:center;font-size:14px;font-weight:800;background:${done?'var(--green)':'var(--bg3)'};color:#06210f;border:1px solid ${done?'var(--green)':'var(--border2)'};">${done?'✓':''}</span>`;
 }
 function _statusCard(){
   const st=_todayStatus();
   const full=st.app&&st.tag;
   return`<div style="margin-top:16px;background:${full?'var(--gdim)':'var(--adim)'};border:1px solid ${full?'var(--gbr)':'var(--abr)'};border-radius:13px;padding:14px;text-align:left;">
-    <div style="font-size:14px;font-weight:800;color:${full?'var(--green)':'var(--amber)'};margin-bottom:4px;">
-      ${full?'✅ เข้างานครบแล้ววันนี้':'⚠️ ยังเข้างานไม่ครบ'}
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-size:14px;font-weight:800;color:${full?'var(--green)':'var(--amber)'};">เข้างานวันนี้</span>
+      <span style="display:flex;gap:6px;">${_statusChk(st.app)}${_statusChk(st.tag)}</span>
     </div>
-    ${_stepRow(st.app,'กดลงเวลาในแอป')}
-    ${_stepRow(st.tag,'แตะสติ๊กเกอร์ที่รถ')}
-    ${full?'':'<div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.7;">ต้องทำครบทั้ง 2 อย่างถึงจะนับว่าเข้างาน</div>'}
+    ${st.trips.length?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid ${full?'var(--gbr)':'var(--abr)'};">
+      ${st.trips.map((t,i)=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;">
+        <span style="font-size:12px;color:var(--text2);">เที่ยวที่ ${i+1}</span>
+        <span style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:11px;color:var(--text3);">ขาไป</span>${_statusChk(t.depart)}
+          <span style="font-size:11px;color:var(--text3);">ขากลับ</span>${_statusChk(t.ret)}
+        </span>
+      </div>`).join('')}
+    </div>`:''}
   </div>`;
 }
 
