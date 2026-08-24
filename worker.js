@@ -13,7 +13,7 @@ const HR_BLOCKED_TABLES = ['employees_salary', 'payroll_periods', 'payroll_entri
 
 // ── ระบบเช็คเวลาเข้างาน ──
 const AUTO_REVOKE_DAYS = 3;   // ไม่แตะเกินกี่วัน → เครื่องหลุด ต้องให้หัวหน้าผูกใหม่
-const DUP_WINDOW_SEC   = 120; // แตะซ้ำจุดเดิมภายในกี่วินาที = นับเป็นครั้งเดียว
+const DUP_WINDOW_SEC   = 20;  // แตะซ้ำจุดเดิมภายในกี่วินาที = นับเป็นครั้งเดียว (กันแตะเบิ้ล/NFC อ่านซ้ำ — สั้นพอไม่กันรอบจริงถัดไป)
 const CLOCK_SKEW_SEC   = 300; // เวลาเครื่องต่างจาก server เกินนี้ = ตีธง
 
 const CORS = {
