@@ -1896,19 +1896,25 @@ function renderGroupContent(){
   }
 
   // รวม entries จากทุกสาย
-  const allExpenses=[],allExIn=[];
+  const allExpenses=[],allExIn=[],allExchange=[];
   members.forEach(sh=>{
     ge(sh.id,S.month).forEach(e=>{
       if(e.type==='expense')allExpenses.push(Object.assign({},e,{_sid:sh.id}));
       else if(e.type==='exin')allExIn.push(e);
+      if(e.type==='exin'||e.type==='exout')allExchange.push(e);
     });
   });
   allExpenses.sort((a,b)=>(b.df||'')>(a.df||'')?1:-1);
   allExIn.sort((a,b)=>(b.df||'')>(a.df||'')?1:-1);
+  allExchange.sort((a,b)=>(b.df||'')>(a.df||'')?1:-1);
 
   if(grp.is_owner){
     h+=`<div class="slbl">รายรับจากจ่ายเฮียรวย</div>`;
     h+=allExIn.length>0?renderEntriesList(allExIn):`<div class="empty" style="padding:12px 0;"><p>ยังไม่มีรายรับ</p></div>`;
+  }
+  if(tf.exchange){
+    h+=`<div class="slbl">แลกเงิน — รวมทุกสายในกลุ่ม</div>`;
+    h+=allExchange.length>0?renderEntriesList(allExchange):`<div class="empty" style="padding:12px 0;"><p>ยังไม่มีรายการแลกเงิน</p></div>`;
   }
   h+=`<div class="slbl">รายจ่าย</div>`;
   h+=allExpenses.length>0?renderEntriesList(allExpenses):`<div class="empty" style="padding:12px 0;"><p>ยังไม่มีรายจ่าย</p></div>`;
@@ -1923,20 +1929,10 @@ function renderEntriesList(entries){
   entries.forEach((e,i)=>{
     if(used.has(i))return;
     if(e.type==='exout'||e.type==='exin'){
-      const matchType=e.type==='exout'?'exin':'exout';
-      const tok=_xpTok(e);
-      const j=entries.findIndex((e2,i2)=>{
-        if(used.has(i2)||i2===i||e2.type!==matchType)return false;
-        const tok2=_xpTok(e2);
-        if(tok&&tok2)return tok===tok2;      // รายการใหม่: จับคู่ด้วย pair-token เป๊ะ
-        if(tok||tok2)return false;            // อย่าจับคู่ข้ามระหว่าง token กับ non-token
-        return e2.oid===e.oid&&e2.df===e.df;  // รายการเก่า: fallback oid+df
-      });
-      if(j>=0){
-        used.add(i);used.add(j);
-        const exout=e.type==='exout'?e:entries[j];
-        const exin=e.type==='exin'?e:entries[j];
-        rows.push(renderExchangePair(exout,exin));
+      const legs=_xFindLegs(e.id);
+      if(legs.length>=2){
+        legs.forEach(({e:e2})=>{const idx=entries.findIndex((x,xi)=>!used.has(xi)&&x.id===e2.id);if(idx>=0)used.add(idx);});
+        rows.push(renderExchangeGroup(legs));
         return;
       }
     }
@@ -1992,21 +1988,42 @@ async function delGroupExpenseBatch(ev,ids){
   }catch(err){toast('ลบไม่สำเร็จ: '+err.message);}
 }
 
-function renderExchangePair(exout,exin){
-  const os=S.shops.find(s=>s.id===exout.oid)||S.groups.find(g=>g.id===exout.oid);
-  const oname=os?.name||'?';
-  const pairId='xp_'+exout.id;
-  let body=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">`;
-  body+=`<div><div style="font-size:12px;color:var(--text3);margin-bottom:6px;">ให้ออก</div>${billTbl(exout.bills||eb(),exout.amount||0)}</div>`;
-  body+=`<div><div style="font-size:12px;color:var(--text3);margin-bottom:6px;">รับเข้า</div>${billTbl(exin.bills||eb(),exin.amount||0)}</div>`;
-  body+=`</div>`;
-  const delBtn=isAdmin()?`<button class="delbtn" onclick="delExchange(event,'${exout.id}')">ลบ</button>`:'';
+// legs = [{rid,e}] — ทุกขาของการแลกเงินครั้งเดียวกัน (อาจกระจายหลายสายในกลุ่ม)
+function renderExchangeGroup(legs){
+  const nameOf=id=>S.shops.find(s=>s.id===id)?.name||S.groups.find(g=>g.id===id)?.name||id||'?';
+  const outs=legs.filter(l=>l.e.type==='exout');
+  const ins=legs.filter(l=>l.e.type==='exin');
+  const totOut=outs.reduce((s,l)=>s+(l.e.amount||0),0);
+  const totIn=ins.reduce((s,l)=>s+(l.e.amount||0),0);
+  const df=legs[0].e.df;
+  const pairId='xp_'+legs[0].e.id;
+  const byDest={};outs.forEach(l=>{(byDest[l.e.oid]=byDest[l.e.oid]||[]).push(l);});
+  const bySrc={};ins.forEach(l=>{(bySrc[l.e.oid]=bySrc[l.e.oid]||[]).push(l);});
+  const flowBlock=(title,color,map)=>Object.entries(map).map(([cid,list])=>{
+    const total=list.reduce((s,l)=>s+(l.e.amount||0),0);
+    const rows=list.map(l=>{
+      const rn=S.shops.find(s=>s.id===l.rid)?.name||l.rid;
+      return`<div style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:3px;"><span>จาก ${rn}</span><span style="font-family:var(--mono);font-weight:600;">${fmt(l.e.amount||0)}</span></div>
+        ${billTbl(l.e.bills||eb(),l.e.amount||0)}
+      </div>`;
+    }).join('');
+    return`<div style="margin-bottom:12px;padding:10px;background:var(--bg2);border-radius:8px;">
+      <div style="font-size:13px;font-weight:600;color:${color};margin-bottom:8px;">${title} ${nameOf(cid)} — รวม ${fmt(total)}</div>
+      ${rows}
+    </div>`;
+  }).join('');
+  let body='';
+  if(outs.length)body+=flowBlock('➜ ให้ออกไปที่','var(--amber)',byDest);
+  if(ins.length)body+=flowBlock('⟵ รับเข้าจาก','var(--green)',bySrc);
+  const oname=outs[0]?nameOf(outs[0].e.oid):(ins[0]?nameOf(ins[0].e.oid):'?');
+  const delBtn=isAdmin()?`<button class="delbtn" onclick="delExchange(event,'${legs[0].e.id}')">ลบ</button>`:'';
   return`<div class="ecard">
     <div class="ehd" onclick="toggleE('${pairId}')">
       <span class="badge bexin">แลกเงิน</span>
-      <span class="edt">${exout.df}</span>
-      <span class="ett">↔ ${oname}</span>
-      <span class="eam" style="color:var(--purple);font-size:13px;">ให้ ${fmt(exout.amount||0)} / รับ ${fmt(exin.amount||0)}</span>
+      <span class="edt">${df}</span>
+      <span class="ett">↔ ${oname}${legs.length>2?` (${legs.length} รายการ)`:''}</span>
+      <span class="eam" style="color:var(--purple);font-size:13px;">ให้ ${fmt(totOut)} / รับ ${fmt(totIn)}</span>
       ${delBtn}
     </div>
     <div class="ebody" id="eb-${pairId}">${body}</div>
