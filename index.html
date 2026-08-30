@@ -1900,7 +1900,7 @@ function renderGroupContent(){
   members.forEach(sh=>{
     ge(sh.id,S.month).forEach(e=>{
       if(e.type==='expense')allExpenses.push(Object.assign({},e,{_sid:sh.id}));
-      else if(e.type==='exin')allExIn.push(e);
+      else if(e.type==='exin'&&!_xpTok(e))allExIn.push(e);
       if(e.type==='exin'||e.type==='exout')allExchange.push(e);
     });
   });
