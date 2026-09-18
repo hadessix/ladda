@@ -1476,6 +1476,15 @@ async function sbGet(table,params=''){
   if(!r.ok)throw new Error(`sbGet ${table}: ${r.status}`);
   return r.json();
 }
+// Supabase ตัดผลลัพธ์ที่ 1000 แถว/ครั้ง → ดึงทีละหน้าจนหมด (ไม่งั้นรายการใหม่สุดหายหลัง F5)
+async function sbGetAll(table,params=''){
+  const PAGE=1000;let out=[];
+  for(let off=0;;off+=PAGE){
+    const rows=await sbGet(table,`${params}&limit=${PAGE}&offset=${off}`);
+    out=out.concat(rows);
+    if(rows.length<PAGE)return out;
+  }
+}
 async function sbUpsert(table,data,opts=''){
   const r=await _wFetch(`${table}?${opts}`,{method:'POST',headers:{'Prefer':'resolution=merge-duplicates,return=minimal'},body:JSON.stringify(data)});
   if(!r.ok){const t=await r.text();throw new Error(`sbUpsert ${table}: ${r.status} ${t}`);}
@@ -1520,8 +1529,8 @@ async function loadAll(){
   try{
     const [routes,entries,sessions,groups,gMembers,vehicles]=await Promise.all([
       sbGet('routes','order=sort_order.asc,created_at.asc'),
-      sbGet('entries','order=created_at.asc'),
-      sbGet('sessions','order=created_at.asc'),
+      sbGetAll('entries','order=created_at.asc,id.asc'),
+      sbGetAll('sessions','order=created_at.asc,id.asc'),
       sbGet('groups','order=sort_order.asc,id.asc'),
       sbGet('group_members','order=sort_order.asc'),
       sbGet('vehicles','order=sort_order.asc,created_at.asc').catch(()=>[]),
